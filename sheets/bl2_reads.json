@@ -1,0 +1,246 @@
+{
+  "sheet": "bl2_reads",
+  "description": "Every Borderlands 2 object the setup reads from the player's own install. Object paths are from the OpenBLCMM BL2 data pack; read_verified is 'yes' once read from a real install.",
+  "columns": {
+    "id": "row id",
+    "object": "object path inside the BL2 packages",
+    "ue_class": "its class",
+    "fields": "properties used",
+    "used_for": "what it becomes in Skyrim",
+    "read_verified": "yes once read from a real BL2 install"
+  },
+  "rows": [
+    {
+      "id": "b_class_assassin",
+      "object": "GD_Assassin.Character.CharClass_Assassin",
+      "ue_class": "PlayerClassDefinition",
+      "fields": "CharacterNameId, SkillCooldownPoolDefinition, SkillTreePath",
+      "used_for": "Zer0: class and cooldown pool",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_skill_assassin",
+      "object": "GD_Assassin_Skills.ActionSkill.Skill_Deception",
+      "ue_class": "SkillDefinition",
+      "fields": "SkillName, SkillDescription, InitialDuration, DurationType",
+      "used_for": "Zer0's action skill name, text and duration",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_class_siren",
+      "object": "GD_Siren.Character.CharClass_Siren",
+      "ue_class": "PlayerClassDefinition",
+      "fields": "CharacterNameId, SkillCooldownPoolDefinition, SkillTreePath",
+      "used_for": "Maya: class and cooldown pool",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_skill_siren",
+      "object": "GD_Siren_Skills.Phaselock.Skill_Phaselock",
+      "ue_class": "SkillDefinition",
+      "fields": "SkillName, SkillDescription, InitialDuration, DurationType",
+      "used_for": "Maya's action skill name, text and duration",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_class_soldier",
+      "object": "GD_Soldier.Character.CharClass_Soldier",
+      "ue_class": "PlayerClassDefinition",
+      "fields": "CharacterNameId, SkillCooldownPoolDefinition, SkillTreePath",
+      "used_for": "Axton: class and cooldown pool",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_skill_soldier",
+      "object": "GD_Soldier_Skills.Scorpio.Skill_Scorpio",
+      "ue_class": "SkillDefinition",
+      "fields": "SkillName, SkillDescription, InitialDuration, DurationType",
+      "used_for": "Axton's action skill name, text and duration",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_class_mercenary",
+      "object": "GD_Mercenary.Character.CharClass_Mercenary",
+      "ue_class": "PlayerClassDefinition",
+      "fields": "CharacterNameId, SkillCooldownPoolDefinition, SkillTreePath",
+      "used_for": "Salvador: class and cooldown pool",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_skill_mercenary",
+      "object": "GD_Mercenary_Skills.ActionSkill.Skill_Gunzerking",
+      "ue_class": "SkillDefinition",
+      "fields": "SkillName, SkillDescription, InitialDuration, DurationType",
+      "used_for": "Salvador's action skill name, text and duration",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_class_mechromancer",
+      "object": "GD_Tulip_Mechromancer.Character.CharClass_Mechromancer",
+      "ue_class": "PlayerClassDefinition",
+      "fields": "CharacterNameId, SkillCooldownPoolDefinition, SkillTreePath",
+      "used_for": "Gaige: class and cooldown pool",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_skill_mechromancer",
+      "object": "GD_Tulip_Mechromancer_Skills.Action.Skill_DeathTrap",
+      "ue_class": "SkillDefinition",
+      "fields": "SkillName, SkillDescription, InitialDuration, DurationType",
+      "used_for": "Gaige's action skill name, text and duration",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_class_psycho",
+      "object": "GD_Lilac_PlayerClass.Character.CharClass_LilacPlayerClass",
+      "ue_class": "PlayerClassDefinition",
+      "fields": "CharacterNameId, SkillCooldownPoolDefinition, SkillTreePath",
+      "used_for": "Krieg: class and cooldown pool",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_skill_psycho",
+      "object": "GD_Lilac_SkillsBase.ActionSkill.Skill_Psycho",
+      "ue_class": "SkillDefinition",
+      "fields": "SkillName, SkillDescription, InitialDuration, DurationType",
+      "used_for": "Krieg's action skill name, text and duration",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_pool_assassin",
+      "object": "D_Resourcepools.PlayerPools.ActiveSkillCooldownPool_Assassin",
+      "ue_class": "ResourcePoolDefinition",
+      "fields": "BaseMaxValue (constant or attribute -> ConstantAttributeValueResolver.ConstantValue)",
+      "used_for": "action skill cooldown",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_pool_siren",
+      "object": "D_Resourcepools.PlayerPools.ActiveSkillCooldownPool_Siren",
+      "ue_class": "ResourcePoolDefinition",
+      "fields": "BaseMaxValue (constant or attribute -> ConstantAttributeValueResolver.ConstantValue)",
+      "used_for": "action skill cooldown",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_pool_soldier",
+      "object": "D_Resourcepools.PlayerPools.ActiveSkillCooldownPool_Soldier",
+      "ue_class": "ResourcePoolDefinition",
+      "fields": "BaseMaxValue (constant or attribute -> ConstantAttributeValueResolver.ConstantValue)",
+      "used_for": "action skill cooldown",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_pool_mercenary",
+      "object": "D_Resourcepools.PlayerPools.ActiveSkillCooldownPool_Mercenary",
+      "ue_class": "ResourcePoolDefinition",
+      "fields": "BaseMaxValue (constant or attribute -> ConstantAttributeValueResolver.ConstantValue)",
+      "used_for": "action skill cooldown",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_pool_mechromancer",
+      "object": "GD_Tulip_Mechromancer_Skills.Action.Pool_DeathTrapCoolDown",
+      "ue_class": "ResourcePoolDefinition",
+      "fields": "BaseMaxValue (constant or attribute -> ConstantAttributeValueResolver.ConstantValue)",
+      "used_for": "action skill cooldown",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_pool_psycho",
+      "object": "GD_Lilac_SkillsBase.ActionSkill.ActiveSkillCooldownPool_Psycho",
+      "ue_class": "ResourcePoolDefinition",
+      "fields": "BaseMaxValue (constant or attribute -> ConstantAttributeValueResolver.ConstantValue)",
+      "used_for": "action skill cooldown",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_globals",
+      "object": "GD_Globals.General.Globals",
+      "ue_class": "GlobalsDefinition",
+      "fields": "RarityLevelColors",
+      "used_for": "rarity colors and levels",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_wt_jakobs_pistol",
+      "object": "GD_Weap_Pistol.A_Weapons.WeaponType_Jakobs_Pistol",
+      "ue_class": "WeaponTypeDefinition",
+      "fields": "Typename, BodyParts, BarrelParts, ...",
+      "used_for": "gun type: name and part lists",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_wb_jakobs_pistol",
+      "object": "GD_Weap_Pistol.A_Weapons.Pistol_Jakobs",
+      "ue_class": "WeaponBalanceDefinition",
+      "fields": "InventoryDefinition, Manufacturers, RuntimePartListCollection",
+      "used_for": "gun balance: parts per rarity",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_part_jakobs_body",
+      "object": "GD_Weap_Pistol.Body.Pistol_Body_Jakobs",
+      "ue_class": "WeaponPartDefinition",
+      "fields": "WeaponAttributeEffects, TitleList, PrefixList",
+      "used_for": "part stat changes",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_prefix_fire",
+      "object": "GD_Weap_Pistol.Name.Prefix.Prefix_Elemental_Incendiary",
+      "ue_class": "WeaponNamePartDefinition",
+      "fields": "PartName",
+      "used_for": "gun name prefix",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_mfr_jakobs",
+      "object": "GD_Manufacturers.Manufacturers.Jakobs",
+      "ue_class": "ManufacturerDefinition",
+      "fields": "FlashLabelName, Grades",
+      "used_for": "manufacturer name",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_psycho",
+      "object": "GD_Population_Psycho.Balance.PawnBalance_Psycho",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
+      "used_for": "enemy type name and toughness",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_nomad",
+      "object": "GD_Population_Nomad.Balance.PawnBalance_Nomad",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
+      "used_for": "enemy type name and toughness",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_goliath",
+      "object": "GD_Population_Goliath.Balance.PawnBalance_Goliath",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
+      "used_for": "enemy type name and toughness",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_bruiser",
+      "object": "GD_Population_Bruiser.Balance.PawnBalance_Bruiser",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
+      "used_for": "enemy type name and toughness",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_marauder_badass",
+      "object": "GD_Anemone_Pop_Bandits.Balance.PawnBalance_MarauderBadass_Leader",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
+      "used_for": "enemy type name and toughness",
+      "read_verified": "no"
+    }
+  ]
+}

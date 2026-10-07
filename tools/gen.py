@@ -13,10 +13,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from preflight import load_sheets, preflight  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "mod" / "skylands" / "sheet_data.py"
+OUT = ROOT / "setup" / "skylands_setup" / "sheet_data.py"
 
 # Columns that only track verification; they stay in the sheets, not the mod.
 SKIP = {"in_game", "in_data", "parser_tested", "real_file_tested", "read_verified", "balanced_in_game"}
+
+
+KEYWORDS = {"class", "def", "from", "import", "global", "return", "type", "in", "is", "not", "and", "or"}
 
 
 def class_name(sheet: str) -> str:
@@ -62,6 +65,10 @@ def render(sheets: dict[str, dict]) -> str:
 
 def main() -> int:
     sheets = load_sheets()
+    bad = [f"{n}.{c}" for n, sh in sheets.items() for c in sh["columns"] if c in KEYWORDS]
+    if bad:
+        print(f"columns named like Python keywords: {bad}")
+        return 1
     errors, _ = preflight(sheets)
     if errors:
         print("preflight failed; run tools/preflight.py")

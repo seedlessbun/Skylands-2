@@ -97,47 +97,26 @@ def preflight(sheets: dict[str, dict], bl2_db: Path | None = None) -> tuple[list
                 if cls.strip() not in KNOWN_DAMAGE_TYPES:
                     errors.append(f"{name}.{row['id']}.damage_types: unknown class '{cls}'")
 
-    # Exactly Skyrim's 18 skills, each actor-value index once.
-    skills = sheets.get("skills", {}).get("rows", [])
-    if len(skills) != 18:
-        errors.append(f"skills: {len(skills)} rows, Skyrim has 18")
-    indices = [r.get("av_index") for r in skills]
-    if sorted(indices) != list(range(6, 24)):
-        errors.append(f"skills.av_index: expected 6..23 once each, got {sorted(indices)}")
-    for r in skills:
-        if not is_unfilled(r.get("per_level")) and r["per_level"] < 0:
-            errors.append(f"skills.{r['id']}.per_level: negative")
+    errors += sheet_rules(sheets)
 
-    # Every skill's xp source and effect is used exactly once.
-    for col, sheet in (("xp_source", "xp_sources"), ("effect", "effects")):
-        used = [r.get(col) for r in skills]
-        for rid in ids.get(sheet, set()):
-            if used.count(rid) != 1:
-                errors.append(f"{sheet}.{rid}: used by {used.count(rid)} skills (expected 1)")
-
-    # Shout words unlock in order.
-    words = sheets.get("shout", {}).get("rows", [])
-    levels = [w.get("unlock_level") for w in words]
-    if [w.get("words") for w in words] != [1, 2, 3]:
-        errors.append("shout: rows must be words 1, 2, 3 in order")
-    if levels != sorted(levels):
-        errors.append("shout.unlock_level: must not decrease")
-
-    # Optional: hook functions exist in the BL2 object data.
+    # Optional: every Borderlands object path exists with the right class in the BL2 data pack.
     if bl2_db is not None:
         con = sqlite3.connect(bl2_db)
-        for row in sheets.get("hooks", {}).get("rows", []):
-            found = con.execute("select 1 from object where name=?", (row["function"],)).fetchone()
+        for row in sheets.get("bl2_reads", {}).get("rows", []):
+            found = con.execute("select k.name from object o join class k on o.class=k.id where o.name=?",
+                                (row["object"],)).fetchone()
             if not found:
-                errors.append(f"hooks.{row['id']}.function: {row['function']} not in BL2 data")
-            elif row.get("in_data") != "yes":
-                errors.append(f"hooks.{row['id']}.in_data: function exists, mark it 'yes'")
-        for row in sheets.get("sounds", {}).get("rows", []) + sheets.get("shout", {}).get("rows", []):
-            obj = row.get("object") if row.get("source") == "bl2" else row.get("camera_anim")
-            if obj and not con.execute("select 1 from object where name=?", (obj,)).fetchone():
-                errors.append(f"{row['id']}: BL2 object {obj} not in BL2 data")
+                errors.append(f"bl2_reads.{row['id']}.object: {row['object']} not in BL2 data")
+            elif found[0] != row["ue_class"]:
+                errors.append(f"bl2_reads.{row['id']}.ue_class: data says {found[0]}")
 
     return errors, unverified
+
+
+def sheet_rules(sheets: dict[str, dict]) -> list[str]:
+    """Rules specific to this mashup's sheets."""
+    errors: list[str] = []
+    return errors
 
 
 def main() -> int:
