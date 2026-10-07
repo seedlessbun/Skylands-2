@@ -132,6 +132,29 @@ GUN_TYPES: dict[str, GunTypesRow] = {
 }
 
 @dataclass(frozen=True)
+class LootInjectionRow:
+    """Vanilla Skyrim leveled lists that get Skylands guns added (the player's own record is copied and extended)."""
+
+    id: str
+    skyrim_lvli: str
+    list: str
+    count: int
+
+
+LOOT_INJECTION: dict[str, LootInjectionRow] = {
+    'bandit_weapon15': LootInjectionRow(id='bandit_weapon15', skyrim_lvli='LootBanditWeapon15', list='any', count=1),
+    'bandit_weapon50': LootInjectionRow(id='bandit_weapon50', skyrim_lvli='LootBanditWeapon50', list='any', count=1),
+    'bandit_weapon100': LootInjectionRow(id='bandit_weapon100', skyrim_lvli='LootBanditWeapon100', list='any', count=1),
+    'bandit_boss_chest': LootInjectionRow(id='bandit_boss_chest', skyrim_lvli='LootBanditChestBossBase', list='good', count=1),
+    'draugr_boss_chest': LootInjectionRow(id='draugr_boss_chest', skyrim_lvli='LootDraugrChestBossBase', list='good', count=1),
+    'dwarven_boss_chest': LootInjectionRow(id='dwarven_boss_chest', skyrim_lvli='LootDwarvenChestBossBase', list='good', count=1),
+    'falmer_boss_chest': LootInjectionRow(id='falmer_boss_chest', skyrim_lvli='LootFalmerChestBossBase', list='good', count=1),
+    'forsworn_boss_chest': LootInjectionRow(id='forsworn_boss_chest', skyrim_lvli='LootForswornChestBossBase', list='good', count=1),
+    'vampire_boss_chest': LootInjectionRow(id='vampire_boss_chest', skyrim_lvli='LootVampireChestBossBase', list='good', count=1),
+    'warlock_boss_chest': LootInjectionRow(id='warlock_boss_chest', skyrim_lvli='LootWarlockChestBossBase', list='good', count=1),
+}
+
+@dataclass(frozen=True)
 class RaritiesRow:
     """Rarity tiers by Borderlands rarity level. Colours are read from the player's GD_Globals (RarityLevelColors); words and multipliers are this mashup's."""
 
@@ -150,4 +173,21 @@ RARITIES: dict[str, RaritiesRow] = {
     'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2),
     'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1),
     'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1),
+}
+
+@dataclass(frozen=True)
+class SkyrimBaseRow:
+    """Vanilla records the generator builds on, found by editor id in the player's own Skyrim.esm / Update.esm / Dawnguard.esm."""
+
+    id: str
+    edid: str
+    record: str
+    plugin: str
+    used_for: str
+
+
+SKYRIM_BASE: dict[str, SkyrimBaseRow] = {
+    'crossbow': SkyrimBaseRow(id='crossbow', edid='^DLC1Crossbow$', record='WEAP', plugin='Dawnguard.esm', used_for='every Skylands gun is a copy of it (model, animations, sounds)'),
+    'bolts': SkyrimBaseRow(id='bolts', edid='^DLC1BoltSteel$', record='AMMO', plugin='Dawnguard.esm', used_for='ammo for the guns'),
+    'voice_slot': SkyrimBaseRow(id='voice_slot', edid='^VoiceEquipSlot$', record='EQUP', plugin='Skyrim.esm', used_for='equip slot of the action-skill shout spells'),
 }

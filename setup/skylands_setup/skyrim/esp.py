@@ -95,7 +95,7 @@ class Plugin:
         self._next = 0x800
         self.self_index = len(masters) << 24
 
-    def new_id(self) -> int:
+    def new_id(self) -> int:  # also used for copies that become new records
         if self._next > 0xFFF:
             raise ValueError("an ESL plugin holds at most 2048 new records")
         fid = self.self_index | self._next

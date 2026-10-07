@@ -170,3 +170,44 @@ def build(root: Path) -> Path:
         "interface\\fonts_en.swf": b"not used",
     }))
     return root
+
+
+def build_full(root: Path) -> Path:
+    """build() plus everything the Skylands generator reads: masters, crossbow, bolts, effects, bandits, loot."""
+    root = build(root)
+    data = root / "Data"
+    esm = bytearray((data / "Skyrim.esm").read_bytes())
+    extra = []
+    mgefs = ["InvisibillityFFSelf", "ParalysisFFAimed", "SummonStormAtronach", "SummonFrostAtronach", "AlchFortifyMarksman",
+             "AlchFortifyHealRate", "AlchFortifyOneHanded", "AlchFortifyTwoHanded", "AbWeaknessFireConstant", "AbFortifyHealth"]
+    extra.append(group("MGEF", [record("MGEF", 0x5000 + i, [sub("EDID", z(e))]) for i, e in enumerate(mgefs)]))
+    enchs = ["EnchWeaponFireDamage03", "EnchWeaponShockDamage03", "EnchWeaponAbsorbHealth02", "EnchWeaponMagickaDamage03"]
+    extra.append(group("ENCH", [record("ENCH", 0x6000 + i, [sub("EDID", z(e))]) for i, e in enumerate(enchs)]))
+    spit = struct.pack("<IIIfIIffI", 0, 0, 11, 0.0, 1, 2, 0.0, 0.0, 0)
+    extra.append(group("SPEL", [record("SPEL", 0x13E07, [sub("EDID", z("VoicePush1")), sub("ETYP", struct.pack("<I", 0x25BEE)), sub("SPIT", spit)])]))
+    extra.append(group("EQUP", [record("EQUP", 0x25BEE, [sub("EDID", z("VoiceEquipSlot"))])]))
+    npcs = [record("NPC_", 0x7000, [sub("EDID", z("EncBandit02TemplateMelee")), sub("FULL", sid(3)), sub("SHRT", sid(3)),
+                                    sub("ACBS", b"\0" * 24), sub("SPCT", struct.pack("<I", 1)), sub("SPLO", struct.pack("<I", 0x5001))]),
+            record("NPC_", 0x7001, [sub("EDID", z("EncBandit02Melee1HNordM")), sub("ACBS", b"\0" * 24)]),
+            record("NPC_", 0x7002, [sub("EDID", z("EncBandit03Boss1HNordM")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24)])]
+    extra.append(group("NPC_", npcs))
+    lv = struct.pack("<HHIHH", 1, 0, 0x1234, 1, 0)
+    extra.append(group("LVLI", [record("LVLI", 0x8000, [sub("EDID", z("LootBanditWeapon15")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"),
+                                                        sub("LLCT", b"\x01"), sub("LVLO", lv)])]))
+    (data / "Skyrim.esm").write_bytes(bytes(esm) + b"".join(extra))
+    tes = record("TES4", 0, [sub("HEDR", struct.pack("<fII", 1.7, 0, 0)), sub("MAST", z("Skyrim.esm")), sub("DATA", b"\0" * 8)])
+    tes = tes[:8] + struct.pack("<I", 0x81) + tes[12:]
+    # Update.esm overrides the loot list (adds an entry); the generator must build on this newer version.
+    lv2 = struct.pack("<HHIHH", 1, 0, 0x1235, 1, 0)
+    (data / "Update.esm").write_bytes(tes + group("LVLI", [record("LVLI", 0x8000, [
+        sub("EDID", z("LootBanditWeapon15")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"), sub("LLCT", b"\x02"), sub("LVLO", lv), sub("LVLO", lv2)])]))
+    tes_dg = record("TES4", 0, [sub("HEDR", struct.pack("<fII", 1.7, 0, 0)), sub("MAST", z("Skyrim.esm")), sub("DATA", b"\0" * 8),
+                                sub("MAST", z("Update.esm")), sub("DATA", b"\0" * 8)])
+    tes_dg = tes_dg[:8] + struct.pack("<I", 0x81) + tes_dg[12:]
+    weap = record("WEAP", 0x02000800, [sub("EDID", z("DLC1Crossbow")), sub("OBND", b"\0" * 12), sub("FULL", sid(1)),
+                                       sub("MODL", z("dlc01\\weapons\\crossbow\\crossbow.nif")), sub("ETYP", struct.pack("<I", 1)),
+                                       sub("DESC", sid(2)), sub("DATA", struct.pack("<IfH", 120, 14.0, 19)),
+                                       sub("DNAM", struct.pack("<BBHff", 9, 0, 0, 1.0, 1.0) + b"\0" * 92), sub("CRDT", b"\0" * 24)], compress=True)
+    ammo = record("AMMO", 0x02000801, [sub("EDID", z("DLC1BoltSteel")), sub("FULL", sid(1))])
+    (data / "Dawnguard.esm").write_bytes(tes_dg + group("WEAP", [weap]) + group("AMMO", [ammo]))
+    return root

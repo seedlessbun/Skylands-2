@@ -1,0 +1,38 @@
+{
+  "sheet": "skyrim_base",
+  "description": "Vanilla records the generator builds on, found by editor id in the player's own Skyrim.esm / Update.esm / Dawnguard.esm.",
+  "columns": {
+    "id": "row id",
+    "edid": "editor id (regex allowed with ^)",
+    "record": "record type",
+    "plugin": "where it is expected",
+    "used_for": "what it becomes",
+    "read_verified": "yes once found in a real install"
+  },
+  "rows": [
+    {
+      "id": "crossbow",
+      "edid": "^DLC1Crossbow$",
+      "record": "WEAP",
+      "plugin": "Dawnguard.esm",
+      "used_for": "every Skylands gun is a copy of it (model, animations, sounds)",
+      "read_verified": "no"
+    },
+    {
+      "id": "bolts",
+      "edid": "^DLC1BoltSteel$",
+      "record": "AMMO",
+      "plugin": "Dawnguard.esm",
+      "used_for": "ammo for the guns",
+      "read_verified": "no"
+    },
+    {
+      "id": "voice_slot",
+      "edid": "^VoiceEquipSlot$",
+      "record": "EQUP",
+      "plugin": "Skyrim.esm",
+      "used_for": "equip slot of the action-skill shout spells",
+      "read_verified": "no"
+    }
+  ]
+}
