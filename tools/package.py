@@ -1,79 +1,88 @@
-"""Build the release zip: the Skylands mod plus the Willow2 Mod Manager it runs on.
+"""Build the release: dist/Skylands-<version>.zip, dist/entries.json and dist/melty.json.
 
-The mod manager (bl-sdk, LGPL-3.0) is downloaded from its official GitHub release, checked
-against a pinned SHA-256, and bundled with credit so Play works in one click. No game files
-from Borderlands 2 or Skyrim are ever included.
-
-Usage: python tools/package.py   -> dist/Skylands-<version>.zip and dist/entries.json
+The zip holds only Skylands' own setup program plus the runtimes it needs (CPython from
+python-build-standalone, PSF license; lzokay, MIT). On the player's PC Melty unpacks it to
+{managed}/Skylands and runs its setup once; the setup reads the player's Borderlands 2 and Skyrim
+SE and builds the Skyrim files there. No file of either game is in the release.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sys
-import tomllib
-import urllib.request
+import tarfile
 import zipfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from package_survey import SKIP, python_tar  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
-MOD = ROOT / "mod" / "skylands"
 DIST = ROOT / "dist"
-CACHE = ROOT / ".cache"
+sys.path.insert(0, str(ROOT / "setup"))
+from skylands_setup.build import VERSION  # noqa: E402
 
-SDK_URL = "https://github.com/bl-sdk/willow2-mod-manager/releases/download/v3.8/willow2-sdk.zip"
-SDK_SHA256 = "e1862ddb282cf845369c9ca1ca70ac180d6104cce25d8a133557fc74e157b4c7"
-SDK_LICENSE_URL = "https://raw.githubusercontent.com/bl-sdk/willow2-mod-manager/v3.8/LICENSE"
+README = f"""Skylands {VERSION}: Skyrim, played as a Borderlands vault hunter.
 
-MOD_FILES = ["__init__.py", "game.py", "progression.py", "sheet_data.py", "pyproject.toml",
-             "skyrim/__init__.py", "skyrim/bsa.py", "skyrim/data.py", "skyrim/esm.py", "skyrim/lz4.py",
-             "skyrim/strings.py"]
+Melty installs this and runs its setup once before the first Play. The setup reads your own
+Borderlands 2 and Skyrim Special Edition installs and builds Skylands.esp, its scripts and its loot-beam
+meshes into Skyrim's Data folder, then enables Skylands.esp in plugins.txt.
+
+Log: skylands-setup.log next to this file. Installed files: installed-files.json.
+Credits and licenses: CREDITS.md, LICENSE-lzokay, python/LICENSE.txt.
+"""
 
 
-def fetch(url: str, dest: Path, sha256: str | None = None) -> bytes:
-    if not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(url) as r:  # noqa: S310 - fixed official URLs
-            dest.write_bytes(r.read())
-    data = dest.read_bytes()
-    if sha256 and hashlib.sha256(data).hexdigest() != sha256:
-        dest.unlink()
-        raise SystemExit(f"{url}: checksum mismatch")
-    return data
+def recipe(file_name: str) -> dict:
+    return {
+        "schemaVersion": 1,
+        "mode": "installed",
+        "games": [{"slug": "skyrim-se", "role": "primary"}, {"slug": "borderlands-2", "role": "companion"}],
+        "components": [{"id": "main", "fileName": file_name, "label": "Skylands setup", "kind": "main", "required": True}],
+        "requirements": [],
+        "mappings": [{"component": "main", "from": "Skylands/", "to": "{managed}/Skylands"}],
+        "setup": {
+            "label": "Skylands from your Borderlands 2",
+            "launch": {"kind": "exe", "path": "{managed}/Skylands/python/python.exe",
+                       "args": ["-X", "utf8", "{managed}/Skylands/app/run_setup.py", "build",
+                                "--bl2", "{game:borderlands-2}", "--skyrim", "{game}",
+                                "--done", f"{{managed}}/Skylands/setup-done-{VERSION}.txt"]},
+            "done": {"file": f"{{managed}}/Skylands/setup-done-{VERSION}.txt", "contains": "ok"},
+            "stopWhenDone": True,
+        },
+        "launch": {"kind": "exe", "path": "{game}/SkyrimSE.exe"},
+    }
 
 
 def main() -> int:
-    version = tomllib.loads((MOD / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-    sdk_zip = CACHE / "willow2-sdk-v3.8.zip"
-    fetch(SDK_URL, sdk_zip, SDK_SHA256)
-    sdk_license = fetch(SDK_LICENSE_URL, CACHE / "willow2-LICENSE.txt").decode("utf-8")
-
     DIST.mkdir(exist_ok=True)
-    out = DIST / f"Skylands-{version}.zip"
+    name = f"Skylands-{VERSION}.zip"
+    out = DIST / name
     entries: list[dict] = []
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         def add(arc: str, data: bytes) -> None:
             info = zipfile.ZipInfo(arc, date_time=(2026, 10, 7, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
             z.writestr(info, data)
             entries.append({"path": arc, "size": len(data)})
 
-        with zipfile.ZipFile(sdk_zip) as sdk:
-            for name in sorted(sdk.namelist()):
-                if name.endswith("/") or "/.stubs/" in name:
-                    continue
-                add(name, sdk.read(name))
-        for rel in MOD_FILES:
-            add(f"sdk_mods/skylands/{rel}", (MOD / rel).read_bytes())
-        add("sdk_mods/skylands/CREDITS.txt", (ROOT / "CREDITS.md").read_bytes())
-        add("sdk_mods/skylands/README.txt", (MOD / "README.txt").read_bytes())
-        add("sdk_mods/skylands/LICENSE-willow2-mod-manager.txt", sdk_license.encode("utf-8"))
-
-    (DIST / "entries.json").write_text(json.dumps(entries, indent=1), encoding="utf-8")
+        with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
+            for m in t.getmembers():
+                if m.isfile() and not any(s in "/" + m.name for s in SKIP):
+                    add("Skylands/" + m.name, t.extractfile(m).read())
+        app = ROOT / "setup"
+        for f in sorted(app.rglob("*")):
+            if f.is_file() and f.suffix not in (".so", ".pyc") and "__pycache__" not in f.parts:
+                add("Skylands/app/" + f.relative_to(app).as_posix(), f.read_bytes())
+        add("Skylands/CREDITS.md", (ROOT / "CREDITS.md").read_bytes())
+        add("Skylands/LICENSE-lzokay", (ROOT / "native" / "lzo" / "LICENSE-lzokay").read_bytes())
+        add("Skylands/README.txt", README.replace("\n", "\r\n").encode())
+    (DIST / "entries.json").write_text(json.dumps(entries), encoding="utf-8")
+    (DIST / "melty.json").write_text(json.dumps(recipe(name), indent=2), encoding="utf-8")
     digest = hashlib.sha256(out.read_bytes()).hexdigest()
-    print(f"{out.relative_to(ROOT)}  {out.stat().st_size} bytes  sha256 {digest}  {len(entries)} files")
+    print(f"{out.relative_to(ROOT)} {out.stat().st_size} bytes sha256 {digest} {len(entries)} files")
     return 0
 
 
