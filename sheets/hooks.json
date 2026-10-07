@@ -1,0 +1,30 @@
+{
+  "sheet": "hooks",
+  "description": "Every Borderlands 2 function the mashup hooks. Names checked against the OpenBLCMM BL2 object data (in_data); in_game is only 'yes' after a run in the real game.",
+  "columns": {
+    "id": "row id",
+    "function": "Package.Class:Function as pyunrealsdk names it",
+    "type": "pre | post",
+    "args_used": "argument names read or changed (by name, never by position)",
+    "purpose": "what the mashup does there",
+    "in_data": "yes when the function exists in the BL2 object data",
+    "in_game": "yes when seen working in the running game"
+  },
+  "rows": [
+    {"id": "h_action_skill", "function": "WillowGame.WillowPlayerController:StartActionSkill", "type": "pre", "args_used": "none", "purpose": "Block the class action skill; the shout replaces it", "in_data": "yes", "in_game": "no"},
+    {"id": "h_upgrade_skill", "function": "WillowGame.WillowPlayerController:ServerUpgradeSkill", "type": "pre", "args_used": "Skill", "purpose": "Block spending class skill points (class trees are replaced)", "in_data": "yes", "in_game": "no"},
+    {"id": "h_skills_menu", "function": "WillowGame.WillowPlayerController:ShowStatusMenu_Skills", "type": "pre", "args_used": "none", "purpose": "Open the Skyrim skills menu instead of the class skill tree", "in_data": "yes", "in_game": "no"},
+    {"id": "h_tick", "function": "WillowGame.WillowPlayerController:PlayerTick", "type": "post", "args_used": "DeltaTime", "purpose": "Per-frame clock: regen, movement, currency and shield polling, cooldowns", "in_data": "yes", "in_game": "no"},
+    {"id": "h_enemy_damage", "function": "WillowGame.WillowAIPawn:TakeDamage", "type": "pre", "args_used": "Damage, DamageType, InstigatedBy", "purpose": "The one damage-out hook: multiply damage by skill effects, award weapon/stealth/magic skill XP", "in_data": "yes", "in_game": "no"},
+    {"id": "h_player_damage", "function": "WillowGame.WillowPlayerPawn:TakeDamage", "type": "pre", "args_used": "Damage", "purpose": "The one damage-in hook: Block / Heavy Armor reduction and XP", "in_data": "yes", "in_game": "no"},
+    {"id": "h_vendor_buy", "function": "WillowGame.WillowVendingMachineBase:PlayerBuyItem", "type": "pre", "args_used": "WPC", "purpose": "Speech: note money before a purchase", "in_data": "yes", "in_game": "no"},
+    {"id": "h_vendor_buy_post", "function": "WillowGame.WillowVendingMachineBase:PlayerBuyItem", "type": "post", "args_used": "WPC", "purpose": "Speech: refund part of the price, award XP", "in_data": "yes", "in_game": "no"},
+    {"id": "h_vendor_sell", "function": "WillowGame.WillowVendingMachineBase:PlayerSellItem", "type": "pre", "args_used": "WPC", "purpose": "Speech: note money before a sale", "in_data": "yes", "in_game": "no"},
+    {"id": "h_vendor_sell_post", "function": "WillowGame.WillowVendingMachineBase:PlayerSellItem", "type": "post", "args_used": "WPC", "purpose": "Speech: bonus on the sale, award XP", "in_data": "yes", "in_game": "no"},
+    {"id": "h_heal", "function": "WillowGame.WillowPawn:HealDamage", "type": "pre", "args_used": "Amount, bIsShieldRestore", "purpose": "Restoration XP when the player is healed", "in_data": "yes", "in_game": "no"},
+    {"id": "h_add_inventory", "function": "WillowGame.WillowInventoryManager:AddInventory", "type": "post", "args_used": "NewItem", "purpose": "Smithing / Enchanting XP on picking up gear", "in_data": "yes", "in_game": "no"},
+    {"id": "h_use_object", "function": "WillowGame.WillowInteractiveObject:UsedBy", "type": "post", "args_used": "User", "purpose": "Lockpicking: opening chests and lockers", "in_data": "yes", "in_game": "no"},
+    {"id": "h_new_game", "function": "WillowGame.WillowPlayerController:ClientNotifyNewGameStarted", "type": "post", "args_used": "none", "purpose": "Mark a brand-new character for the 'finally awake' opening", "in_data": "yes", "in_game": "no"},
+    {"id": "h_possess", "function": "WillowGame.WillowPlayerController:Possess", "type": "post", "args_used": "none", "purpose": "Player spawned or map loaded: reset per-map state, run the opening when due", "in_data": "yes", "in_game": "no"}
+  ]
+}

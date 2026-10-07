@@ -1,0 +1,34 @@
+{
+  "sheet": "effects",
+  "description": "What a Skyrim skill does on Pandora. Magnitude = per_level x (skill - start) + per_perk x perks taken in that tree, capped (columns on the skills sheet).",
+  "columns": {
+    "id": "row id",
+    "kind": "damage_out | crit_bonus | damage_in | regen_health | regen_shield | move_speed | money_refund | money_bonus | chest_money | status_chance",
+    "hook": "ref hooks.id where it is applied",
+    "applies_to": "which events or stats it changes",
+    "damage_types": "WillowDmgSource_* classes for damage effects ('-' otherwise)",
+    "pandora_text": "line shown in the skills menu; {v} is the current magnitude",
+    "in_game": "yes once seen working in the running game"
+  },
+  "refs": {"hook": "hooks"},
+  "rows": [
+    {"id": "e_one_handed", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "pistol, SMG and melee damage", "damage_types": "WillowDmgSource_Pistol,WillowDmgSource_SubMachineGun,WillowDmgSource_Melee,WillowDmgSource_MeleeWithBlade", "pandora_text": "+{v}% pistol, SMG and melee damage", "in_game": "no"},
+    {"id": "e_two_handed", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "shotgun and rocket launcher damage", "damage_types": "WillowDmgSource_Shotgun,WillowDmgSource_Rocket", "pandora_text": "+{v}% shotgun and launcher damage", "in_game": "no"},
+    {"id": "e_archery", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "sniper and assault rifle damage", "damage_types": "WillowDmgSource_Sniper,WillowDmgSource_MachineGun", "pandora_text": "+{v}% sniper and assault rifle damage", "in_game": "no"},
+    {"id": "e_block", "kind": "damage_in", "hook": "h_player_damage", "applies_to": "damage taken while the shield is up", "damage_types": "-", "pandora_text": "-{v}% damage taken while your shield holds", "in_game": "no"},
+    {"id": "e_smithing", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "all gun damage (well-kept gear)", "damage_types": "WillowDmgSource_Pistol,WillowDmgSource_SubMachineGun,WillowDmgSource_Shotgun,WillowDmgSource_Rocket,WillowDmgSource_Sniper,WillowDmgSource_MachineGun,WillowDmgSource_Bullet", "pandora_text": "+{v}% damage with every gun", "in_game": "no"},
+    {"id": "e_heavy_armor", "kind": "damage_in", "hook": "h_player_damage", "applies_to": "damage taken to health", "damage_types": "-", "pandora_text": "-{v}% damage taken to health", "in_game": "no"},
+    {"id": "e_light_armor", "kind": "move_speed", "hook": "h_tick", "applies_to": "ground speed", "damage_types": "-", "pandora_text": "+{v}% movement speed", "in_game": "no"},
+    {"id": "e_pickpocket", "kind": "money_bonus", "hook": "h_tick", "applies_to": "cash picked up", "damage_types": "-", "pandora_text": "+{v}% cash from pickups", "in_game": "no"},
+    {"id": "e_lockpicking", "kind": "chest_money", "hook": "h_use_object", "applies_to": "opening a chest also finds cash", "damage_types": "-", "pandora_text": "Chests hold {v}% of a level's worth of extra cash", "in_game": "no"},
+    {"id": "e_sneak", "kind": "crit_bonus", "hook": "h_enemy_damage", "applies_to": "critical hits", "damage_types": "-", "pandora_text": "+{v}% critical hit damage", "in_game": "no"},
+    {"id": "e_alchemy", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "burn, corrode, shock and slag damage over time", "damage_types": "WillowDmgSource_StatusEffect", "pandora_text": "+{v}% elemental damage over time", "in_game": "no"},
+    {"id": "e_speech", "kind": "money_refund", "hook": "h_vendor_buy_post", "applies_to": "vending machine prices (refund on buy, bonus on sell)", "damage_types": "-", "pandora_text": "{v}% better prices at vending machines", "in_game": "no"},
+    {"id": "e_alteration", "kind": "regen_shield", "hook": "h_tick", "applies_to": "shield recharge once it has started", "damage_types": "-", "pandora_text": "Shield recharges {v}% of capacity per second faster", "in_game": "no"},
+    {"id": "e_conjuration", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "grenade damage", "damage_types": "WillowDmgSource_Grenade", "pandora_text": "+{v}% grenade damage", "in_game": "no"},
+    {"id": "e_destruction", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "direct hits from elemental guns", "damage_types": "WillowDmgSource_Pistol,WillowDmgSource_SubMachineGun,WillowDmgSource_Shotgun,WillowDmgSource_Rocket,WillowDmgSource_Sniper,WillowDmgSource_MachineGun", "pandora_text": "+{v}% damage with elemental guns", "in_game": "no"},
+    {"id": "e_illusion", "kind": "damage_out", "hook": "h_enemy_damage", "applies_to": "all damage while in Fight For Your Life", "damage_types": "*", "pandora_text": "+{v}% damage while Fighting For Your Life", "in_game": "no"},
+    {"id": "e_restoration", "kind": "regen_health", "hook": "h_tick", "applies_to": "health regeneration", "damage_types": "-", "pandora_text": "Regenerate {v}% of max health per second", "in_game": "no"},
+    {"id": "e_enchanting", "kind": "status_chance", "hook": "h_tick", "applies_to": "held gun's elemental effect chance", "damage_types": "-", "pandora_text": "+{v}% elemental effect chance", "in_game": "no"}
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "sheet": "shout",
+  "description": "Unrelenting Force as the action skill, one row per word. Word names and cooldowns come from the player's Skyrim.esm (SHOU/WOOP); force and reach are this mashup's.",
+  "columns": {
+    "id": "row id",
+    "words": "how many words are shouted (1-3)",
+    "woop_edid": "Skyrim WOOP editor id of the word this row adds",
+    "unlock_level": "Dragonborn (Skyrim character) level that teaches the word",
+    "cooldown_source": "where the recharge comes from",
+    "range_uu": "reach in Unreal units (about 50 per metre)",
+    "cone_deg": "half-angle of the cone in front of the player",
+    "push_speed": "knockback speed given to each enemy (uu/s)",
+    "lift_speed": "upward speed given to each enemy (uu/s)",
+    "damage_frac": "damage as a fraction of each enemy's max health",
+    "camera_anim": "BL2 CameraAnim played on the player",
+    "in_game": "yes once seen working in the running game"
+  },
+  "rows": [
+    {"id": "w_fus", "words": 1, "woop_edid": "WordFus", "unlock_level": 1, "cooldown_source": "SHOU.SNAM[0].recharge", "range_uu": 900, "cone_deg": 35, "push_speed": 900, "lift_speed": 250, "damage_frac": 0.05, "camera_anim": "Anim_CameraAnimations.Explosions.Canim_Explosion_Minor", "in_game": "no"},
+    {"id": "w_ro", "words": 2, "woop_edid": "WordRo", "unlock_level": 5, "cooldown_source": "SHOU.SNAM[1].recharge", "range_uu": 1300, "cone_deg": 40, "push_speed": 1600, "lift_speed": 400, "damage_frac": 0.10, "camera_anim": "Anim_CameraAnimations.Explosions.Canim_Explosion_Medium", "in_game": "no"},
+    {"id": "w_dah", "words": 3, "woop_edid": "WordDah", "unlock_level": 10, "cooldown_source": "SHOU.SNAM[2].recharge", "range_uu": 1800, "cone_deg": 45, "push_speed": 2600, "lift_speed": 650, "damage_frac": 0.20, "camera_anim": "Anim_CameraAnimations.Explosions.Canim_Explosion_WarriorEarthquake", "in_game": "no"}
+  ]
+}

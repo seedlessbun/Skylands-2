@@ -1,0 +1,11 @@
+{
+  "sheet": "sounds",
+  "description": "Sounds played. BL2 sounds are Wwise events already in the game; Skyrim sounds would come from the player's Skyrim archives (stretch, not in 0.1).",
+  "columns": {"id": "row id", "source": "bl2 | skyrim", "object": "BL2 AkEvent path or Skyrim archive path", "played_on": "ref ui.id or shout.id", "version": "0.1 | later", "in_game": "yes once heard"},
+  "refs": {"played_on": ["ui", "shout"]},
+  "rows": [
+    {"id": "s_level_up", "source": "bl2", "object": "Ake_UI.UI_HUD.Ak_Play_UI_Alert_Level_Up", "played_on": "u_level_up", "version": "0.1", "in_game": "no"},
+    {"id": "s_shout", "source": "bl2", "object": "Ake_Mon_Goliath.Ak_Play_Mon_Goliath_AOE_Slam", "played_on": "w_fus", "version": "0.1", "in_game": "no"},
+    {"id": "s_fus_ro_dah_voice", "source": "skyrim", "object": "Skyrim - Voices_en0.bsa: sound/voice/... (xWMA in .fuz; needs a decoder)", "played_on": "w_dah", "version": "later", "in_game": "no"}
+  ]
+}

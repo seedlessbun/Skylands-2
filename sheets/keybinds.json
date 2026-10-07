@@ -1,0 +1,9 @@
+{
+  "sheet": "keybinds",
+  "description": "Keys the mashup adds (rebindable in the SDK's mod menu).",
+  "columns": {"id": "row id", "default_key": "Unreal key name", "action": "what it does", "in_game": "yes once seen working"},
+  "rows": [
+    {"id": "k_shout", "default_key": "F", "action": "Shout Unrelenting Force (Borderlands 2's action-skill key; the class action skill is blocked)", "in_game": "no"},
+    {"id": "k_menu", "default_key": "K", "action": "Open the Skyrim skills and perks menu", "in_game": "no"}
+  ]
+}

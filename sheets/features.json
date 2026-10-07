@@ -1,0 +1,16 @@
+{
+  "sheet": "features",
+  "description": "What version 0.1 promises a player. Every row must be in the build and, before listing, seen in the real game.",
+  "columns": {"id": "row id", "feature": "what the player gets", "version": "0.1 | later", "sheets": "sheets that define it", "in_game": "yes once seen in the running game"},
+  "rows": [
+    {"id": "ft_opening", "feature": "New game opens with Skyrim's 'you're finally awake' greeting and a race choice", "version": "0.1", "sheets": "ui,skyrim_reads", "in_game": "no"},
+    {"id": "ft_skills", "feature": "All 18 Skyrim skills level up from Borderlands play", "version": "0.1", "sheets": "skills,xp_sources,formulas", "in_game": "no"},
+    {"id": "ft_effects", "feature": "Each skill's level and perks change Borderlands stats", "version": "0.1", "sheets": "skills,effects", "in_game": "no"},
+    {"id": "ft_perks", "feature": "Skyrim's real perk trees, read from the player's Skyrim, spent with Dragonborn level-ups", "version": "0.1", "sheets": "skyrim_reads,ui", "in_game": "no"},
+    {"id": "ft_class_off", "feature": "Class skill trees and class action skill replaced", "version": "0.1", "sheets": "hooks,ui", "in_game": "no"},
+    {"id": "ft_shout", "feature": "Unrelenting Force on the action-skill key, words unlocking with level", "version": "0.1", "sheets": "shout,keybinds,sounds", "in_game": "no"},
+    {"id": "ft_save", "feature": "Progress saved per Borderlands character", "version": "0.1", "sheets": "hooks", "in_game": "no"},
+    {"id": "ft_voice", "feature": "Skyrim's real FUS RO DAH voice and UI sounds", "version": "later", "sheets": "sounds", "in_game": "no"},
+    {"id": "ft_coop", "feature": "Co-op", "version": "later", "sheets": "-", "in_game": "no"}
+  ]
+}
