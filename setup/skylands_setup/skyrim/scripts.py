@@ -1,0 +1,90 @@
+"""The Papyrus scripts Skylands needs, written straight to .pex (see pex.py)."""
+
+from __future__ import annotations
+
+from .pex import Function, Script
+
+NONE = ("id", "::nonevar")
+SELF = ("id", "self")
+ZERO9 = [("float", 0.0)] * 9  # Message.Show's nine optional float arguments
+
+
+def class_choice_quest() -> Script:
+    """SkylandsClassQuest extends Quest.
+
+    As soon as the player can move after character creation (and is not in a menu), show the
+    vault hunter choice once, then teach and equip that vault hunter's action-skill shout and give
+    the starting guns. Works the same on an existing save.
+
+      Event OnInit()
+        RegisterForSingleUpdate(2.0)
+      EndEvent
+
+      Event OnUpdate()
+        If Chosen
+          Return
+        EndIf
+        If Utility.IsInMenuMode()
+          RegisterForSingleUpdate(1.0)
+          Return
+        EndIf
+        If !Game.IsMovementControlsEnabled()
+          RegisterForSingleUpdate(1.0)
+          Return
+        EndIf
+        Int i = ClassChoice.Show()
+        Actor player = Game.GetPlayer()
+        player.AddShout(Shouts[i])
+        Game.TeachWord(Words[i])
+        Game.UnlockWord(Words[i])
+        player.EquipShout(Shouts[i])
+        player.AddItem(StarterGuns, 1, False)
+        Chosen = True
+      EndEvent
+    """
+    on_init = Function(
+        "OnInit",
+        locals=[("::nonevar", "None")],
+        code=[("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)],
+    )
+    on_update = Function(
+        "OnUpdate",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("choice", "Int"), ("player", "Actor"),
+                ("chosenShout", "Shout"), ("chosenWord", "WordOfPower"), ("::temp5", "Bool")],
+        code=[
+            ("jmpf", ("id", "Chosen"), ("lbl", "not_chosen")),
+            ("return", None),
+            ("label", "not_chosen"),
+            ("callstatic", ("id", "Utility"), ("id", "IsInMenuMode"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "not_menu")),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            ("return", None),
+            ("label", "not_menu"),
+            ("callstatic", ("id", "Game"), ("id", "IsMovementControlsEnabled"), ("id", "::temp5")),
+            ("not", ("id", "::temp0"), ("id", "::temp5")),  # the compiler's shape for If !X
+            ("jmpf", ("id", "::temp0"), ("lbl", "can_move")),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            ("return", None),
+            ("label", "can_move"),
+            ("callmethod", ("id", "Show"), ("id", "::ClassChoice_var"), ("id", "choice"), *ZERO9),
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("array_getelement", ("id", "chosenShout"), ("id", "::Shouts_var"), ("id", "choice")),
+            ("callmethod", ("id", "AddShout"), ("id", "player"), NONE, ("id", "chosenShout")),
+            ("array_getelement", ("id", "chosenWord"), ("id", "::Words_var"), ("id", "choice")),
+            ("callstatic", ("id", "Game"), ("id", "TeachWord"), NONE, ("id", "chosenWord")),
+            ("callstatic", ("id", "Game"), ("id", "UnlockWord"), NONE, ("id", "chosenWord")),
+            ("callmethod", ("id", "EquipShout"), ("id", "player"), NONE, ("id", "chosenShout")),
+            ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterGuns_var"),
+             ("int", 1), ("bool", False)),
+            ("assign", ("id", "Chosen"), ("bool", True)),
+            ("return", None),
+        ],
+    )
+    return Script(
+        name="SkylandsClassQuest",
+        parent="Quest",
+        variables=[("Chosen", "Bool", ("bool", False))],
+        auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
+                         ("StarterGuns", "Form")],
+        functions=[on_init, on_update],
+    )
