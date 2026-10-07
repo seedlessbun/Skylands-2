@@ -226,6 +226,7 @@ def pandora_install(root) -> None:
     b.obj("GD_Globals.General.Globals", "GlobalsDefinition", b.arr_structs("RarityLevelColors", [
         b.i("MinLevel", 1) + b.i("MaxLevel", 1) + color(255, 255, 255),
         b.i("MinLevel", 5) + b.i("MaxLevel", 5) + color(255, 180, 0),
+        *[b.i("MinLevel", lvl) + b.i("MaxLevel", lvl) + color(lvl * 40, 120, 60) for lvl in (2, 3, 4, 6)],
     ]))
     for _k, o, n in [("marauder", "GD_Population_Marauder.Balance.PawnBalance_MarauderRegular", "Marauder"),
                     ("psycho", "GD_Population_Psycho.Balance.PawnBalance_Psycho", "Psycho")]:

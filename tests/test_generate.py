@@ -54,3 +54,23 @@ def test_generate_from_both_games(tmp_path):
     assert npcs["EncBandit03Boss1HNordM"].first("FULL") == b"Badass Nomad\0"
     assert "EncBandit02Melee1HNordM" not in npcs  # unnamed records keep inheriting from their template
     assert rep["guns"] == 6 and rep["renamed_enemies"] == 2 and rep["missing_classes"] == ["psycho"]
+
+
+def test_build_installs_and_enables(tmp_path, monkeypatch):
+    from skylands_setup import build
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
+    plugins = tmp_path / "appdata" / "Skyrim Special Edition" / "plugins.txt"
+    plugins.parent.mkdir(parents=True)
+    plugins.write_text("# keep me\n*Unofficial Patch.esp\n")
+    done = tmp_path / "managed" / "setup-done.txt"
+    assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
+    assert done.read_text().startswith("ok 0.2.0")
+    assert (sky / "Data" / "Skylands.esp").is_file() and (sky / "Data" / "Scripts" / "SkylandsLootBeam.pex").is_file()
+    assert plugins.read_text().splitlines() == ["# keep me", "*Unofficial Patch.esp", "*Skylands.esp"]
+    assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
+    assert plugins.read_text().count("Skylands.esp") == 1
+    assert build.main(["--bl2", str(tmp_path / "nope"), "--skyrim", str(sky), "--done", str(done)]) == 2
+    assert not done.exists()
