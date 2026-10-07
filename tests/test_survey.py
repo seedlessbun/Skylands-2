@@ -11,6 +11,16 @@ import fake_skyrim  # noqa: E402
 from skylands_setup import survey  # noqa: E402
 
 
+def test_survey_with_full_fake_install(tmp_path):
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    sky = fake_skyrim.build(tmp_path / "sky")
+    out = tmp_path / "r.json"
+    assert survey.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--out", str(out)]) == 0
+    rep = json.loads(out.read_text())
+    assert "fatal" not in rep, rep.get("fatal")
+    assert len(rep["extract"]["classes"]) == 5 and rep["extract"]["weapons"]["guns"]
+
+
 def test_survey_end_to_end(tmp_path):
     bl2 = tmp_path / "Borderlands 2"
     cooked = bl2 / "WillowGame" / "CookedPCConsole"
@@ -25,9 +35,5 @@ def test_survey_end_to_end(tmp_path):
     assert survey.main(["--bl2", str(bl2), "--skyrim", str(sky), "--out", str(out)]) == 0
     rep = json.loads(out.read_text())
     assert "fatal" not in rep, rep.get("fatal")
-    t = rep["bl2"]["targets"]["b_skill_assassin"]
-    assert t["found"] and t["class"] == "SkillDefinition"
-    assert t["properties"]["InitialDuration"] == 6.5
-    assert any("error" in s for s in rep["bl2"]["targets"]["b_class_assassin"]["searched"])
-    assert rep["bl2"]["localization_hits"][0]["file"] == "GD_Assassin_Skills.int"
     assert rep["skyrim"]["localized"] is True
+    assert "extract" in rep and isinstance(rep["extract"]["errors"], list)

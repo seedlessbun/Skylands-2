@@ -137,6 +137,14 @@ def survey_bl2(bl2: Path, report: dict) -> None:
         entry["seconds"] = round(time.time() - t0, 2)
 
 
+def survey_extract(bl2: Path, report: dict, cache: Path) -> None:
+    from .bl2 import extract
+
+    t0 = time.time()
+    report["extract"] = extract.extract(bl2, cache)
+    report["extract"]["seconds"] = round(time.time() - t0, 1)
+
+
 def survey_skyrim(sky: Path, report: dict) -> None:
     data = sky / "Data"
     exe = sky / "SkyrimSE.exe"
@@ -146,7 +154,7 @@ def survey_skyrim(sky: Path, report: dict) -> None:
     if not esm.is_file():
         out["error"] = "Skyrim.esm not found"
         return
-    tes4, recs = read_plugin(esm, {"NPC_", "LVLN", "LVLI", "MGEF", "QUST", "WEAP", "AMMO"})
+    tes4, recs = read_plugin(esm, {"NPC_", "LVLN", "LVLI", "MGEF", "QUST", "WEAP", "AMMO", "ENCH", "EQUP"})
     out["localized"] = is_localized(tes4)
     names: dict[int, str] = {}
     try:
@@ -167,6 +175,15 @@ def survey_skyrim(sky: Path, report: dict) -> None:
     out["loot_lists"] = sorted(r.edid for r in recs["LVLI"] if r.edid.lower().startswith(("loot", "lchest", "lvlweapon")))[:400]
     out["mq101"] = [(r.edid, len(r.all("INDX"))) for r in recs["QUST"] if r.edid == "MQ101"]
     out["crossbow"] = [(r.edid, r.form_id) for r in recs["WEAP"] if "crossbow" in r.edid.lower()][:20]
+    out["ench_weapon"] = sorted(r.edid for r in recs["ENCH"] if r.edid.lower().startswith("enchweapon"))[:300]
+    out["mgef_damage"] = sorted(r.edid for r in recs["MGEF"] if re.search(r"damage|poison|absorb|summon", r.edid, re.I))[:300]
+    out["equip_slots"] = [(r.edid, r.form_id) for r in recs["EQUP"]]
+    out["bandit_named"] = sorted({(r.edid, name(r)) for r in recs["NPC_"] if r.edid.startswith("EncBandit") and name(r)})
+    dg = data / "Dawnguard.esm"
+    if dg.is_file():
+        _, drecs = read_plugin(dg, {"WEAP", "AMMO", "PROJ"})
+        out["dawnguard_crossbows"] = [(r.edid, r.form_id) for r in drecs["WEAP"] if "crossbow" in r.edid.lower()]
+        out["dawnguard_bolts"] = [(r.edid, r.form_id) for r in drecs["AMMO"] if "bolt" in r.edid.lower()]
     out["mgef_samples"] = sorted(r.edid for r in recs["MGEF"] if re.search(r"invis|paraly|summon|fortify|weakness", r.edid, re.I))[:200]
     plugins = Path(os.environ.get("LOCALAPPDATA", "")) / "Skyrim Special Edition" / "plugins.txt"
     out["plugins_txt"] = plugins.read_text(errors="replace")[:4000] if plugins.is_file() else None
@@ -189,14 +206,17 @@ def main(argv: list[str]) -> int:
         print("Run again with --bl2 \"<folder>\" --skyrim \"<folder>\".")
         return 1
     print(f"Borderlands 2: {a.bl2}\nSkyrim SE: {a.skyrim}\nReading... this can take a few minutes.")
-    report: dict = {"tool": "skylands survey 1", "python": sys.version}
-    for fn, arg in ((survey_bl2, a.bl2), (survey_skyrim, a.skyrim)):
+    report: dict = {"tool": "skylands survey 2", "python": sys.version}
+    cache = Path(a.out).parent / "skylands-cache"
+    for fn, args in ((survey_extract, (Path(a.bl2), report, cache)), (survey_skyrim, (Path(a.skyrim), report))):
         try:
-            fn(Path(arg), report)
+            fn(*args)
         except Exception:  # noqa: BLE001
             report.setdefault("fatal", []).append(traceback.format_exc()[-2000:])
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(report, indent=1), encoding="utf-8")
-    found = sum(1 for t in report.get("bl2", {}).get("targets", {}).values() if t.get("found"))
-    print(f"Skylands survey written to {a.out}: {found}/{len(S.BL2_READS)} Borderlands objects found")
+    ex = report.get("extract", {})
+    print(f"Skylands survey written to {a.out}")
+    print(f"  vault hunters: {len(ex.get('classes', []))}/6, guns: {len(ex.get('weapons', {}).get('guns', []))}, "
+          f"enemy types: {len(ex.get('enemies', {}))}, rarity colours: {len(ex.get('rarities', []))}, problems: {len(ex.get('errors', []))}")
     return 0

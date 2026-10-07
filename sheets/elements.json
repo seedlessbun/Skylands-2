@@ -1,0 +1,36 @@
+{
+  "sheet": "elements",
+  "description": "Borderlands elements on guns and the vanilla Skyrim weapon enchantment each uses (editor ids looked up in the player's Skyrim.esm).",
+  "columns": {
+    "id": "row id",
+    "bl2_part": "suffix of the BL2 elemental part (Pistol_Elemental_<x>)",
+    "skyrim_enchantment": "vanilla ENCH editor id",
+    "in_game": "yes once seen"
+  },
+  "rows": [
+    {
+      "id": "fire",
+      "bl2_part": "Fire",
+      "skyrim_enchantment": "EnchWeaponFireDamage03",
+      "in_game": "no"
+    },
+    {
+      "id": "shock",
+      "bl2_part": "Shock",
+      "skyrim_enchantment": "EnchWeaponShockDamage03",
+      "in_game": "no"
+    },
+    {
+      "id": "corrosive",
+      "bl2_part": "Corrosive",
+      "skyrim_enchantment": "EnchWeaponAbsorbHealth02",
+      "in_game": "no"
+    },
+    {
+      "id": "slag",
+      "bl2_part": "Slag",
+      "skyrim_enchantment": "EnchWeaponMagickaDamage03",
+      "in_game": "no"
+    }
+  ]
+}

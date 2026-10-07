@@ -1,0 +1,69 @@
+{
+  "sheet": "rarities",
+  "description": "Rarity tiers by Borderlands rarity level. Colours are read from the player's GD_Globals (RarityLevelColors); words and multipliers are this mashup's.",
+  "columns": {
+    "id": "row id",
+    "level": "Borderlands rarity level",
+    "word": "shown in the gun's name",
+    "damage_mult": "x base damage",
+    "value_mult": "x base value",
+    "loot_copies": "copies in the loot list (higher = more common)",
+    "balanced_in_game": "yes once tuned"
+  },
+  "rows": [
+    {
+      "id": "common",
+      "level": 1,
+      "word": "Common",
+      "damage_mult": 1.0,
+      "value_mult": 1.0,
+      "loot_copies": 12,
+      "balanced_in_game": "no"
+    },
+    {
+      "id": "uncommon",
+      "level": 2,
+      "word": "Uncommon",
+      "damage_mult": 1.15,
+      "value_mult": 1.6,
+      "loot_copies": 8,
+      "balanced_in_game": "no"
+    },
+    {
+      "id": "rare",
+      "level": 3,
+      "word": "Rare",
+      "damage_mult": 1.3,
+      "value_mult": 2.5,
+      "loot_copies": 4,
+      "balanced_in_game": "no"
+    },
+    {
+      "id": "epic",
+      "level": 4,
+      "word": "Epic",
+      "damage_mult": 1.5,
+      "value_mult": 4.0,
+      "loot_copies": 2,
+      "balanced_in_game": "no"
+    },
+    {
+      "id": "legendary",
+      "level": 5,
+      "word": "Legendary",
+      "damage_mult": 1.8,
+      "value_mult": 8.0,
+      "loot_copies": 1,
+      "balanced_in_game": "no"
+    },
+    {
+      "id": "etech",
+      "level": 6,
+      "word": "E-tech",
+      "damage_mult": 1.6,
+      "value_mult": 5.0,
+      "loot_copies": 1,
+      "balanced_in_game": "no"
+    }
+  ]
+}

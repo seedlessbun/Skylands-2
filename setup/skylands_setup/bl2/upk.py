@@ -296,9 +296,27 @@ def open_package(path: Path) -> Package:
 
 
 def read_names_only(path: Path) -> list[str]:
-    """Name table only (cheap way to find which package holds an object)."""
+    """Name table only, decompressing just the chunks that hold it (cheap way to index packages)."""
     raw = Path(path).read_bytes()
-    data = decompressed_image(raw)
+    if len(raw) < 16 or struct.unpack_from("<I", raw, 0)[0] != TAG:
+        raise UPKError("not an Unreal package")
+    if struct.unpack_from("<I", raw, 4)[0] == 0x20000:
+        data = decompressed_image(raw)
+    else:
+        h = _header(raw)
+        if not h["chunks"]:
+            data = raw
+        else:
+            lo, hi = h["name_offset"], max(h["import_offset"], h["name_offset"] + 1)
+            first = min(c[2] for c in h["chunks"])
+            image = bytearray(raw[:first])
+            for u_off, u_size, c_off, _c in sorted(h["chunks"]):
+                if u_off < hi and u_off + u_size > lo:
+                    chunk = _decompress_chunk(raw, c_off)
+                    if len(image) < u_off:
+                        image += b"\0" * (u_off - len(image))
+                    image[u_off : u_off + u_size] = chunk
+            data = bytes(image)
     h = _header(data)
     r = Reader(data, h["name_offset"])
     names = []

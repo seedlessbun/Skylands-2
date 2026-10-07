@@ -1,0 +1,73 @@
+{
+  "sheet": "enemies",
+  "description": "Skyrim bandits renamed as Pandora's bandit types. Matched by the player's Skyrim.esm editor ids; names read from Borderlands 2.",
+  "columns": {
+    "id": "row id",
+    "skyrim_edid_pattern": "regex on NPC_ editor ids (records that have a name)",
+    "bl2_read": "ref bl2_reads (enemy balance)",
+    "badass": "yes | no",
+    "abilities": "vanilla MGEF editor ids added as an ability, EDID:magnitude ';'-separated ('-' none)",
+    "in_game": "yes once seen"
+  },
+  "rows": [
+    {
+      "id": "tier0",
+      "skyrim_edid_pattern": "^EncBandit0[01](?!.*Boss)",
+      "bl2_read": "b_enemy_marauder",
+      "badass": "no",
+      "abilities": "AbWeaknessFireConstant:15",
+      "in_game": "no"
+    },
+    {
+      "id": "tier2",
+      "skyrim_edid_pattern": "^EncBandit02(?!.*Boss)",
+      "bl2_read": "b_enemy_nomad",
+      "badass": "no",
+      "abilities": "AbWeaknessFireConstant:15",
+      "in_game": "no"
+    },
+    {
+      "id": "tier3",
+      "skyrim_edid_pattern": "^EncBandit03(?!.*Boss)",
+      "bl2_read": "b_enemy_psycho",
+      "badass": "no",
+      "abilities": "AbWeaknessFireConstant:15",
+      "in_game": "no"
+    },
+    {
+      "id": "tier4",
+      "skyrim_edid_pattern": "^EncBandit04(?!.*Boss)",
+      "bl2_read": "b_enemy_bruiser",
+      "badass": "no",
+      "abilities": "AbWeaknessFireConstant:15",
+      "in_game": "no"
+    },
+    {
+      "id": "tier5",
+      "skyrim_edid_pattern": "^EncBandit05(?!.*Boss)",
+      "bl2_read": "b_enemy_goliath",
+      "badass": "no",
+      "abilities": "AbWeaknessFireConstant:15",
+      "in_game": "no"
+    },
+    {
+      "id": "tier6",
+      "skyrim_edid_pattern": "^EncBandit06(?!.*Boss)",
+      "bl2_read": "b_enemy_marauder_badass",
+      "badass": "yes",
+      "abilities": "AbFortifyHealth:100",
+      "in_game": "no"
+    },
+    {
+      "id": "boss",
+      "skyrim_edid_pattern": "^EncBandit0\\dBoss",
+      "bl2_read": "b_enemy_nomad_badass",
+      "badass": "yes",
+      "abilities": "AbFortifyHealth:150",
+      "in_game": "no"
+    }
+  ],
+  "refs": {
+    "bl2_read": "bl2_reads"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "sheet": "classes",
+  "description": "The six vault hunters. Names, text, duration and cooldown come from the player's Borderlands 2 (bl2_reads); the Skyrim effect is a vanilla magic effect found by editor id in the player's Skyrim.esm.",
+  "columns": {
+    "id": "row id",
+    "class_read": "ref bl2_reads (PlayerClassDefinition)",
+    "skill_read": "ref bl2_reads (SkillDefinition)",
+    "delivery": "self | aimed (Skyrim spell delivery)",
+    "effects": "vanilla MGEF editor ids with magnitude, ';'-separated: EDID:magnitude",
+    "summon_name_from": "for summons: which Borderlands text names the summoned ally ('-' if none)",
+    "in_game": "yes once seen working"
+  },
+  "rows": [
+    {
+      "id": "assassin",
+      "class_read": "b_class_assassin",
+      "skill_read": "b_skill_assassin",
+      "delivery": "self",
+      "effects": "InvisibillityFFSelf:0",
+      "summon_name_from": "-",
+      "in_game": "no"
+    },
+    {
+      "id": "siren",
+      "class_read": "b_class_siren",
+      "skill_read": "b_skill_siren",
+      "delivery": "aimed",
+      "effects": "ParalysisFFAimed:0",
+      "summon_name_from": "-",
+      "in_game": "no"
+    },
+    {
+      "id": "soldier",
+      "class_read": "b_class_soldier",
+      "skill_read": "b_skill_soldier",
+      "delivery": "self",
+      "effects": "SummonStormAtronach:0",
+      "summon_name_from": "skill_name",
+      "in_game": "no"
+    },
+    {
+      "id": "mercenary",
+      "class_read": "b_class_mercenary",
+      "skill_read": "b_skill_mercenary",
+      "delivery": "self",
+      "effects": "AlchFortifyMarksman:50;AlchFortifyHealRate:100",
+      "summon_name_from": "-",
+      "in_game": "no"
+    },
+    {
+      "id": "mechromancer",
+      "class_read": "b_class_mechromancer",
+      "skill_read": "b_skill_mechromancer",
+      "delivery": "self",
+      "effects": "SummonFrostAtronach:0",
+      "summon_name_from": "skill_name",
+      "in_game": "no"
+    },
+    {
+      "id": "psycho",
+      "class_read": "b_class_psycho",
+      "skill_read": "b_skill_psycho",
+      "delivery": "self",
+      "effects": "AlchFortifyOneHanded:50;AlchFortifyTwoHanded:50;AlchFortifyHealRate:100",
+      "summon_name_from": "-",
+      "in_game": "no"
+    }
+  ],
+  "refs": {
+    "class_read": "bl2_reads",
+    "skill_read": "bl2_reads"
+  }
+}

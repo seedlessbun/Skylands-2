@@ -203,43 +203,67 @@
       "read_verified": "no"
     },
     {
-      "id": "b_enemy_psycho",
-      "object": "GD_Population_Psycho.Balance.PawnBalance_Psycho",
+      "id": "b_enemy_marauder",
+      "object": "GD_Population_Marauder.Balance.PawnBalance_MarauderRegular",
       "ue_class": "AIPawnBalanceDefinition",
-      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
-      "used_for": "enemy type name and toughness",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
       "read_verified": "no"
     },
     {
       "id": "b_enemy_nomad",
       "object": "GD_Population_Nomad.Balance.PawnBalance_Nomad",
       "ue_class": "AIPawnBalanceDefinition",
-      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
-      "used_for": "enemy type name and toughness",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
       "read_verified": "no"
     },
     {
-      "id": "b_enemy_goliath",
-      "object": "GD_Population_Goliath.Balance.PawnBalance_Goliath",
+      "id": "b_enemy_psycho",
+      "object": "GD_Population_Psycho.Balance.PawnBalance_Psycho",
       "ue_class": "AIPawnBalanceDefinition",
-      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
-      "used_for": "enemy type name and toughness",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
       "read_verified": "no"
     },
     {
       "id": "b_enemy_bruiser",
       "object": "GD_Population_Bruiser.Balance.PawnBalance_Bruiser",
       "ue_class": "AIPawnBalanceDefinition",
-      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
-      "used_for": "enemy type name and toughness",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_goliath",
+      "object": "GD_Population_Goliath.Balance.PawnBalance_Goliath",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
       "read_verified": "no"
     },
     {
       "id": "b_enemy_marauder_badass",
-      "object": "GD_Anemone_Pop_Bandits.Balance.PawnBalance_MarauderBadass_Leader",
+      "object": "GD_Population_Marauder.Balance.PawnBalance_MarauderBadass",
       "ue_class": "AIPawnBalanceDefinition",
-      "fields": "AIPawn, PlayThroughs (DisplayName, Health)",
-      "used_for": "enemy type name and toughness",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_nomad_badass",
+      "object": "GD_Population_Nomad.Balance.PawnBalance_NomadBadass",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
+      "read_verified": "no"
+    },
+    {
+      "id": "b_enemy_psycho_badass",
+      "object": "GD_Population_Psycho.Balance.PawnBalance_PsychoBadass",
+      "ue_class": "AIPawnBalanceDefinition",
+      "fields": "PlayThroughs(0).DisplayName",
+      "used_for": "enemy type name",
       "read_verified": "no"
     }
   ]

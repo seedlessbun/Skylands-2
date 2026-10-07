@@ -31,7 +31,7 @@ echo.
 echo Done. Send survey-report.json from this folder back to Claude.
 pause
 """
-README = """Skylands survey (test round 1)
+README = """Skylands survey (test round 2)
 
 Double-click Run-Survey.bat. It finds Borderlands 2 and Skyrim Special Edition through Steam,
 reads them (it changes nothing in either game) and writes survey-report.json in this folder.
@@ -57,7 +57,7 @@ def python_tar() -> bytes:
 
 def main() -> int:
     DIST.mkdir(exist_ok=True)
-    out = DIST / "Skylands-Survey-1.zip"
+    out = DIST / "Skylands-Survey-2.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

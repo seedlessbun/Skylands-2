@@ -41,9 +41,113 @@ BL2_READS: dict[str, Bl2ReadsRow] = {
     'b_part_jakobs_body': Bl2ReadsRow(id='b_part_jakobs_body', object='GD_Weap_Pistol.Body.Pistol_Body_Jakobs', ue_class='WeaponPartDefinition', fields='WeaponAttributeEffects, TitleList, PrefixList', used_for='part stat changes'),
     'b_prefix_fire': Bl2ReadsRow(id='b_prefix_fire', object='GD_Weap_Pistol.Name.Prefix.Prefix_Elemental_Incendiary', ue_class='WeaponNamePartDefinition', fields='PartName', used_for='gun name prefix'),
     'b_mfr_jakobs': Bl2ReadsRow(id='b_mfr_jakobs', object='GD_Manufacturers.Manufacturers.Jakobs', ue_class='ManufacturerDefinition', fields='FlashLabelName, Grades', used_for='manufacturer name'),
-    'b_enemy_psycho': Bl2ReadsRow(id='b_enemy_psycho', object='GD_Population_Psycho.Balance.PawnBalance_Psycho', ue_class='AIPawnBalanceDefinition', fields='AIPawn, PlayThroughs (DisplayName, Health)', used_for='enemy type name and toughness'),
-    'b_enemy_nomad': Bl2ReadsRow(id='b_enemy_nomad', object='GD_Population_Nomad.Balance.PawnBalance_Nomad', ue_class='AIPawnBalanceDefinition', fields='AIPawn, PlayThroughs (DisplayName, Health)', used_for='enemy type name and toughness'),
-    'b_enemy_goliath': Bl2ReadsRow(id='b_enemy_goliath', object='GD_Population_Goliath.Balance.PawnBalance_Goliath', ue_class='AIPawnBalanceDefinition', fields='AIPawn, PlayThroughs (DisplayName, Health)', used_for='enemy type name and toughness'),
-    'b_enemy_bruiser': Bl2ReadsRow(id='b_enemy_bruiser', object='GD_Population_Bruiser.Balance.PawnBalance_Bruiser', ue_class='AIPawnBalanceDefinition', fields='AIPawn, PlayThroughs (DisplayName, Health)', used_for='enemy type name and toughness'),
-    'b_enemy_marauder_badass': Bl2ReadsRow(id='b_enemy_marauder_badass', object='GD_Anemone_Pop_Bandits.Balance.PawnBalance_MarauderBadass_Leader', ue_class='AIPawnBalanceDefinition', fields='AIPawn, PlayThroughs (DisplayName, Health)', used_for='enemy type name and toughness'),
+    'b_enemy_marauder': Bl2ReadsRow(id='b_enemy_marauder', object='GD_Population_Marauder.Balance.PawnBalance_MarauderRegular', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+    'b_enemy_nomad': Bl2ReadsRow(id='b_enemy_nomad', object='GD_Population_Nomad.Balance.PawnBalance_Nomad', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+    'b_enemy_psycho': Bl2ReadsRow(id='b_enemy_psycho', object='GD_Population_Psycho.Balance.PawnBalance_Psycho', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+    'b_enemy_bruiser': Bl2ReadsRow(id='b_enemy_bruiser', object='GD_Population_Bruiser.Balance.PawnBalance_Bruiser', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+    'b_enemy_goliath': Bl2ReadsRow(id='b_enemy_goliath', object='GD_Population_Goliath.Balance.PawnBalance_Goliath', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+    'b_enemy_marauder_badass': Bl2ReadsRow(id='b_enemy_marauder_badass', object='GD_Population_Marauder.Balance.PawnBalance_MarauderBadass', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+    'b_enemy_nomad_badass': Bl2ReadsRow(id='b_enemy_nomad_badass', object='GD_Population_Nomad.Balance.PawnBalance_NomadBadass', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+    'b_enemy_psycho_badass': Bl2ReadsRow(id='b_enemy_psycho_badass', object='GD_Population_Psycho.Balance.PawnBalance_PsychoBadass', ue_class='AIPawnBalanceDefinition', fields='PlayThroughs(0).DisplayName', used_for='enemy type name'),
+}
+
+@dataclass(frozen=True)
+class ClassesRow:
+    """The six vault hunters. Names, text, duration and cooldown come from the player's Borderlands 2 (bl2_reads); the Skyrim effect is a vanilla magic effect found by editor id in the player's Skyrim.esm."""
+
+    id: str
+    class_read: str
+    skill_read: str
+    delivery: str
+    effects: str
+    summon_name_from: str
+
+
+CLASSES: dict[str, ClassesRow] = {
+    'assassin': ClassesRow(id='assassin', class_read='b_class_assassin', skill_read='b_skill_assassin', delivery='self', effects='InvisibillityFFSelf:0', summon_name_from='-'),
+    'siren': ClassesRow(id='siren', class_read='b_class_siren', skill_read='b_skill_siren', delivery='aimed', effects='ParalysisFFAimed:0', summon_name_from='-'),
+    'soldier': ClassesRow(id='soldier', class_read='b_class_soldier', skill_read='b_skill_soldier', delivery='self', effects='SummonStormAtronach:0', summon_name_from='skill_name'),
+    'mercenary': ClassesRow(id='mercenary', class_read='b_class_mercenary', skill_read='b_skill_mercenary', delivery='self', effects='AlchFortifyMarksman:50;AlchFortifyHealRate:100', summon_name_from='-'),
+    'mechromancer': ClassesRow(id='mechromancer', class_read='b_class_mechromancer', skill_read='b_skill_mechromancer', delivery='self', effects='SummonFrostAtronach:0', summon_name_from='skill_name'),
+    'psycho': ClassesRow(id='psycho', class_read='b_class_psycho', skill_read='b_skill_psycho', delivery='self', effects='AlchFortifyOneHanded:50;AlchFortifyTwoHanded:50;AlchFortifyHealRate:100', summon_name_from='-'),
+}
+
+@dataclass(frozen=True)
+class ElementsRow:
+    """Borderlands elements on guns and the vanilla Skyrim weapon enchantment each uses (editor ids looked up in the player's Skyrim.esm)."""
+
+    id: str
+    bl2_part: str
+    skyrim_enchantment: str
+
+
+ELEMENTS: dict[str, ElementsRow] = {
+    'fire': ElementsRow(id='fire', bl2_part='Fire', skyrim_enchantment='EnchWeaponFireDamage03'),
+    'shock': ElementsRow(id='shock', bl2_part='Shock', skyrim_enchantment='EnchWeaponShockDamage03'),
+    'corrosive': ElementsRow(id='corrosive', bl2_part='Corrosive', skyrim_enchantment='EnchWeaponAbsorbHealth02'),
+    'slag': ElementsRow(id='slag', bl2_part='Slag', skyrim_enchantment='EnchWeaponMagickaDamage03'),
+}
+
+@dataclass(frozen=True)
+class EnemiesRow:
+    """Skyrim bandits renamed as Pandora's bandit types. Matched by the player's Skyrim.esm editor ids; names read from Borderlands 2."""
+
+    id: str
+    skyrim_edid_pattern: str
+    bl2_read: str
+    badass: str
+    abilities: str
+
+
+ENEMIES: dict[str, EnemiesRow] = {
+    'tier0': EnemiesRow(id='tier0', skyrim_edid_pattern='^EncBandit0[01](?!.*Boss)', bl2_read='b_enemy_marauder', badass='no', abilities='AbWeaknessFireConstant:15'),
+    'tier2': EnemiesRow(id='tier2', skyrim_edid_pattern='^EncBandit02(?!.*Boss)', bl2_read='b_enemy_nomad', badass='no', abilities='AbWeaknessFireConstant:15'),
+    'tier3': EnemiesRow(id='tier3', skyrim_edid_pattern='^EncBandit03(?!.*Boss)', bl2_read='b_enemy_psycho', badass='no', abilities='AbWeaknessFireConstant:15'),
+    'tier4': EnemiesRow(id='tier4', skyrim_edid_pattern='^EncBandit04(?!.*Boss)', bl2_read='b_enemy_bruiser', badass='no', abilities='AbWeaknessFireConstant:15'),
+    'tier5': EnemiesRow(id='tier5', skyrim_edid_pattern='^EncBandit05(?!.*Boss)', bl2_read='b_enemy_goliath', badass='no', abilities='AbWeaknessFireConstant:15'),
+    'tier6': EnemiesRow(id='tier6', skyrim_edid_pattern='^EncBandit06(?!.*Boss)', bl2_read='b_enemy_marauder_badass', badass='yes', abilities='AbFortifyHealth:100'),
+    'boss': EnemiesRow(id='boss', skyrim_edid_pattern='^EncBandit0\\dBoss', bl2_read='b_enemy_nomad_badass', badass='yes', abilities='AbFortifyHealth:150'),
+}
+
+@dataclass(frozen=True)
+class GunTypesRow:
+    """Borderlands gun types. Package and balance naming are Borderlands 2's; Skyrim numbers are this mashup's balance (crossbow-based, before rarity)."""
+
+    id: str
+    package: str
+    balance_prefix: str
+    base_damage: int
+    base_value: int
+    weight: float
+    speed: float
+
+
+GUN_TYPES: dict[str, GunTypesRow] = {
+    'pistol': GunTypesRow(id='pistol', package='GD_Weap_Pistol', balance_prefix='Pistol', base_damage=12, base_value=60, weight=4.0, speed=1.3),
+    'smg': GunTypesRow(id='smg', package='GD_Weap_SMG', balance_prefix='SMG', base_damage=10, base_value=80, weight=6.0, speed=1.6),
+    'assault_rifle': GunTypesRow(id='assault_rifle', package='GD_Weap_AssaultRifle', balance_prefix='AR', base_damage=15, base_value=100, weight=10.0, speed=1.2),
+    'shotgun': GunTypesRow(id='shotgun', package='GD_Weap_Shotgun', balance_prefix='SG', base_damage=20, base_value=100, weight=10.0, speed=0.8),
+    'sniper': GunTypesRow(id='sniper', package='GD_Weap_SniperRifles', balance_prefix='Sniper', base_damage=26, base_value=120, weight=12.0, speed=0.6),
+    'launcher': GunTypesRow(id='launcher', package='GD_Weap_Launchers', balance_prefix='RL', base_damage=34, base_value=150, weight=16.0, speed=0.5),
+}
+
+@dataclass(frozen=True)
+class RaritiesRow:
+    """Rarity tiers by Borderlands rarity level. Colours are read from the player's GD_Globals (RarityLevelColors); words and multipliers are this mashup's."""
+
+    id: str
+    level: int
+    word: str
+    damage_mult: float
+    value_mult: float
+    loot_copies: int
+
+
+RARITIES: dict[str, RaritiesRow] = {
+    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12),
+    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8),
+    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4),
+    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2),
+    'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1),
+    'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1),
 }
