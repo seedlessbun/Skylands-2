@@ -9,6 +9,7 @@ tool reports anything it cannot decode so the real files can confirm each rule.
 
 from __future__ import annotations
 
+import re
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -252,11 +253,31 @@ class Package:
             out += sep + parts[k][0]
         return out
 
+    def _indexes(self) -> None:
+        if getattr(self, "_by_name", None) is None:
+            by_name: dict[str, list[int]] = {}
+            by_outer: dict[int, list[int]] = {}
+            for e in self.exports:
+                by_name.setdefault(e.name.lower(), []).append(e.index)
+                by_outer.setdefault(e.outer_index, []).append(e.index)
+            self._by_name, self._by_outer = by_name, by_outer
+
     def find(self, path: str) -> int:
-        for e in self.exports:
-            if e.name.lower() == path.rsplit(".", 1)[-1].split(":")[-1].lower() and self.path_of(e.index).lower() == path.lower():
-                return e.index
+        self._indexes()
+        leaf = re.split(r"[.:]", path)[-1].lower()
+        want = path.lower()
+        for i in self._by_name.get(leaf, ()):
+            if self.path_of(i).lower() == want:
+                return i
         return 0
+
+    def children_of(self, path: str) -> list[int]:
+        """Exports directly inside the object or package group at path."""
+        idx = self.find(path)
+        if not idx:
+            return []
+        self._indexes()
+        return list(self._by_outer.get(idx, ()))
 
     def export_data(self, index: int) -> bytes:
         e = self.exports[index - 1]
@@ -295,9 +316,29 @@ def open_package(path: Path) -> Package:
     return pkg
 
 
-def read_names_only(path: Path) -> list[str]:
-    """Name table only, decompressing just the chunks that hold it (cheap way to index packages)."""
-    raw = Path(path).read_bytes()
+def _name_table(data: bytes, offset: int, count: int) -> list[bytes]:
+    """Names as raw bytes (FString + 8 bytes of flags each). A tight loop: this runs for every package."""
+    unpack = struct.Struct("<i").unpack_from
+    names: list[bytes] = []
+    append = names.append
+    pos = offset
+    for _ in range(count):
+        n = unpack(data, pos)[0]
+        pos += 4
+        if n > 0:
+            append(data[pos : pos + n - 1])
+            pos += n
+        elif n < 0:
+            append(data[pos : pos - n * 2 - 2].decode("utf-16-le", errors="replace").encode("cp1252", errors="replace"))
+            pos += -n * 2
+        else:
+            append(b"")
+        pos += 8
+    return names
+
+
+def _names_image(raw: bytes) -> tuple[bytes, dict]:
+    """Decompress just enough of a package to read its name table."""
     if len(raw) < 16 or struct.unpack_from("<I", raw, 0)[0] != TAG:
         raise UPKError("not an Unreal package")
     if struct.unpack_from("<I", raw, 4)[0] == 0x20000:
@@ -317,13 +358,19 @@ def read_names_only(path: Path) -> list[str]:
                         image += b"\0" * (u_off - len(image))
                     image[u_off : u_off + u_size] = chunk
             data = bytes(image)
-    h = _header(data)
-    r = Reader(data, h["name_offset"])
-    names = []
-    for _ in range(h["name_count"]):
-        names.append(r.fstring())
-        r.u64()
-    return names
+    return data, _header(data)
+
+
+def read_names_only(path: Path) -> list[str]:
+    """Name table only, decompressing just the chunks that hold it."""
+    data, h = _names_image(Path(path).read_bytes())
+    return [n.decode("cp1252", errors="replace") for n in _name_table(data, h["name_offset"], h["name_count"])]
+
+
+def read_name_set(path: Path) -> set[str]:
+    """Lower-cased names of a package, for the object index."""
+    data, h = _names_image(Path(path).read_bytes())
+    return {n.lower().decode("cp1252", errors="replace") for n in _name_table(data, h["name_offset"], h["name_count"])}
 
 
 # ---- tagged properties ------------------------------------------------------------------------

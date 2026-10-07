@@ -47,3 +47,21 @@ def test_not_a_package(tmp_path):
     p.write_bytes(b"nope" * 10)
     with pytest.raises(upk.UPKError):
         upk.open_package(p)
+
+
+def test_find_and_children_use_indexes(tmp_path):
+    import time
+
+    b = fake_bl2.ObjBuilder()
+    for i in range(3000):
+        b.obj(f"GD_Big.Group{i % 30}.Obj_{i}", "WeaponPartDefinition", b"")
+    path = tmp_path / "GD_Big.upk"
+    path.write_bytes(b.build())
+    pkg = upk.open_package(path)
+    t = time.time()
+    for i in range(0, 3000, 15):
+        assert pkg.find(f"GD_Big.Group{i % 30}.Obj_{i}")
+    assert time.time() - t < 1.0
+    assert pkg.find("GD_Big.Group1.Obj_2") == 0  # right name, wrong group
+    kids = pkg.children_of("GD_Big.Group3")
+    assert len(kids) == 100 and all(pkg.path_of(k).startswith("GD_Big.Group3.") for k in kids)

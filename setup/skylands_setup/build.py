@@ -84,7 +84,7 @@ def main(argv: list[str]) -> int:
             say(f"Skyrim Special Edition not found ({sky}).")
             return 2
         say(f"Skylands {VERSION} setup. Borderlands 2: {bl2}  Skyrim SE: {sky}")
-        data = extract.extract(bl2, work / "cache")
+        data = extract.extract(bl2, work / "cache", say, budget_minutes=40)
         (work / "pandora.json").write_text(json.dumps(data, indent=1), encoding="utf-8")
         say(f"Read Borderlands 2: {len(data.get('classes', []))} vault hunters, "
             f"{len(data.get('weapons', {}).get('guns', []))} gun balances, {len(data.get('enemies', {}))} enemy types, "

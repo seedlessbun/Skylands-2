@@ -141,7 +141,7 @@ def survey_extract(bl2: Path, report: dict, cache: Path) -> None:
     from .bl2 import extract
 
     t0 = time.time()
-    report["extract"] = extract.extract(bl2, cache)
+    report["extract"] = extract.extract(bl2, cache, lambda m: print(m, flush=True), budget_minutes=12)
     report["extract"]["seconds"] = round(time.time() - t0, 1)
 
 
@@ -206,7 +206,7 @@ def main(argv: list[str]) -> int:
         print("Run again with --bl2 \"<folder>\" --skyrim \"<folder>\".")
         return 1
     print(f"Borderlands 2: {a.bl2}\nSkyrim SE: {a.skyrim}\nReading... this can take a few minutes.")
-    report: dict = {"tool": "skylands survey 2", "python": sys.version}
+    report: dict = {"tool": "skylands survey 3", "python": sys.version}
     cache = Path(a.out).parent / "skylands-cache"
     for fn, args in ((survey_extract, (Path(a.bl2), report, cache)), (survey_skyrim, (Path(a.skyrim), report))):
         try:

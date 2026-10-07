@@ -32,3 +32,9 @@ def test_extract_everything(tmp_path):
     # cached index gives the same answer
     again = extract.extract(tmp_path / "bl2", tmp_path / "cache")
     assert again["classes"] == d["classes"]
+
+
+def test_budget_stops_extraction_and_reports(tmp_path):
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    d = extract.extract(tmp_path / "bl2", None, budget_minutes=1e-9)
+    assert any("time budget" in e for e in d["errors"]) and d["log"] and d["log"][0].endswith("Indexing 3 Borderlands 2 packages ...")

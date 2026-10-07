@@ -7,6 +7,7 @@ Every value comes from the player's own files. Anything that cannot be read is l
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 from .. import sheet_data as S
@@ -130,7 +131,7 @@ def _part_name(ix: Index, name_part: str | None) -> str:
     return ((ix.props(name_part) or {}).get("PartName") or "") if name_part else ""
 
 
-def guns(ix: Index, errors: list[str]) -> dict:
+def guns(ix: Index, errors: list[str], say=None) -> dict:
     out: dict = {"guns": [], "manufacturers": {}}
     for gt in S.GUN_TYPES.values():
         groups = [(f"{gt.package}.A_Weapons", False), (f"{gt.package}.A_Weapons_Legendary", True)]
@@ -185,6 +186,8 @@ def guns(ix: Index, errors: list[str]) -> dict:
                 })
         if not any(g["type"] == gt.id for g in out["guns"]):
             errors.append(f"no {gt.id} balances found in {gt.package}")
+        if say:
+            say(f"  {gt.id}: {sum(1 for g in out['guns'] if g['type'] == gt.id)} gun balances")
     return out
 
 
@@ -203,14 +206,29 @@ def enemies(ix: Index, errors: list[str]) -> dict:
     return out
 
 
-def extract(bl2_root: Path, cache_dir: Path | None = None) -> dict:
+def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget_minutes: float | None = None) -> dict:
+    log: list[str] = []
+
+    def say(m: str) -> None:
+        log.append(f"[{time.time() - t0:6.0f} s] {m}")
+        if progress:
+            progress(m)
+
     errors: list[str] = []
-    ix = Index(bl2_root, cache_dir / "bl2_index.json" if cache_dir else None)
+    t0 = time.time()
+    ix = Index(bl2_root, cache_dir, say)
+    if budget_minutes:
+        ix.deadline = t0 + budget_minutes * 60
     data: dict = {"packages": len(ix.files), "index_errors": len(ix.errors)}
     for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies)):
+        t = time.time()
+        say(f"Reading {key} ...")
         try:
-            data[key] = fn(ix, errors)
+            data[key] = fn(ix, errors, say) if fn is guns else fn(ix, errors)
         except Exception as e:  # noqa: BLE001 - keep going, report it
             errors.append(f"{key}: {type(e).__name__}: {e}")
+        say(f"  {key} done in {time.time() - t:.0f} s")
     data["errors"] = errors
+    data["seconds"] = round(time.time() - t0, 1)
+    data["log"] = log
     return data
