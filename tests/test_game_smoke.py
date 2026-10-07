@@ -35,10 +35,24 @@ def tick(g, n=1, dt=0.1):
         g.on_tick(None, NS(DeltaTime=dt))
 
 
+def test_opening_when_save_loads_after_spawn(game):
+    """The in-game bug: spawn, then save data loads; the greeting must still come."""
+    fake_sdk.make_world()
+    shown = len(fake_sdk.SHOWN)
+    game.on_possess()
+    game.progress.value = {}
+    game.on_load()
+    tick(game, 30)
+    assert len(fake_sdk.SHOWN) == shown + 1 and fake_sdk.SHOWN[-1].title == "Hey, you."
+    tick(game, 60)
+    assert len(fake_sdk.SHOWN) == shown + 1  # shown once
+    assert game.STATE["level"] == 1 and game.STATE["points"] == 0
+
+
 def test_opening_and_race(game):
     w = fake_sdk.make_world()
-    game.on_load()
     game.on_possess()
+    game.on_load()
     tick(game, 30)
     box = fake_sdk.SHOWN[-1]
     assert box.title == "Hey, you."

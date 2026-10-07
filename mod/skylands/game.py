@@ -45,6 +45,7 @@ _messages: list[tuple[str, str]] = []
 _next_message_at = 0.0
 _opening_due_at: float | None = None
 _no_skyrim_shown = False
+_opening_shown = False
 _first_ok: set[str] = set()
 _last = {"money": None, "shield": None, "injured": False, "scan_at": 0.0, "enemy_near": False}
 _vendor_money: dict[str, int] = {}
@@ -376,6 +377,7 @@ def show_perk_menu(edid: str) -> None:
 
 
 def show_race_menu() -> None:
+    normalize_state()
     races = RULES.skyrim["races"]
     buttons = [OptionBoxButton(r["name"], f"{r['desc']}\n\n{boosts_text(r)}") for r in races]
     by_name = {r["name"]: r for r in races}
@@ -421,19 +423,25 @@ def on_save() -> None:
     progress.value = json.loads(json.dumps(STATE))
 
 
+def normalize_state() -> None:
+    """Fill in anything missing from a character's progress (old saves, or loaded before Skyrim was read)."""
+    if RULES is None:
+        return
+    for key, value in RULES.new_state().items():
+        STATE.setdefault(key, value)
+    if STATE["race"]:
+        for e in RULES.skill_by_edid:
+            STATE["skills"].setdefault(e, {"level": RULES.start, "xp": 0.0})
+
+
 def on_load() -> None:
-    global STATE, _opening_due_at
+    global _opening_shown
     loaded = progress.value if isinstance(progress.value, dict) else {}
-    STATE = json.loads(json.dumps(loaded)) if loaded else {}
-    if RULES is not None:
-        base = RULES.new_state()
-        base.update(STATE)
-        STATE = base
-        if STATE["race"]:
-            for e in RULES.skill_by_edid:
-                STATE["skills"].setdefault(e, {"level": RULES.start, "xp": 0.0})
-    _opening_due_at = None
-    ok_once("save_load")
+    STATE.clear()
+    STATE.update(json.loads(json.dumps(loaded)) if loaded else {})
+    normalize_state()
+    _opening_shown = False  # the tick schedules the greeting if this character has no race yet
+    ok_once("save_load", f"race={STATE.get('race') or 'none'}")
 
 
 # ---- hooks ------------------------------------------------------------------------------------
@@ -466,12 +474,15 @@ def on_possess(*_: Any) -> None:
     _speed.clear()
     _status.clear()
     _opening_due_at = _clock + float(T["t_opening_delay_s"])
+    ok_once("possess")
 
 
 @hook(H["h_new_game"].function, Type.POST)
 def on_new_game(*_: Any) -> None:
-    global _opening_due_at
+    global _opening_due_at, _opening_shown
+    _opening_shown = False
     _opening_due_at = _clock + float(T["t_opening_delay_s"])
+    ok_once("new_game")
 
 
 @hook(H["h_enemy_damage"].function)
@@ -657,7 +668,7 @@ def _hold_attr(store: dict, key: Any, obj: Any, attr: str, factor: float) -> Non
 
 @hook(H["h_tick"].function, Type.POST)
 def on_tick(_obj: Any, args: Any, *_: Any) -> None:
-    global _clock, _next_message_at, _opening_due_at, _no_skyrim_shown, _heal_acc, _own_heal
+    global _clock, _next_message_at, _opening_due_at, _no_skyrim_shown, _heal_acc, _own_heal, _opening_shown
     global _shout_was_ready, _shield_full_after_hit
     pc = get_pc(possibly_loading=True)
     if pc is None or pc.WorldInfo.Pauser is not None:
@@ -674,18 +685,22 @@ def on_tick(_obj: Any, args: Any, *_: Any) -> None:
     if pawn is None:
         return
 
-    if _opening_due_at is not None and _clock >= _opening_due_at:
-        _opening_due_at = None
-        if RULES is None:
-            if not _no_skyrim_shown and LOAD_ERROR:
-                _no_skyrim_shown = True
-                TrainingBox(title="Skyrim not found", message=LOAD_ERROR).show()
-            elif not LOAD_ERROR:
-                _opening_due_at = _clock + 1.0  # still reading Skyrim
-        elif not STATE.get("race"):
-            if not STATE:
-                STATE.update(RULES.new_state())
+    ok_once("tick")
+    # Greeting: due a moment after spawning for any character without a race, whatever order
+    # the spawn, save-load and Skyrim-reading events arrived in.
+    needs_opening = not _opening_shown and not STATE.get("race")
+    if needs_opening and _opening_due_at is None:
+        _opening_due_at = _clock + float(T["t_opening_delay_s"])
+    if needs_opening and _clock >= _opening_due_at:
+        if RULES is not None:
+            normalize_state()
+            _opening_shown = True
+            _opening_due_at = None
             show_opening()
+        elif LOAD_ERROR and not _no_skyrim_shown:
+            _no_skyrim_shown = True
+            _opening_due_at = None
+            TrainingBox(title="Skyrim not found", message=LOAD_ERROR).show()
 
     if RULES is None or not STATE.get("race"):
         return
