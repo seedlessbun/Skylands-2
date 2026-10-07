@@ -88,3 +88,83 @@ def class_choice_quest() -> Script:
                          ("StarterGuns", "Form")],
         functions=[on_init, on_update],
     )
+
+
+def loot_beam() -> Script:
+    """SkylandsLootBeam extends ObjectReference (attached to every Skylands gun).
+
+      Activator Property Beam Auto
+      ObjectReference beamRef
+
+      Event OnLoad()
+        If !beamRef
+          beamRef = PlaceAtMe(Beam, 1, False, False)
+        EndIf
+      EndEvent
+
+      Event OnUnload()
+        ClearBeam()
+      EndEvent
+
+      Event OnContainerChanged(ObjectReference akNewContainer, ObjectReference akOldContainer)
+        If akNewContainer
+          ClearBeam()
+        EndIf
+      EndEvent
+
+      Function ClearBeam()
+        If beamRef
+          beamRef.Disable(False)
+          beamRef.Delete()
+          beamRef = None
+        EndIf
+      EndFunction
+    """
+    clear_call = ("callmethod", ("id", "ClearBeam"), SELF, NONE)
+    on_load = Function(
+        "OnLoad",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("::temp1", "Bool"), ("placed", "ObjectReference")],
+        code=[
+            ("cast", ("id", "::temp0"), ("id", "beamRef")),
+            ("not", ("id", "::temp1"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp1"), ("lbl", "done")),
+            ("callmethod", ("id", "PlaceAtMe"), SELF, ("id", "placed"), ("id", "::Beam_var"), ("int", 1),
+             ("bool", False), ("bool", False)),
+            ("assign", ("id", "beamRef"), ("id", "placed")),
+            ("label", "done"),
+            ("return", None),
+        ],
+    )
+    on_unload = Function("OnUnload", locals=[("::nonevar", "None")], code=[clear_call, ("return", None)])
+    on_container = Function(
+        "OnContainerChanged",
+        params=[("akNewContainer", "ObjectReference"), ("akOldContainer", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            ("cast", ("id", "::temp0"), ("id", "akNewContainer")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            clear_call,
+            ("label", "done"),
+            ("return", None),
+        ],
+    )
+    clear = Function(
+        "ClearBeam",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            ("cast", ("id", "::temp0"), ("id", "beamRef")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("callmethod", ("id", "Disable"), ("id", "beamRef"), NONE, ("bool", False)),
+            ("callmethod", ("id", "Delete"), ("id", "beamRef"), NONE),
+            ("assign", ("id", "beamRef"), None),
+            ("label", "done"),
+            ("return", None),
+        ],
+    )
+    return Script(
+        name="SkylandsLootBeam",
+        parent="ObjectReference",
+        variables=[("beamRef", "ObjectReference", None)],
+        auto_properties=[("Beam", "Activator")],
+        functions=[on_load, on_unload, on_container, clear],
+    )

@@ -61,3 +61,16 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
                  "WordOfPower[] Property Words Auto", "Form Property StarterGuns Auto"):
         assert prop in psc
     assert EXPECTED in psc
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_loot_beam_decompiles_to_intended_papyrus(tmp_path):
+    f = tmp_path / "SkylandsLootBeam.pex"
+    f.write_bytes(pex.write(scripts.loot_beam()))
+    subprocess.run([CHAMPOLLION, str(f), "-p", str(tmp_path / "out")], check=True, timeout=30, capture_output=True)
+    psc = "\n".join(line.rstrip() for line in (tmp_path / "out" / "SkylandsLootBeam.psc").read_text().splitlines())
+    assert "ScriptName SkylandsLootBeam Extends ObjectReference" in psc
+    assert "Activator Property Beam Auto" in psc
+    assert "Event OnLoad()\n  If !beamRef as Bool\n    ObjectReference placed = Self.PlaceAtMe(Beam, 1, False, False)" in psc
+    assert "Event OnContainerChanged(ObjectReference akNewContainer, ObjectReference akOldContainer)\n  If akNewContainer as Bool\n    Self.ClearBeam()" in psc
+    assert "beamRef.Disable(False)\n    beamRef.Delete()\n    beamRef = None" in psc
