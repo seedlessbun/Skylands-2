@@ -367,27 +367,37 @@ def read_names_only(path: Path) -> list[str]:
     return [n.decode("cp1252", errors="replace") for n in _name_table(data, h["name_offset"], h["name_count"])]
 
 
-def index_info(path: Path) -> tuple[set[str], set[str]]:
-    """(lower-cased names, lower-cased names of the package's top-level exports).
+def index_info(path: Path) -> tuple[set[str], dict[str, int]]:
+    """(top-level export names, {"top.group": number of objects directly inside it}), all lower-case.
 
-    Name tables also hold the names of everything a package merely imports, so only the top-level
-    exports say which file actually defines an object.
+    Name tables also hold the names of everything a package merely imports, and many files carry a
+    small copy of a group such as GD_Weap_Pistol.A_Weapons. The object counts say which file really
+    defines a group: the one that holds the most.
     """
     data, h = _names_image(Path(path).read_bytes())
     names = _name_table(data, h["name_offset"], h["name_count"])
-    top: set[str] = set()
+    n = h["export_count"]
+    outers, idxs, nums = [0] * (n + 1), [0] * (n + 1), [0] * (n + 1)
+    head, nm = struct.Struct("<iii"), struct.Struct("<ii")
     pos = h["export_offset"]
-    head = struct.Struct("<iii")
-    nm = struct.Struct("<ii")
-    for _ in range(h["export_count"]):
-        _cls, _sup, outer = head.unpack_from(data, pos)
-        if outer == 0:
-            idx, num = nm.unpack_from(data, pos + 12)
-            base = names[idx].decode("cp1252", errors="replace")
-            top.add((base if num == 0 else f"{base}_{num - 1}").lower())
+    for i in range(1, n + 1):
+        outers[i] = head.unpack_from(data, pos)[2]
+        idxs[i], nums[i] = nm.unpack_from(data, pos + 12)
         nets = struct.unpack_from("<i", data, pos + 44)[0]
         pos += 48 + nets * 4 + 20
-    return {n.lower().decode("cp1252", errors="replace") for n in names}, top
+
+    def name_of(i: int) -> str:
+        base = names[idxs[i]].decode("cp1252", errors="replace")
+        return (base if nums[i] == 0 else f"{base}_{nums[i] - 1}").lower()
+
+    top = {i: name_of(i) for i in range(1, n + 1) if outers[i] == 0}
+    group_of = {i: top[outers[i]] + "." + name_of(i) for i in range(1, n + 1) if outers[i] in top}
+    groups = dict.fromkeys(group_of.values(), 0)
+    for i in range(1, n + 1):
+        key = group_of.get(outers[i])
+        if key is not None:
+            groups[key] += 1
+    return set(top.values()), groups
 
 
 def read_name_set(path: Path) -> set[str]:

@@ -219,7 +219,7 @@ def main(argv: list[str]) -> int:
         print("Run again with --bl2 \"<folder>\" --skyrim \"<folder>\".")
         return 1
     print(f"Borderlands 2: {a.bl2}\nSkyrim SE: {a.skyrim}\nReading... this can take a few minutes.")
-    report: dict = {"tool": "skylands survey 4", "python": sys.version}
+    report: dict = {"tool": "skylands survey 5", "python": sys.version}
     cache = Path(a.out).parent / "skylands-cache"
     for fn, args in ((survey_extract, (Path(a.bl2), report, cache)), (survey_skyrim, (Path(a.skyrim), report)),
                      (survey_generate, (Path(a.skyrim), report, Path(a.out).parent / "survey-stage"))):

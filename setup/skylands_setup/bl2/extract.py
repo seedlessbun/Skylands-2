@@ -137,6 +137,14 @@ def _part_name(ix: Index, name_part: str | None) -> str:
 
 def guns(ix: Index, errors: list[str], say=None) -> dict:
     out: dict = {"guns": [], "manufacturers": {}}
+    try:
+        _guns_into(ix, errors, say, out)
+    except TimeoutError as e:  # keep what was read so far
+        errors.append(f"weapons stopped early after {len(out['guns'])} guns: {e}")
+    return out
+
+
+def _guns_into(ix: Index, errors: list[str], say, out: dict) -> None:
     for gt in S.GUN_TYPES.values():
         groups = [(f"{gt.package}.A_Weapons", False), (f"{gt.package}.A_Weapons_Legendary", True)]
         prefixes = {e: _part_name(ix, f"{gt.package}.Name.Prefix.Prefix_Elemental_{w}") for e, w in ELEMENT_WORDS.items()}
@@ -197,7 +205,6 @@ def guns(ix: Index, errors: list[str], say=None) -> dict:
             errors.append(f"no {gt.id} balances found in {gt.package}")
         if say:
             say(f"  {gt.id}: {sum(1 for g in out['guns'] if g['type'] == gt.id)} gun balances")
-    return out
 
 
 def enemies(ix: Index, errors: list[str]) -> dict:
@@ -225,7 +232,7 @@ def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget
 
     errors: list[str] = []
     t0 = time.time()
-    ix = Index(bl2_root, cache_dir, say)
+    ix = Index(bl2_root, cache_dir / "bl2_index.json" if cache_dir else None, say)
     if budget_minutes:
         ix.deadline = time.process_time() + budget_minutes * 60
     data: dict = {"packages": len(ix.files), "index_errors": len(ix.errors)}
