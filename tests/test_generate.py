@@ -29,7 +29,7 @@ def test_generate_from_both_games(tmp_path):
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert names["Skylands_Pistol_Jakobs"] == "Jakobs Revolver (Common)"
     assert names["Skylands_Pistol_Jakobs_3_Rare_Fire"] == "Incendiary Revolver (Rare)"
-    assert names["Skylands_Pistol_Jakobs_5_Maggie"] == "Maggie (Legendary)"
+    assert names["Skylands_Pistol_Jakobs_5_Maggie"] == "Sledge's Maggie (Legendary)"
     fire = next(r for r in recs["WEAP"] if r.edid == "Skylands_Pistol_Jakobs_3_Rare_Fire")
     sigs = [s for s, _ in fire.subrecords]
     assert sigs.index("VMAD") < sigs.index("OBND") < sigs.index("FULL") < sigs.index("MODL") < sigs.index("EITM") < sigs.index("ETYP")
@@ -67,10 +67,53 @@ def test_build_installs_and_enables(tmp_path, monkeypatch):
     plugins.write_text("# keep me\n*Unofficial Patch.esp\n")
     done = tmp_path / "managed" / "setup-done.txt"
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
-    assert done.read_text().startswith("ok 0.2.0")
+    assert done.read_text().startswith("ok 0.2.1")
     assert (sky / "Data" / "Skylands.esp").is_file() and (sky / "Data" / "Scripts" / "SkylandsLootBeam.pex").is_file()
     assert plugins.read_text().splitlines() == ["# keep me", "*Unofficial Patch.esp", "*Skylands.esp"]
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
     assert plugins.read_text().count("Skylands.esp") == 1
     assert build.main(["--bl2", str(tmp_path / "nope"), "--skyrim", str(sky), "--done", str(done)]) == 2
     assert not done.exists()
+
+
+def test_uninstall_removes_only_what_was_installed(tmp_path, monkeypatch):
+    from skylands_setup import build
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    (sky / "Data" / "Other.esp").write_bytes(b"keep me")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
+    plugins = tmp_path / "appdata" / "Skyrim Special Edition" / "plugins.txt"
+    plugins.parent.mkdir(parents=True)
+    plugins.write_text("*Unofficial Patch.esp\n")
+    done = tmp_path / "work" / "setup-done.txt"
+    assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
+    assert (plugins.parent / "plugins.txt.skylands-backup").read_text() == "*Unofficial Patch.esp\n"
+    assert build.uninstall_main(["--work", str(done.parent)]) == 0
+    assert not (sky / "Data" / "Skylands.esp").exists() and not (sky / "Data" / "Scripts" / "SkylandsLootBeam.pex").exists()
+    assert not (sky / "Data" / "Meshes" / "Skylands").exists()
+    assert (sky / "Data" / "Other.esp").read_bytes() == b"keep me" and (sky / "Data" / "Skyrim.esm").exists()
+    assert plugins.read_text().splitlines() == ["*Unofficial Patch.esp"]
+    assert not done.exists()
+    assert build.uninstall_main(["--work", str(done.parent)]) == 0  # nothing left to do
+
+
+def test_generated_plugin_is_accepted_by_esplugin(tmp_path):
+    """Set ESPCHECK to tools/espcheck's binary: an independent parser must accept the plugin as a valid light plugin."""
+    import os
+    import subprocess
+
+    import pytest
+
+    exe = os.environ.get("ESPCHECK")
+    if not exe:
+        pytest.skip("set ESPCHECK to the esplugin checker")
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", None)
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    bl2["enemies"]["b_enemy_nomad"] = "Nomad"
+    bl2["enemies"]["b_enemy_nomad_badass"] = "Badass Nomad"
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    generate.generate(bl2, sky, tmp_path / "out")
+    r = subprocess.run([exe, str(tmp_path / "out" / "Data" / "Skylands.esp")], capture_output=True, text=True)
+    assert r.returncode == 0 and "parsed OK" in r.stdout and "is_valid_as_light_plugin: Ok(true)" in r.stdout, r.stdout + r.stderr

@@ -147,7 +147,7 @@ def guns(ix: Index, errors: list[str], say=None) -> dict:
 def _guns_into(ix: Index, errors: list[str], say, out: dict) -> None:
     for gt in S.GUN_TYPES.values():
         groups = [(f"{gt.package}.A_Weapons", False), (f"{gt.package}.A_Weapons_Legendary", True)]
-        prefixes = {e: _part_name(ix, f"{gt.package}.Name.Prefix.Prefix_Elemental_{w}") for e, w in ELEMENT_WORDS.items()}
+        prefixes = {e: _part_name(ix, f"{gt.package}.Name.Prefix.Prefix_Elemental_{w}") or w for e, w in ELEMENT_WORDS.items()}
         for group, legendary in groups:
             found = ix.children(group, "WeaponBalanceDefinition")
             if say:
@@ -175,14 +175,13 @@ def _guns_into(ix: Index, errors: list[str], say, out: dict) -> None:
                 title = _part_name(ix, _first(wtp.get("TitleList")))
                 unique = ""
                 if legendary:
+                    title_n = prefix_n = ""
                     for slot in ("BarrelPartData", "BodyPartData", "Accessory1PartData", "GripPartData"):
                         for part in _parts(ix, chain[:1], slot):
                             pp = ix.props(part) or {}
-                            for key in ("TitleList", "PrefixList"):
-                                n = _part_name(ix, _first(pp.get(key)))
-                                if n:
-                                    unique = unique or n
-                    unique = unique or re.sub(r"(?<!^)(?=[A-Z])", " ", leaf.split("_")[-1])
+                            title_n = title_n or _part_name(ix, _first(pp.get("TitleList")))
+                            prefix_n = prefix_n or _part_name(ix, _first(pp.get("PrefixList")))
+                    unique = " ".join(x for x in (prefix_n, title_n) if x) or re.sub(r"(?<!^)(?=[A-Z])", " ", leaf.split("_")[-1])
                 elements = []
                 for part in _parts(ix, chain, "ElementalPartData"):
                     e = part.rsplit("_", 1)[-1]

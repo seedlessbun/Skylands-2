@@ -21,7 +21,7 @@ from . import generate
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 
 def enable_plugin(plugin: str) -> Path | None:
@@ -32,12 +32,59 @@ def enable_plugin(plugin: str) -> Path | None:
     path = Path(base) / "Skyrim Special Edition" / "plugins.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines() if path.is_file() else []
+    backup = path.with_name("plugins.txt.skylands-backup")
+    if path.is_file() and not backup.exists():
+        shutil.copyfile(path, backup)
     if not any(line.lstrip("*").strip().lower() == plugin.lower() for line in lines):
         lines.append(f"*{plugin}")
     else:
         lines = [f"*{plugin}" if line.lstrip("*").strip().lower() == plugin.lower() else line for line in lines]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def disable_plugin(plugin: str) -> bool:
+    base = os.environ.get("LOCALAPPDATA")
+    path = Path(base) / "Skyrim Special Edition" / "plugins.txt" if base else None
+    if path is None or not path.is_file():
+        return False
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    kept = [line for line in lines if line.lstrip("*").strip().lower() != plugin.lower()]
+    path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    return len(kept) != len(lines)
+
+
+def uninstall_main(argv: list[str]) -> int:
+    """Remove exactly the files the setup installed, and the plugin line it added."""
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="skylands uninstall")
+    ap.add_argument("--work", required=True, help="the folder holding installed-files.json")
+    a = ap.parse_args(argv)
+    work = Path(a.work)
+    record = work / "installed-files.json"
+    if not record.is_file():
+        print("Nothing to remove: Skylands has not installed anything from this folder.")
+        return 0
+    info = json.loads(record.read_text(encoding="utf-8"))
+    sky = Path(info["skyrim"])
+    removed = 0
+    for rel in info["files"]:
+        f = sky / rel
+        if f.is_file():
+            f.unlink()
+            removed += 1
+    for d in (sky / "Data" / "Meshes" / "Skylands", sky / "Data" / "Textures" / "Skylands"):
+        try:
+            d.rmdir()
+        except OSError:
+            pass
+    unplugged = disable_plugin(generate.PLUGIN)
+    record.unlink()
+    for marker in work.glob("setup-done*.txt"):
+        marker.unlink()
+    print(f"Removed {removed} Skylands files from {sky / 'Data'}" + ("; plugin disabled." if unplugged else "."))
+    return 0
 
 
 def install(stage: Path, skyrim: Path) -> list[str]:

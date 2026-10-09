@@ -26,7 +26,7 @@ def test_extract_everything(tmp_path):
     assert guns["Pistol_Jakobs"]["rarity"] == 1 and guns["Pistol_Jakobs_3_Rare"]["rarity"] == 3
     assert guns["Pistol_Jakobs_3_Rare"]["title"] == "Revolver" and guns["Pistol_Jakobs_3_Rare"]["elements"] == ["Fire"]
     assert guns["Pistol_Jakobs_3_Rare"]["element_prefixes"] == {"Fire": "Incendiary"}
-    assert guns["Pistol_Jakobs_5_Maggie"]["rarity"] == 5 and guns["Pistol_Jakobs_5_Maggie"]["unique_name"] == "Maggie"
+    assert guns["Pistol_Jakobs_5_Maggie"]["rarity"] == 5 and guns["Pistol_Jakobs_5_Maggie"]["unique_name"] == "Sledge's Maggie"
     assert guns["Pistol_Jakobs"]["damage_scale"] == 2.2 and guns["Pistol_Jakobs"]["clip"] == 6
     assert d["weapons"]["manufacturers"] == {"Jakobs": "Jakobs"}
     assert d["enemies"] == {"b_enemy_marauder": "Marauder", "b_enemy_psycho": "Psycho"}

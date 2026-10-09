@@ -248,8 +248,10 @@ def pandora_install(root) -> None:
     g.obj("GD_Weap_Pistol.Name.Prefix.Prefix_Elemental_Incendiary", "WeaponNamePartDefinition", g.s("PartName", "Incendiary"))
     g.obj("GD_Weap_Pistol.Name.Title_Jakobs.Title_Maggie", "WeaponNamePartDefinition", g.s("PartName", "Maggie"))
     g.obj("GD_Weap_Pistol.elemental.Pistol_Elemental_Fire", "WeaponPartDefinition", b"")
+    g.obj("GD_Weap_Pistol.Name.Prefix_Jakobs.Prefix_Sledges", "WeaponNamePartDefinition", g.s("PartName", "Sledge's"))
     g.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Maggie", "WeaponPartDefinition",
-          g.arr_objs("TitleList", ["GD_Weap_Pistol.Name.Title_Jakobs.Title_Maggie"]))
+          g.arr_objs("TitleList", ["GD_Weap_Pistol.Name.Title_Jakobs.Title_Maggie"]) +
+          g.arr_objs("PrefixList", ["GD_Weap_Pistol.Name.Prefix_Jakobs.Prefix_Sledges"]))
     g.obj("GD_Weap_Pistol.A_Weapons.WeaponType_Jakobs_Pistol", "WeaponTypeDefinition",
           g.arr_objs("TitleList", ["GD_Weap_Pistol.Name.Title_Jakobs.Title__Revolver"]) +
           g.st("InstantHitDamage", "AttributeInitializationData", g.f("BaseValueConstant", 20.0) + g.f("BaseValueScaleConstant", 2.2)) +
