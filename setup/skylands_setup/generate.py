@@ -256,7 +256,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         if c is None:
             report.setdefault("missing_classes", []).append(row.id)
             continue
-        duration = int(round(c["duration"] or 10))
+        duration = int(round(min(c["duration"] or 10, row.max_duration)))
         effects = []
         for edid, mag in parse_effects(row.effects):
             effects.append((m.need("MGEF", edid).form_id, mag, 0, duration))

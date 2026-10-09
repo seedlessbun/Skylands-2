@@ -21,10 +21,12 @@ class Index:
     def __init__(self, bl2_root: Path, cache: Path | None = None, progress: Callable[[str], None] | None = None) -> None:
         self.root = Path(bl2_root)
         self.say = progress or (lambda _m: None)
-        self.deadline: float | None = None  # time.time() after which property reads raise TimeoutError
+        self.deadline: float | None = None  # time.process_time() (CPU time, so sleep does not count) after which property reads raise TimeoutError
         self.files = sorted(p for p in self.root.rglob("*.upk") if p.is_file())
         self.errors: dict[str, str] = {}
         self.names: dict[str, list[int]] = {}  # lowercased name -> file indices
+        self.top: dict[str, list[int]] = {}  # lowercased top-level export -> file indices (who defines it)
+        self.slow: list[dict] = []
         self._open: dict[Path, upk.Package] = {}
         self._props: dict[str, dict | None] = {}
         total = len(self.files)
@@ -33,18 +35,34 @@ class Index:
         step = max(1, total // 20)
         for i, f in enumerate(self.files):
             try:
-                for n in upk.read_name_set(f):
+                names, top = upk.index_info(f)
+                for n in names:
                     self.names.setdefault(n, []).append(i)
+                for n in top:
+                    self.top.setdefault(n, []).append(i)
             except Exception as e:  # noqa: BLE001 - some files (shader caches) are not object packages
                 self.errors[str(f.relative_to(self.root))] = str(e)[:120]
             if (i + 1) % step == 0 or i + 1 == total:
                 self.say(f"  indexed {i + 1}/{total} packages ({time.time() - t0:.0f} s)")
 
+    def _has(self, part: str) -> set[int]:
+        """Files whose name table holds the part; 'Name_3' is stored as 'Name' plus a number."""
+        found = set(self.names.get(part, ()))
+        base = re.sub(r"_\d+$", "", part)
+        if base != part:
+            found |= set(self.names.get(base, ()))
+        return found
+
     def candidates(self, path: str) -> list[Path]:
-        """Packages whose name table holds every part of the object path."""
+        """Packages that define the object's top-level package and hold every other part of the path."""
         parts = [p.lower() for p in re.split(r"[.:]", path) if p]
-        sets = [set(self.names.get(p, [])) for p in parts]
-        common = set.intersection(*sets) if sets else set()
+        if not parts:
+            return []
+        common = set(self.top.get(parts[0], ()))
+        for p in parts[1:]:
+            if not common:
+                break
+            common &= self._has(p)
         return [self.files[i] for i in sorted(common)]
 
     def package(self, f: Path) -> upk.Package:
@@ -57,20 +75,27 @@ class Index:
         return pkg
 
     def get(self, path: str) -> tuple[upk.Package, int] | None:
-        for f in self.candidates(path):
+        t0 = time.time()
+        found = None
+        cands = self.candidates(path)
+        for f in cands:
             try:
                 pkg = self.package(f)
             except Exception:  # noqa: BLE001
                 continue
             idx = pkg.find(path)
             if idx:
-                return pkg, idx
-        return None
+                found = (pkg, idx)
+                break
+        took = time.time() - t0
+        if took > 2.0 and len(self.slow) < 40:
+            self.slow.append({"path": path, "seconds": round(took, 1), "candidates": len(cands)})
+        return found
 
     def props(self, path: str) -> dict | None:
         if path in self._props:
             return self._props[path]
-        if self.deadline is not None and time.time() > self.deadline:
+        if self.deadline is not None and time.process_time() > self.deadline:
             raise TimeoutError("the time budget for reading Borderlands 2 ran out")
         found = self.get(path)
         result = None

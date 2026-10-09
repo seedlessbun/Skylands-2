@@ -8,7 +8,8 @@
     "delivery": "self | aimed (Skyrim spell delivery)",
     "effects": "vanilla MGEF editor ids with magnitude, ';'-separated: EDID:magnitude",
     "summon_name_from": "for summons: which Borderlands text names the summoned ally ('-' if none)",
-    "in_game": "yes once seen working"
+    "in_game": "yes once seen working",
+    "max_duration": "longest Skyrim effect time in seconds (Borderlands' own duration is used when shorter)"
   },
   "rows": [
     {
@@ -18,7 +19,8 @@
       "delivery": "self",
       "effects": "InvisibillityFFSelf:0",
       "summon_name_from": "-",
-      "in_game": "no"
+      "in_game": "no",
+      "max_duration": 30
     },
     {
       "id": "siren",
@@ -27,7 +29,8 @@
       "delivery": "aimed",
       "effects": "ParalysisFFAimed:0",
       "summon_name_from": "-",
-      "in_game": "no"
+      "in_game": "no",
+      "max_duration": 15
     },
     {
       "id": "soldier",
@@ -36,7 +39,8 @@
       "delivery": "self",
       "effects": "SummonStormAtronach:0",
       "summon_name_from": "skill_name",
-      "in_game": "no"
+      "in_game": "no",
+      "max_duration": 30
     },
     {
       "id": "mercenary",
@@ -45,7 +49,8 @@
       "delivery": "self",
       "effects": "AlchFortifyMarksman:50;AlchFortifyHealRate:100",
       "summon_name_from": "-",
-      "in_game": "no"
+      "in_game": "no",
+      "max_duration": 30
     },
     {
       "id": "mechromancer",
@@ -54,7 +59,8 @@
       "delivery": "self",
       "effects": "SummonFrostAtronach:0",
       "summon_name_from": "skill_name",
-      "in_game": "no"
+      "in_game": "no",
+      "max_duration": 60
     },
     {
       "id": "psycho",
@@ -63,7 +69,8 @@
       "delivery": "self",
       "effects": "AlchFortifyOneHanded:50;AlchFortifyTwoHanded:50;AlchFortifyHealRate:100",
       "summon_name_from": "-",
-      "in_game": "no"
+      "in_game": "no",
+      "max_duration": 30
     }
   ],
   "refs": {

@@ -61,15 +61,16 @@ class ClassesRow:
     delivery: str
     effects: str
     summon_name_from: str
+    max_duration: int
 
 
 CLASSES: dict[str, ClassesRow] = {
-    'assassin': ClassesRow(id='assassin', class_read='b_class_assassin', skill_read='b_skill_assassin', delivery='self', effects='InvisibillityFFSelf:0', summon_name_from='-'),
-    'siren': ClassesRow(id='siren', class_read='b_class_siren', skill_read='b_skill_siren', delivery='aimed', effects='ParalysisFFAimed:0', summon_name_from='-'),
-    'soldier': ClassesRow(id='soldier', class_read='b_class_soldier', skill_read='b_skill_soldier', delivery='self', effects='SummonStormAtronach:0', summon_name_from='skill_name'),
-    'mercenary': ClassesRow(id='mercenary', class_read='b_class_mercenary', skill_read='b_skill_mercenary', delivery='self', effects='AlchFortifyMarksman:50;AlchFortifyHealRate:100', summon_name_from='-'),
-    'mechromancer': ClassesRow(id='mechromancer', class_read='b_class_mechromancer', skill_read='b_skill_mechromancer', delivery='self', effects='SummonFrostAtronach:0', summon_name_from='skill_name'),
-    'psycho': ClassesRow(id='psycho', class_read='b_class_psycho', skill_read='b_skill_psycho', delivery='self', effects='AlchFortifyOneHanded:50;AlchFortifyTwoHanded:50;AlchFortifyHealRate:100', summon_name_from='-'),
+    'assassin': ClassesRow(id='assassin', class_read='b_class_assassin', skill_read='b_skill_assassin', delivery='self', effects='InvisibillityFFSelf:0', summon_name_from='-', max_duration=30),
+    'siren': ClassesRow(id='siren', class_read='b_class_siren', skill_read='b_skill_siren', delivery='aimed', effects='ParalysisFFAimed:0', summon_name_from='-', max_duration=15),
+    'soldier': ClassesRow(id='soldier', class_read='b_class_soldier', skill_read='b_skill_soldier', delivery='self', effects='SummonStormAtronach:0', summon_name_from='skill_name', max_duration=30),
+    'mercenary': ClassesRow(id='mercenary', class_read='b_class_mercenary', skill_read='b_skill_mercenary', delivery='self', effects='AlchFortifyMarksman:50;AlchFortifyHealRate:100', summon_name_from='-', max_duration=30),
+    'mechromancer': ClassesRow(id='mechromancer', class_read='b_class_mechromancer', skill_read='b_skill_mechromancer', delivery='self', effects='SummonFrostAtronach:0', summon_name_from='skill_name', max_duration=60),
+    'psycho': ClassesRow(id='psycho', class_read='b_class_psycho', skill_read='b_skill_psycho', delivery='self', effects='AlchFortifyOneHanded:50;AlchFortifyTwoHanded:50;AlchFortifyHealRate:100', summon_name_from='-', max_duration=30),
 }
 
 @dataclass(frozen=True)

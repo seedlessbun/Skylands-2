@@ -39,6 +39,10 @@ def _attr_value(ix: Index, init: dict | None, errors: list[str], what: str) -> f
     if not attr:
         return round(float(init.get("BaseValueConstant", 0.0)) * float(init.get("BaseValueScaleConstant", 1.0)), 3)
     props = ix.props(attr) or {}
+    base = props.get("BaseValue")  # DesignerAttributeDefinition: the number lives on the attribute itself
+    if isinstance(base, dict) and "BaseValueConstant" in base:
+        return round(float(base["BaseValueConstant"]) * float(base.get("BaseValueScaleConstant", 1.0))
+                     * float(init.get("BaseValueScaleConstant", 1.0)), 3)
     resolver = _first(props.get("ValueResolverChain"))
     if not resolver:
         errors.append(f"{what}: {attr} has no value resolver")
@@ -137,7 +141,12 @@ def guns(ix: Index, errors: list[str], say=None) -> dict:
         groups = [(f"{gt.package}.A_Weapons", False), (f"{gt.package}.A_Weapons_Legendary", True)]
         prefixes = {e: _part_name(ix, f"{gt.package}.Name.Prefix.Prefix_Elemental_{w}") for e, w in ELEMENT_WORDS.items()}
         for group, legendary in groups:
-            for bal in ix.children(group, "WeaponBalanceDefinition"):
+            found = ix.children(group, "WeaponBalanceDefinition")
+            if say:
+                say(f"  {gt.id}: {len(found)} balances in {group}")
+            for n_done, bal in enumerate(found):
+                if say and n_done and n_done % 25 == 0:
+                    say(f"    {gt.id}: {n_done}/{len(found)}")
                 leaf = bal.rsplit(".", 1)[1]
                 m = re.match(rf"{gt.balance_prefix}_([A-Za-z]+)(?:_(\d_[A-Za-z]+))?$", leaf)
                 if not m:
@@ -218,7 +227,7 @@ def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget
     t0 = time.time()
     ix = Index(bl2_root, cache_dir, say)
     if budget_minutes:
-        ix.deadline = t0 + budget_minutes * 60
+        ix.deadline = time.process_time() + budget_minutes * 60
     data: dict = {"packages": len(ix.files), "index_errors": len(ix.errors)}
     for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies)):
         t = time.time()
@@ -231,4 +240,5 @@ def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget
     data["errors"] = errors
     data["seconds"] = round(time.time() - t0, 1)
     data["log"] = log
+    data["slow_lookups"] = ix.slow
     return data

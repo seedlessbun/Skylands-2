@@ -367,6 +367,29 @@ def read_names_only(path: Path) -> list[str]:
     return [n.decode("cp1252", errors="replace") for n in _name_table(data, h["name_offset"], h["name_count"])]
 
 
+def index_info(path: Path) -> tuple[set[str], set[str]]:
+    """(lower-cased names, lower-cased names of the package's top-level exports).
+
+    Name tables also hold the names of everything a package merely imports, so only the top-level
+    exports say which file actually defines an object.
+    """
+    data, h = _names_image(Path(path).read_bytes())
+    names = _name_table(data, h["name_offset"], h["name_count"])
+    top: set[str] = set()
+    pos = h["export_offset"]
+    head = struct.Struct("<iii")
+    nm = struct.Struct("<ii")
+    for _ in range(h["export_count"]):
+        _cls, _sup, outer = head.unpack_from(data, pos)
+        if outer == 0:
+            idx, num = nm.unpack_from(data, pos + 12)
+            base = names[idx].decode("cp1252", errors="replace")
+            top.add((base if num == 0 else f"{base}_{num - 1}").lower())
+        nets = struct.unpack_from("<i", data, pos + 44)[0]
+        pos += 48 + nets * 4 + 20
+    return {n.lower().decode("cp1252", errors="replace") for n in names}, top
+
+
 def read_name_set(path: Path) -> set[str]:
     """Lower-cased names of a package, for the object index."""
     data, h = _names_image(Path(path).read_bytes())

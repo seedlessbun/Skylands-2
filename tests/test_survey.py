@@ -21,6 +21,16 @@ def test_survey_with_full_fake_install(tmp_path):
     assert len(rep["extract"]["classes"]) == 5 and rep["extract"]["weapons"]["guns"]
 
 
+def test_survey_dry_run_build_reports_ok(tmp_path):
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    out = tmp_path / "r.json"
+    assert survey.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--out", str(out)]) == 0
+    rep = json.loads(out.read_text())
+    assert rep["generate"]["ok"] is True and rep["generate"]["guns"] == 6 and rep["generate"]["esp_bytes"] > 1000
+    assert rep["extract"]["slow_lookups"] == [] and rep["extract"]["log"]
+
+
 def test_survey_end_to_end(tmp_path):
     bl2 = tmp_path / "Borderlands 2"
     cooked = bl2 / "WillowGame" / "CookedPCConsole"

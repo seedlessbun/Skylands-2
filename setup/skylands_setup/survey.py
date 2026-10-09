@@ -145,6 +145,19 @@ def survey_extract(bl2: Path, report: dict, cache: Path) -> None:
     report["extract"]["seconds"] = round(time.time() - t0, 1)
 
 
+def survey_generate(sky: Path, report: dict, stage: Path) -> None:
+    """Dry run of the real build against the player's installs (writes only into the survey folder)."""
+    from . import generate
+
+    t0 = time.time()
+    try:
+        rep = generate.generate(report.get("extract") or {}, sky, stage)
+        esp = stage / "Data" / generate.PLUGIN
+        report["generate"] = {"ok": True, **rep, "esp_bytes": esp.stat().st_size, "seconds": round(time.time() - t0, 1)}
+    except Exception:  # noqa: BLE001
+        report["generate"] = {"ok": False, "error": traceback.format_exc()[-1500:], "seconds": round(time.time() - t0, 1)}
+
+
 def survey_skyrim(sky: Path, report: dict) -> None:
     data = sky / "Data"
     exe = sky / "SkyrimSE.exe"
@@ -206,9 +219,10 @@ def main(argv: list[str]) -> int:
         print("Run again with --bl2 \"<folder>\" --skyrim \"<folder>\".")
         return 1
     print(f"Borderlands 2: {a.bl2}\nSkyrim SE: {a.skyrim}\nReading... this can take a few minutes.")
-    report: dict = {"tool": "skylands survey 3", "python": sys.version}
+    report: dict = {"tool": "skylands survey 4", "python": sys.version}
     cache = Path(a.out).parent / "skylands-cache"
-    for fn, args in ((survey_extract, (Path(a.bl2), report, cache)), (survey_skyrim, (Path(a.skyrim), report))):
+    for fn, args in ((survey_extract, (Path(a.bl2), report, cache)), (survey_skyrim, (Path(a.skyrim), report)),
+                     (survey_generate, (Path(a.skyrim), report, Path(a.out).parent / "survey-stage"))):
         try:
             fn(*args)
         except Exception:  # noqa: BLE001
@@ -217,6 +231,8 @@ def main(argv: list[str]) -> int:
     Path(a.out).write_text(json.dumps(report, indent=1), encoding="utf-8")
     ex = report.get("extract", {})
     print(f"Skylands survey written to {a.out}")
+    g = report.get("generate", {})
+    print(f"  dry-run build: {'ok' if g.get('ok') else 'FAILED'} ({g.get('records', 0)} records, {g.get('guns', 0)} guns)")
     print(f"  vault hunters: {len(ex.get('classes', []))}/6, guns: {len(ex.get('weapons', {}).get('guns', []))}, "
           f"enemy types: {len(ex.get('enemies', {}))}, rarity colours: {len(ex.get('rarities', []))}, problems: {len(ex.get('errors', []))}")
     return 0

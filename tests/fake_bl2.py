@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import struct
 
 import lzo
@@ -23,9 +24,12 @@ class Builder:
         self.exports: list[dict] = []
 
     def n(self, name: str) -> bytes:
-        if name not in self.names:
-            self.names.append(name)
-        return struct.pack("<ii", self.names.index(name), 0)
+        # Like the engine: "Name_3" is the name "Name" plus the number 4.
+        m = re.fullmatch(r"(.+)_(\d+)", name)
+        base, num = (m.group(1), int(m.group(2)) + 1) if m else (name, 0)
+        if base not in self.names:
+            self.names.append(base)
+        return struct.pack("<ii", self.names.index(base), num)
 
     def imp(self, cp: str, cn: str, outer: int, name: str) -> int:
         for x in (cp, cn, name):
@@ -203,7 +207,7 @@ def pandora_install(root) -> None:
         ("assassin", "GD_Assassin.Character.CharClass_Assassin", "GD_Assassin_Skills.ActionSkill.Skill_Deception", "Zer0", "attr"),
         ("siren", "GD_Siren.Character.CharClass_Siren", "GD_Siren_Skills.Phaselock.Skill_Phaselock", "Maya", "const"),
         ("soldier", "GD_Soldier.Character.CharClass_Soldier", "GD_Soldier_Skills.Scorpio.Skill_Scorpio", "Axton", "const"),
-        ("mercenary", "GD_Mercenary.Character.CharClass_Mercenary", "GD_Mercenary_Skills.ActionSkill.Skill_Gunzerking", "Salvador", "const"),
+        ("mercenary", "GD_Mercenary.Character.CharClass_Mercenary", "GD_Mercenary_Skills.ActionSkill.Skill_Gunzerking", "Salvador", "designer"),
     ]:
         nid = f"GD_PlayerNameId.{k.capitalize()}"
         b.obj(nid, "PlayerNameIdentifierDefinition", b.s("LocalizedCharacterName", name))
@@ -214,6 +218,11 @@ def pandora_install(root) -> None:
             res = attr + ":ConstantAttributeValueResolver_0"
             b.obj(res, "ConstantAttributeValueResolver", b.f("ConstantValue", 15.0))
             b.exports[b.paths[attr] - 1]["body"] = struct.pack("<i", -1) + b.arr_objs("ValueResolverChain", [res]) + b.none()
+            init = b.f("BaseValueConstant", 0.0) + b.o("BaseValueAttribute", attr) + b.f("BaseValueScaleConstant", 1.0)
+        elif pool_kind == "designer":
+            attr = f"GD_{k.capitalize()}_Skills.Misc.Cooldown_{k}"
+            b.obj(attr, "DesignerAttributeDefinition", b.st("BaseValue", "AttributeInitializationData",
+                  b.f("BaseValueConstant", 20.0) + b.f("BaseValueScaleConstant", 1.0)))
             init = b.f("BaseValueConstant", 0.0) + b.o("BaseValueAttribute", attr) + b.f("BaseValueScaleConstant", 1.0)
         else:
             init = b.f("BaseValueConstant", 42.0) + b.f("BaseValueScaleConstant", 1.0)
@@ -279,3 +288,14 @@ def pandora_install(root) -> None:
           t.o("SkillCooldownPoolDefinition", "GD_Tulip_Mechromancer_Skills.Action.Pool_DeathTrapCoolDown"))
     t.obj("GD_Tulip_Mechromancer_Skills.Action.Skill_DeathTrap", "SkillDefinition", t.s("SkillName", "Deathtrap") + t.f("InitialDuration", 20.0))
     (dlc / "GD_Tulip_Fake.upk").write_bytes(t.build())
+
+
+def level_package_importing(path, names) -> None:
+    """A level-style package: it imports objects (so their names are in its name table) but defines none of them."""
+    b = Builder()
+    core = b.imp("Core", "Package", 0, "Core")
+    for n in names:
+        b.imp("Core", "Package", core, n)
+    top = b.exp(b.imp("Core", "Class", core, "Package"), 0, "Fake_P")
+    b.exp(b.imp("Core", "Class", core, "Level"), top, "PersistentLevel")
+    path.write_bytes(b.build())

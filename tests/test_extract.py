@@ -19,6 +19,7 @@ def test_extract_everything(tmp_path):
     assert cls["assassin"]["character"] == "Zer0" and cls["assassin"]["cooldown"] == 15.0
     assert cls["assassin"]["skill_desc"] == "Action Skill. Press your shout key now."
     assert cls["siren"]["cooldown"] == 42.0 and cls["mechromancer"]["character"] == "Gaige"
+    assert cls["mercenary"]["cooldown"] == 20.0  # designer attribute: the number is on the attribute itself
     assert cls["mechromancer"]["cooldown"] == 60.0 and cls["mechromancer"]["duration"] == 20.0
     assert "psycho" not in cls and any("class psycho" in e for e in d["errors"])
     guns = {g["balance"].rsplit(".", 1)[1]: g for g in d["weapons"]["guns"]}
@@ -36,5 +37,20 @@ def test_extract_everything(tmp_path):
 
 def test_budget_stops_extraction_and_reports(tmp_path):
     fake_bl2.pandora_install(tmp_path / "bl2")
-    d = extract.extract(tmp_path / "bl2", None, budget_minutes=1e-9)
+    d = extract.extract(tmp_path / "bl2", None, budget_minutes=-1)
     assert any("time budget" in e for e in d["errors"]) and d["log"] and d["log"][0].endswith("Indexing 3 Borderlands 2 packages ...")
+
+
+def test_candidates_are_defining_packages_only(tmp_path):
+    from skylands_setup.bl2.index import Index
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    cooked = tmp_path / "bl2" / "WillowGame" / "CookedPCConsole"
+    for i in range(5):  # levels import the weapon groups, so their name tables contain the names too
+        fake_bl2.level_package_importing(cooked / f"Level{i}_P.upk", ["GD_Weap_Pistol", "A_Weapons", "Pistol_Jakobs_3_Rare"])
+    ix = Index(tmp_path / "bl2")
+    assert len(ix.files) == 8
+    got = ix.candidates("GD_Weap_Pistol.A_Weapons.Pistol_Jakobs_3_Rare")
+    assert [p.name for p in got] == ["GD_Weapons_Fake.upk"]
+    # numbered instance names resolve through their base name
+    assert ix.props("GD_Assassin_Skills.Misc.Cooldown_assassin:ConstantAttributeValueResolver_0") == {"ConstantValue": 15.0}
