@@ -34,7 +34,9 @@ EXPECTED = """Event OnUpdate()
   Game.TeachWord(chosenWord)
   Game.UnlockWord(chosenWord)
   player.EquipShout(chosenShout)
-  player.AddItem(StarterGuns, 1, False)
+  player.AddItem(StarterGun, 1, False)
+  player.AddItem(StarterAmmo, 60, False)
+  player.EquipItem(StarterGun, False, False)
   Chosen = True
   Return
 EndEvent"""
@@ -58,7 +60,7 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
     psc = "\n".join(line.rstrip() for line in (tmp_path / "out" / "SkylandsClassQuest.psc").read_text().splitlines())
     assert "ScriptName SkylandsClassQuest Extends Quest" in psc
     for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto",
-                 "WordOfPower[] Property Words Auto", "Form Property StarterGuns Auto"):
+                 "WordOfPower[] Property Words Auto", "Form Property StarterGun Auto", "Form Property StarterAmmo Auto"):
         assert prop in psc
     assert EXPECTED in psc
 

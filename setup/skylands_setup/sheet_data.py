@@ -121,15 +121,16 @@ class GunTypesRow:
     base_value: int
     weight: float
     speed: float
+    crit_damage: int
 
 
 GUN_TYPES: dict[str, GunTypesRow] = {
-    'pistol': GunTypesRow(id='pistol', package='GD_Weap_Pistol', balance_prefix='Pistol', base_damage=12, base_value=60, weight=4.0, speed=1.3),
-    'smg': GunTypesRow(id='smg', package='GD_Weap_SMG', balance_prefix='SMG', base_damage=10, base_value=80, weight=6.0, speed=1.6),
-    'assault_rifle': GunTypesRow(id='assault_rifle', package='GD_Weap_AssaultRifle', balance_prefix='AR', base_damage=15, base_value=100, weight=10.0, speed=1.2),
-    'shotgun': GunTypesRow(id='shotgun', package='GD_Weap_Shotgun', balance_prefix='SG', base_damage=20, base_value=100, weight=10.0, speed=0.8),
-    'sniper': GunTypesRow(id='sniper', package='GD_Weap_SniperRifles', balance_prefix='Sniper', base_damage=26, base_value=120, weight=12.0, speed=0.6),
-    'launcher': GunTypesRow(id='launcher', package='GD_Weap_Launchers', balance_prefix='RL', base_damage=34, base_value=150, weight=16.0, speed=0.5),
+    'pistol': GunTypesRow(id='pistol', package='GD_Weap_Pistol', balance_prefix='Pistol', base_damage=12, base_value=60, weight=4.0, speed=1.3, crit_damage=6),
+    'smg': GunTypesRow(id='smg', package='GD_Weap_SMG', balance_prefix='SMG', base_damage=10, base_value=80, weight=6.0, speed=1.6, crit_damage=3),
+    'assault_rifle': GunTypesRow(id='assault_rifle', package='GD_Weap_AssaultRifle', balance_prefix='AR', base_damage=15, base_value=100, weight=10.0, speed=1.2, crit_damage=5),
+    'shotgun': GunTypesRow(id='shotgun', package='GD_Weap_Shotgun', balance_prefix='SG', base_damage=20, base_value=100, weight=10.0, speed=0.8, crit_damage=4),
+    'sniper': GunTypesRow(id='sniper', package='GD_Weap_SniperRifles', balance_prefix='Sniper', base_damage=26, base_value=120, weight=12.0, speed=0.6, crit_damage=14),
+    'launcher': GunTypesRow(id='launcher', package='GD_Weap_Launchers', balance_prefix='RL', base_damage=34, base_value=150, weight=16.0, speed=0.5, crit_damage=8),
 }
 
 @dataclass(frozen=True)
@@ -143,16 +144,16 @@ class LootInjectionRow:
 
 
 LOOT_INJECTION: dict[str, LootInjectionRow] = {
-    'bandit_weapon15': LootInjectionRow(id='bandit_weapon15', skyrim_lvli='LootBanditWeapon15', list='any', count=1),
-    'bandit_weapon50': LootInjectionRow(id='bandit_weapon50', skyrim_lvli='LootBanditWeapon50', list='any', count=1),
-    'bandit_weapon100': LootInjectionRow(id='bandit_weapon100', skyrim_lvli='LootBanditWeapon100', list='any', count=1),
-    'bandit_boss_chest': LootInjectionRow(id='bandit_boss_chest', skyrim_lvli='LootBanditChestBossBase', list='good', count=1),
-    'draugr_boss_chest': LootInjectionRow(id='draugr_boss_chest', skyrim_lvli='LootDraugrChestBossBase', list='good', count=1),
-    'dwarven_boss_chest': LootInjectionRow(id='dwarven_boss_chest', skyrim_lvli='LootDwarvenChestBossBase', list='good', count=1),
-    'falmer_boss_chest': LootInjectionRow(id='falmer_boss_chest', skyrim_lvli='LootFalmerChestBossBase', list='good', count=1),
-    'forsworn_boss_chest': LootInjectionRow(id='forsworn_boss_chest', skyrim_lvli='LootForswornChestBossBase', list='good', count=1),
-    'vampire_boss_chest': LootInjectionRow(id='vampire_boss_chest', skyrim_lvli='LootVampireChestBossBase', list='good', count=1),
-    'warlock_boss_chest': LootInjectionRow(id='warlock_boss_chest', skyrim_lvli='LootWarlockChestBossBase', list='good', count=1),
+    'bandit_weapon15': LootInjectionRow(id='bandit_weapon15', skyrim_lvli='LootBanditWeapon15', list='any', count=6),
+    'bandit_weapon50': LootInjectionRow(id='bandit_weapon50', skyrim_lvli='LootBanditWeapon50', list='any', count=6),
+    'bandit_weapon100': LootInjectionRow(id='bandit_weapon100', skyrim_lvli='LootBanditWeapon100', list='any', count=6),
+    'bandit_boss_chest': LootInjectionRow(id='bandit_boss_chest', skyrim_lvli='LootBanditChestBossBase', list='good', count=3),
+    'draugr_boss_chest': LootInjectionRow(id='draugr_boss_chest', skyrim_lvli='LootDraugrChestBossBase', list='good', count=3),
+    'dwarven_boss_chest': LootInjectionRow(id='dwarven_boss_chest', skyrim_lvli='LootDwarvenChestBossBase', list='good', count=3),
+    'falmer_boss_chest': LootInjectionRow(id='falmer_boss_chest', skyrim_lvli='LootFalmerChestBossBase', list='good', count=3),
+    'forsworn_boss_chest': LootInjectionRow(id='forsworn_boss_chest', skyrim_lvli='LootForswornChestBossBase', list='good', count=3),
+    'vampire_boss_chest': LootInjectionRow(id='vampire_boss_chest', skyrim_lvli='LootVampireChestBossBase', list='good', count=3),
+    'warlock_boss_chest': LootInjectionRow(id='warlock_boss_chest', skyrim_lvli='LootWarlockChestBossBase', list='good', count=3),
 }
 
 @dataclass(frozen=True)
@@ -165,15 +166,18 @@ class RaritiesRow:
     damage_mult: float
     value_mult: float
     loot_copies: int
+    speed_mult: float
+    element_mult: float
+    crit_mult: float
 
 
 RARITIES: dict[str, RaritiesRow] = {
-    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12),
-    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8),
-    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4),
-    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2),
-    'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1),
-    'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1),
+    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12, speed_mult=1.0, element_mult=1.0, crit_mult=1.0),
+    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8, speed_mult=1.04, element_mult=1.2, crit_mult=1.1),
+    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4, speed_mult=1.08, element_mult=1.5, crit_mult=1.2),
+    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2, speed_mult=1.12, element_mult=1.9, crit_mult=1.35),
+    'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1, speed_mult=1.16, element_mult=2.4, crit_mult=1.5),
+    'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1, speed_mult=1.12, element_mult=2.8, crit_mult=1.3),
 }
 
 @dataclass(frozen=True)

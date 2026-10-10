@@ -13,70 +13,70 @@
       "id": "bandit_weapon15",
       "skyrim_lvli": "LootBanditWeapon15",
       "list": "any",
-      "count": 1,
+      "count": 6,
       "in_game": "no"
     },
     {
       "id": "bandit_weapon50",
       "skyrim_lvli": "LootBanditWeapon50",
       "list": "any",
-      "count": 1,
+      "count": 6,
       "in_game": "no"
     },
     {
       "id": "bandit_weapon100",
       "skyrim_lvli": "LootBanditWeapon100",
       "list": "any",
-      "count": 1,
+      "count": 6,
       "in_game": "no"
     },
     {
       "id": "bandit_boss_chest",
       "skyrim_lvli": "LootBanditChestBossBase",
       "list": "good",
-      "count": 1,
+      "count": 3,
       "in_game": "no"
     },
     {
       "id": "draugr_boss_chest",
       "skyrim_lvli": "LootDraugrChestBossBase",
       "list": "good",
-      "count": 1,
+      "count": 3,
       "in_game": "no"
     },
     {
       "id": "dwarven_boss_chest",
       "skyrim_lvli": "LootDwarvenChestBossBase",
       "list": "good",
-      "count": 1,
+      "count": 3,
       "in_game": "no"
     },
     {
       "id": "falmer_boss_chest",
       "skyrim_lvli": "LootFalmerChestBossBase",
       "list": "good",
-      "count": 1,
+      "count": 3,
       "in_game": "no"
     },
     {
       "id": "forsworn_boss_chest",
       "skyrim_lvli": "LootForswornChestBossBase",
       "list": "good",
-      "count": 1,
+      "count": 3,
       "in_game": "no"
     },
     {
       "id": "vampire_boss_chest",
       "skyrim_lvli": "LootVampireChestBossBase",
       "list": "good",
-      "count": 1,
+      "count": 3,
       "in_game": "no"
     },
     {
       "id": "warlock_boss_chest",
       "skyrim_lvli": "LootWarlockChestBossBase",
       "list": "good",
-      "count": 1,
+      "count": 3,
       "in_game": "no"
     }
   ]

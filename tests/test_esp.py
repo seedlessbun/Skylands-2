@@ -14,7 +14,7 @@ def test_plugin_roundtrip(tmp_path):
     word = p.new("WOOP", "SkylandsWord_Deception").add("FULL", esp.zstr("Decepti0n")).add("TNAM", esp.zstr("Decepti0n"))
     q = p.new("QUST", "SkylandsClassQuest")
     q.add("VMAD", esp.vmad([("SkylandsClassQuest", [("Words", esp.P_OBJECT_ARRAY, [word.form_id]),
-                                                     ("StarterGuns", esp.P_OBJECT, 0x0001234)])], quest=True))
+                                                     ("StarterGun", esp.P_OBJECT, 0x0001234)])], quest=True))
     big = p.new("MESG", "SkylandsClassChoice").add("DESC", b"x" * 70000 + b"\0")
     over = esp.Rec("WEAP", 0x02000801, [("EDID", esp.zstr("DLC1Crossbow")), ("DATA", b"\0" * 10)], flags=esp.REC_COMPRESSED)
     p.override(over)

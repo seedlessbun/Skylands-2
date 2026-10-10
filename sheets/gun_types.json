@@ -9,6 +9,7 @@
     "base_value": "gold value at common rarity",
     "weight": "Skyrim weight",
     "speed": "Skyrim attack speed",
+    "crit_damage": "Skyrim critical damage bonus at common rarity",
     "balanced_in_game": "yes once tuned in play"
   },
   "rows": [
@@ -20,6 +21,7 @@
       "base_value": 60,
       "weight": 4.0,
       "speed": 1.3,
+      "crit_damage": 6,
       "balanced_in_game": "no"
     },
     {
@@ -30,6 +32,7 @@
       "base_value": 80,
       "weight": 6.0,
       "speed": 1.6,
+      "crit_damage": 3,
       "balanced_in_game": "no"
     },
     {
@@ -40,6 +43,7 @@
       "base_value": 100,
       "weight": 10.0,
       "speed": 1.2,
+      "crit_damage": 5,
       "balanced_in_game": "no"
     },
     {
@@ -50,6 +54,7 @@
       "base_value": 100,
       "weight": 10.0,
       "speed": 0.8,
+      "crit_damage": 4,
       "balanced_in_game": "no"
     },
     {
@@ -60,6 +65,7 @@
       "base_value": 120,
       "weight": 12.0,
       "speed": 0.6,
+      "crit_damage": 14,
       "balanced_in_game": "no"
     },
     {
@@ -70,6 +76,7 @@
       "base_value": 150,
       "weight": 16.0,
       "speed": 0.5,
+      "crit_damage": 8,
       "balanced_in_game": "no"
     }
   ]

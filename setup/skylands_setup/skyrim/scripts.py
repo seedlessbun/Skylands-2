@@ -14,7 +14,7 @@ def class_choice_quest() -> Script:
 
     As soon as the player can move after character creation (and is not in a menu), show the
     vault hunter choice once, then teach and equip that vault hunter's action-skill shout and give
-    the starting guns. Works the same on an existing save.
+    the starting gun and its ammo. Works the same on an existing save.
 
       Event OnInit()
         RegisterForSingleUpdate(2.0)
@@ -38,7 +38,9 @@ def class_choice_quest() -> Script:
         Game.TeachWord(Words[i])
         Game.UnlockWord(Words[i])
         player.EquipShout(Shouts[i])
-        player.AddItem(StarterGuns, 1, False)
+        player.AddItem(StarterGun, 1, False)
+        player.AddItem(StarterAmmo, 60, False)
+        player.EquipItem(StarterGun, False, False)
         Chosen = True
       EndEvent
     """
@@ -74,8 +76,12 @@ def class_choice_quest() -> Script:
             ("callstatic", ("id", "Game"), ("id", "TeachWord"), NONE, ("id", "chosenWord")),
             ("callstatic", ("id", "Game"), ("id", "UnlockWord"), NONE, ("id", "chosenWord")),
             ("callmethod", ("id", "EquipShout"), ("id", "player"), NONE, ("id", "chosenShout")),
-            ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterGuns_var"),
+            ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterGun_var"),
              ("int", 1), ("bool", False)),
+            ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterAmmo_var"),
+             ("int", 60), ("bool", False)),
+            ("callmethod", ("id", "EquipItem"), ("id", "player"), NONE, ("id", "::StarterGun_var"),
+             ("bool", False), ("bool", False)),
             ("assign", ("id", "Chosen"), ("bool", True)),
             ("return", None),
         ],
@@ -85,7 +91,7 @@ def class_choice_quest() -> Script:
         parent="Quest",
         variables=[("Chosen", "Bool", ("bool", False))],
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
-                         ("StarterGuns", "Form")],
+                         ("StarterGun", "Form"), ("StarterAmmo", "Form")],
         functions=[on_init, on_update],
     )
 

@@ -134,6 +134,13 @@ def parse_effects(text: str) -> list[tuple[str, float]]:
     return out
 
 
+def scale_efit(data: bytes, mult: float) -> bytes:
+    """EFIT = magnitude (f32), area (u32), duration (u32): scale the magnitude."""
+    if len(data) < 4:
+        return data
+    return struct.pack("<f", round(struct.unpack_from("<f", data)[0] * mult, 2)) + data[4:]
+
+
 def rarity_row(level: int):
     return next((r for r in S.RARITIES.values() if r.level == level), S.RARITIES["legendary"])
 
@@ -177,7 +184,22 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     # ---- guns ---------------------------------------------------------------------------------
     crossbow = m.need("WEAP", S.SKYRIM_BASE["crossbow"].edid)
     bolts = m.need("AMMO", S.SKYRIM_BASE["bolts"].edid)
-    enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment).form_id for e in S.ELEMENTS.values()}
+    base_enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment) for e in S.ELEMENTS.values()}
+    enchant_cache: dict[tuple[str, int], int] = {}
+
+    def element_enchant(element: str, level: int) -> int:
+        """The vanilla enchantment for this element, copied with its strength scaled by rarity."""
+        key = (element, level)
+        if key not in enchant_cache:
+            e = copy(base_enchant[element])
+            e.form_id = p.new_id()
+            e.set("EDID", esp.zstr(f"Skylands_Ench_{element}_{rarity_row(level).id}"))
+            mult = float(rarity_row(level).element_mult)
+            e.subs[:] = [(sig, scale_efit(d, mult) if sig == "EFIT" else d) for sig, d in e.subs]
+            p.override(e)
+            enchant_cache[key] = e.form_id
+        return enchant_cache[key]
+
     gun_types = {g.id: g for g in S.GUN_TYPES.values()}
     by_rarity: dict[int, list[int]] = {}
     starters: list[int] = []
@@ -197,13 +219,16 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
             insert_ordered(w, "FULL", esp.zstr(gun_name(g, element, bl2["weapons"]["manufacturers"])), WEAP_ORDER)
             insert_ordered(w, "VMAD", esp.vmad([("SkylandsLootBeam", [("Beam", esp.P_OBJECT, beams[rr.level])])]), WEAP_ORDER)
             if element:
-                insert_ordered(w, "EITM", esp.u32(enchant[element]), WEAP_ORDER)
+                insert_ordered(w, "EITM", esp.u32(element_enchant(element, rr.level)), WEAP_ORDER)
                 insert_ordered(w, "EAMT", u16(3000), WEAP_ORDER)
             d = w.get("DATA") or b"\0" * 10
             insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + d[10:], WEAP_ORDER)
             dn = w.get("DNAM")
             if dn and len(dn) >= 8:
-                w.set("DNAM", dn[:4] + struct.pack("<f", float(gt.speed)) + dn[8:])
+                w.set("DNAM", dn[:4] + struct.pack("<f", round(float(gt.speed) * float(rr.speed_mult), 3)) + dn[8:])
+            crit = w.get("CRDT")
+            if crit and len(crit) >= 2:
+                w.set("CRDT", u16(round(gt.crit_damage * float(rr.crit_mult))) + crit[2:])
             p.override(w)
             by_rarity.setdefault(rr.level, []).append(w.form_id)
             if g["type"] == "pistol" and rr.level == 1 and element is None:
@@ -218,8 +243,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     good_entries = [(tier_lists[lvl], 1) for lvl in tier_lists if lvl >= 3 for _ in range(rarity_row(lvl).loot_copies)]
     gun_any = leveled_list(p, "SkylandsGunsAny", any_entries)
     gun_good = leveled_list(p, "SkylandsGunsGood", good_entries or any_entries)
-    drop_any = leveled_list(p, "SkylandsGunDrop", [(gun_any.form_id, 1), (bolts.form_id, 20)], flags=0x7)
-    drop_good = leveled_list(p, "SkylandsGunDropGood", [(gun_good.form_id, 1), (bolts.form_id, 30)], flags=0x7)
+    # Drops are plain lists (no "use all"): one gun per roll. Ammo is its own entry in the loot lists.
+    drop_any = gun_any
+    drop_good = gun_good
+    ammo_drop = leveled_list(p, "SkylandsAmmoDrop", [(bolts.form_id, 12)])
     for row in S.LOOT_INJECTION.values():
         target = m.find("LVLI", row.skyrim_lvli)
         if target is None:
@@ -228,16 +255,16 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         lst = copy(target)
         add = drop_good.form_id if row.list == "good" else drop_any.form_id
         n = (lst.get("LLCT") or b"\0")[0]
-        if n + row.count > 255:
+        extra = [add] * row.count + [ammo_drop.form_id]
+        if n + len(extra) > 255:
             continue
-        for _ in range(row.count):
+        for fid in extra:
             last = max(i for i, (s, _) in enumerate(lst.subs) if s in ("LLCT", "LVLO", "COED"))
-            lst.subs.insert(last + 1, ("LVLO", lvlo(add)))
-        lst.set("LLCT", bytes([n + row.count]))
+            lst.subs.insert(last + 1, ("LVLO", lvlo(fid)))
+        lst.set("LLCT", bytes([n + len(extra)]))
         p.override(lst)
         report["loot_lists"] += 1
     starter_gun = rnd.choice(starters) if starters else next(iter(by_rarity[min(by_rarity)]))
-    starter_kit = leveled_list(p, "SkylandsStarterKit", [(starter_gun, 1), (bolts.form_id, 60)], flags=0x7)
 
     # ---- vault hunters ---------------------------------------------------------------------------
     fus = next((w for w in m.by_type["WOOP"].values() if w.edid == "WordFus"), None)
@@ -285,7 +312,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     quest = p.new("QUST", "SkylandsClassQuest")
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
-        ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGuns", esp.P_OBJECT, starter_kit.form_id)])], quest=True))
+        ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id)])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 

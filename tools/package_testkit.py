@@ -46,7 +46,9 @@ README = f"""Skylands {VERSION} test build: Skyrim played as a Borderlands vault
    If it cannot find a game, run it from a command prompt with:
      Install-Skylands.bat --bl2 "D:\\path\\Borderlands 2" --skyrim "D:\\path\\Skyrim Special Edition"
 3. Start Skyrim from Steam. Load a save (or start a new game).
-4. About two seconds after you can move, a "Choose your Vault Hunter" box appears. Pick one.
+4. About two seconds after you can move, a "Choose your Vault Hunter" box appears. Pick one. You get that
+   vault hunter's action skill, a starter pistol (equipped) and 60 bolts. Use a NEW game or a save from
+   before you chose: a save that already chose a vault hunter will not get the starter pistol again.
 5. To undo everything: Uninstall-Skylands.bat (removes only the files Skylands installed and its plugin line;
    plugins.txt.skylands-backup next to your plugins.txt is a copy from before the first install).
 
@@ -58,7 +60,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-1.zip"
+    out = dist / "Skylands-TestBuild-2.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

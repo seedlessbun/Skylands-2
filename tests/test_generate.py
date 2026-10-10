@@ -2,6 +2,8 @@ import struct
 import sys
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "setup"))
 sys.path.insert(0, str(HERE))
@@ -25,7 +27,7 @@ def test_generate_from_both_games(tmp_path):
     data = out / "Data"
     assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsLootBeam.pex").is_file()
     assert (data / "Meshes" / "Skylands" / "Beam_legendary.nif").is_file() and (data / "Textures" / "Skylands" / "beam.dds").is_file()
-    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI"})
+    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "ENCH", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI"})
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert names["Skylands_Pistol_Jakobs"] == "Jakobs Revolver (Common)"
     assert names["Skylands_Pistol_Jakobs_3_Rare_Fire"] == "Incendiary Revolver (Rare)"
@@ -33,12 +35,16 @@ def test_generate_from_both_games(tmp_path):
     fire = next(r for r in recs["WEAP"] if r.edid == "Skylands_Pistol_Jakobs_3_Rare_Fire")
     sigs = [s for s, _ in fire.subrecords]
     assert sigs.index("VMAD") < sigs.index("OBND") < sigs.index("FULL") < sigs.index("MODL") < sigs.index("EITM") < sigs.index("ETYP")
-    assert "DESC" not in sigs and struct.unpack_from("<I", fire.first("EITM"))[0] == 0x6000
+    assert "DESC" not in sigs and "EITM" in sigs
+    ench = next(r for r in recs["ENCH"] if r.form_id == struct.unpack_from("<I", fire.first("EITM"))[0])
+    assert ench.edid == "Skylands_Ench_Fire_rare" and struct.unpack("<fII", ench.first("EFIT"))[0] == 15.0  # 10 x rare 1.5
+    assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == pytest.approx(1.3 * 1.08, abs=1e-3)
+    assert struct.unpack_from("<H", fire.first("CRDT"))[0] == round(6 * 1.2)
     value, weight, dmg = struct.unpack_from("<IfH", fire.first("DATA"))
     assert dmg == round(12 * 1.3) and value == 150
     assert fire.form_id >> 24 == 3 and fire.first("MODL").startswith(b"dlc01")
     loot = next(r for r in recs["LVLI"] if r.edid == "LootBanditWeapon15")
-    assert loot.form_id == 0x8000 and loot.first("LLCT") == b"\x03" and len(loot.all("LVLO")) == 3  # built on Update.esm's version
+    assert loot.form_id == 0x8000 and loot.first("LLCT") == b"\x09" and len(loot.all("LVLO")) == 9  # built on Update.esm's version
     assert len(recs["SHOU"]) == 5 and {r.edid for r in recs["WOOP"]} >= {"SkylandsWord_assassin", "SkylandsWord_mechromancer"}
     zer0 = next(r for r in recs["SHOU"] if r.edid == "SkylandsShout_assassin")
     word, spell_id, recharge = struct.unpack("<IIf", zer0.all("SNAM")[0])
@@ -67,7 +73,7 @@ def test_build_installs_and_enables(tmp_path, monkeypatch):
     plugins.write_text("# keep me\n*Unofficial Patch.esp\n")
     done = tmp_path / "managed" / "setup-done.txt"
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
-    assert done.read_text().startswith("ok 0.2.1")
+    assert done.read_text().startswith(f"ok {build.VERSION}")
     assert (sky / "Data" / "Skylands.esp").is_file() and (sky / "Data" / "Scripts" / "SkylandsLootBeam.pex").is_file()
     assert plugins.read_text().splitlines() == ["# keep me", "*Unofficial Patch.esp", "*Skylands.esp"]
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
