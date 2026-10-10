@@ -30,3 +30,17 @@ def test_plugin_roundtrip(tmp_path):
     assert len(recs["MESG"][0].first("DESC")) == 70001  # XXXX-sized subrecord
     assert recs["WEAP"][0].edid == "DLC1Crossbow"  # compressed override reads back
     assert big.form_id == 0x03000802
+
+
+def test_plugin_is_light_only_while_it_fits():
+    small = esp.Plugin("S.esp", ["Skyrim.esm"])
+    for i in range(10):
+        small.new("MISC", f"M{i}")
+    big = esp.Plugin("B.esp", ["Skyrim.esm"])
+    for i in range(2100):
+        big.new("MISC", f"M{i}")
+
+    def flags(p):
+        return int.from_bytes(p.encode()[8:12], "little")
+
+    assert flags(small) & esp.FLAG_ESL and not flags(big) & esp.FLAG_ESL

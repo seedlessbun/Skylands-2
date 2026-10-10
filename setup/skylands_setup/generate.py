@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import sheet_data as S
+from . import stats
 from .skyrim import esp, nif, pex, scripts
 from .skyrim.esm import Record, read_plugin
 
@@ -161,6 +162,58 @@ def gun_name(g: dict, element: str | None, manufacturers: dict) -> str:
     return f"{base} ({rarity_row(g['rarity']).word})"
 
 
+AV_VARIABLE10 = 77  # an actor value nothing uses: the stats effect only displays numbers
+MGEF_AV_AT = 68
+MGEF_ART_AT = (24, 32, 36, 72, 76, 92, 96, 100, 108, 116, 128, 132, 136)  # light, shaders, projectile, arts, ability, perk
+
+
+def stats_template(m: Masters, base_ench: Record) -> Record:
+    """The magic effect of a vanilla weapon enchantment, to be stripped into a display-only effect."""
+    efid = base_ench.first("EFID")
+    mg = m.by_type["MGEF"].get(struct.unpack_from("<I", efid)[0]) if efid else None
+    if mg is None:
+        raise GenerateError("the effect of the vanilla weapon enchantments was not found")
+    return mg
+
+
+def stats_effect(p: esp.Plugin, edid: str, text: str, template: Record) -> int:
+    """A new magic effect that does nothing but show the gun's stats on its enchantment."""
+    r = esp.Rec("MGEF", p.new_id(), [])
+    r.add("EDID", esp.zstr(f"Skylands_Stats_{edid}")).add("FULL", esp.zstr("Gun stats")).add("DNAM", esp.zstr(text))
+    data = bytearray(template.first("DATA") or b"\0" * 152)
+    if len(data) >= MGEF_AV_AT + 4:
+        struct.pack_into("<i", data, MGEF_AV_AT, AV_VARIABLE10)
+        for at in MGEF_ART_AT:
+            if len(data) >= at + 4:
+                struct.pack_into("<I", data, at, 0)
+    r.add("DATA", bytes(data))
+    p.override(r)
+    return r.form_id
+
+
+def gun_enchant(p: esp.Plugin, edid: str, st: dict, donor: Record, with_element: bool, element_word: str | None,
+                template: Record) -> int:
+    """One enchantment per gun: the vanilla element effect scaled by the gun's roll, plus its stats line."""
+    head, effects = [], []
+    for sig, d in donor.subrecords:
+        if sig == "EFID":
+            effects.append([(sig, d)])
+        elif effects:
+            effects[-1].append((sig, d))
+        else:
+            head.append((sig, d))
+    e = esp.Rec("ENCH", p.new_id(), [(sig, d) for sig, d in head if sig not in ("EDID", "FULL")])
+    e.subs.insert(0, ("EDID", esp.zstr(f"Skylands_Ench_{edid}")))
+    insert_ordered(e, "FULL", esp.zstr("Gun stats"), ["EDID", "VMAD", "OBND", "FULL", "ENIT"])
+    if with_element:
+        for group in effects:
+            e.subs.extend((sig, scale_efit(d, st["element_mult"]) if sig == "EFIT" else d) for sig, d in group)
+    mg = stats_effect(p, edid, stats.describe(st, element_word), template)
+    e.add("EFID", esp.u32(mg)).add("EFIT", struct.pack("<fII", 0.0, 0, 0))
+    p.override(e)
+    return e.form_id
+
+
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     data_dir = Path(skyrim_dir) / "Data"
     m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL"})
@@ -185,20 +238,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     crossbow = m.need("WEAP", S.SKYRIM_BASE["crossbow"].edid)
     bolts = m.need("AMMO", S.SKYRIM_BASE["bolts"].edid)
     base_enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment) for e in S.ELEMENTS.values()}
-    enchant_cache: dict[tuple[str, int], int] = {}
-
-    def element_enchant(element: str, level: int) -> int:
-        """The vanilla enchantment for this element, copied with its strength scaled by rarity."""
-        key = (element, level)
-        if key not in enchant_cache:
-            e = copy(base_enchant[element])
-            e.form_id = p.new_id()
-            e.set("EDID", esp.zstr(f"Skylands_Ench_{element}_{rarity_row(level).id}"))
-            mult = float(rarity_row(level).element_mult)
-            e.subs[:] = [(sig, scale_efit(d, mult) if sig == "EFIT" else d) for sig, d in e.subs]
-            p.override(e)
-            enchant_cache[key] = e.form_id
-        return enchant_cache[key]
+    any_enchant = next(iter(base_enchant.values()))
+    stats_mgef = stats_template(m, any_enchant)
 
     gun_types = {g.id: g for g in S.GUN_TYPES.values()}
     by_rarity: dict[int, list[int]] = {}
@@ -218,22 +259,24 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
             w.set("EDID", esp.zstr(edid))
             insert_ordered(w, "FULL", esp.zstr(gun_name(g, element, bl2["weapons"]["manufacturers"])), WEAP_ORDER)
             insert_ordered(w, "VMAD", esp.vmad([("SkylandsLootBeam", [("Beam", esp.P_OBJECT, beams[rr.level])])]), WEAP_ORDER)
-            if element:
-                insert_ordered(w, "EITM", esp.u32(element_enchant(element, rr.level)), WEAP_ORDER)
-                insert_ordered(w, "EAMT", u16(3000), WEAP_ORDER)
+            st = stats.roll(edid, gt, rr, element is not None)
+            ench = gun_enchant(p, edid, st, base_enchant.get(element) or any_enchant, element is not None, element, stats_mgef)
+            insert_ordered(w, "EITM", esp.u32(ench), WEAP_ORDER)
+            insert_ordered(w, "EAMT", u16(65535), WEAP_ORDER)
             d = w.get("DATA") or b"\0" * 10
             insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + d[10:], WEAP_ORDER)
             dn = w.get("DNAM")
             if dn and len(dn) >= 8:
-                w.set("DNAM", dn[:4] + struct.pack("<f", round(float(gt.speed) * float(rr.speed_mult), 3)) + dn[8:])
+                w.set("DNAM", dn[:4] + struct.pack("<f", st["speed"]) + dn[8:])
             crit = w.get("CRDT")
             if crit and len(crit) >= 2:
-                w.set("CRDT", u16(round(gt.crit_damage * float(rr.crit_mult))) + crit[2:])
+                w.set("CRDT", u16(st["crit_damage"]) + crit[2:])
             p.override(w)
             by_rarity.setdefault(rr.level, []).append(w.form_id)
             if g["type"] == "pistol" and rr.level == 1 and element is None:
                 starters.append(w.form_id)
             report["guns"] += 1
+            report.setdefault("stats", {})[edid] = {k: v for k, v in st.items() if v is not None}
     if not by_rarity:
         raise GenerateError("no Borderlands guns were extracted")
 

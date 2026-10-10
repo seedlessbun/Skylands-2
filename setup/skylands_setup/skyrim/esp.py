@@ -85,7 +85,7 @@ class Rec:
 
 
 class Plugin:
-    """An ESL-flagged plugin. New FormIDs are 0x800-0xFFF in this plugin's own index."""
+    """New FormIDs start at 0x800 in this plugin's own index. Flagged ESL (light) while they fit in 0x800-0xFFF."""
 
     def __init__(self, name: str, masters: list[str], author: str = "Skylands") -> None:
         self.name = name
@@ -96,8 +96,8 @@ class Plugin:
         self.self_index = len(masters) << 24
 
     def new_id(self) -> int:  # also used for copies that become new records
-        if self._next > 0xFFF:
-            raise ValueError("an ESL plugin holds at most 2048 new records")
+        if self._next > 0xFFFFFF:
+            raise ValueError("a plugin holds at most 16 million new records")
         fid = self.self_index | self._next
         self._next += 1
         return fid
@@ -114,7 +114,7 @@ class Plugin:
 
     def encode(self) -> bytes:
         hedr = struct.pack("<fII", 1.71, len(self.records), self._next)
-        tes4 = Rec("TES4", 0, [("HEDR", hedr), ("CNAM", zstr(self.author))], flags=FLAG_ESL)
+        tes4 = Rec("TES4", 0, [("HEDR", hedr), ("CNAM", zstr(self.author))], flags=FLAG_ESL if self._next <= 0x1000 else 0)
         for m in self.masters:
             tes4.add("MAST", zstr(m)).add("DATA", struct.pack("<Q", 0))
         out = tes4.encode()

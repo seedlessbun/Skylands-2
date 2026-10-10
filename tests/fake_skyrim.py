@@ -180,9 +180,9 @@ def build_full(root: Path) -> Path:
     extra = []
     mgefs = ["InvisibillityFFSelf", "ParalysisFFAimed", "SummonStormAtronach", "SummonFrostAtronach", "AlchFortifyMarksman",
              "AlchFortifyHealRate", "AlchFortifyOneHanded", "AlchFortifyTwoHanded", "AbWeaknessFireConstant", "AbFortifyHealth"]
-    extra.append(group("MGEF", [record("MGEF", 0x5000 + i, [sub("EDID", z(e))]) for i, e in enumerate(mgefs)]))
+    extra.append(group("MGEF", [record("MGEF", 0x5000 + i, [sub("EDID", z(e)), sub("DATA", b"\0" * 152)]) for i, e in enumerate(mgefs)]))
     enchs = ["EnchWeaponFireDamage03", "EnchWeaponShockDamage03", "EnchWeaponAbsorbHealth02", "EnchWeaponMagickaDamage03"]
-    extra.append(group("ENCH", [record("ENCH", 0x6000 + i, [sub("EDID", z(e)), sub("EFID", struct.pack("<I", 0x5000)),
+    extra.append(group("ENCH", [record("ENCH", 0x6000 + i, [sub("EDID", z(e)), sub("FULL", sid(3)), sub("ENIT", b"\0" * 36), sub("EFID", struct.pack("<I", 0x5000)),
                                                        sub("EFIT", struct.pack("<fII", 10.0, 0, 0))]) for i, e in enumerate(enchs)]))
     spit = struct.pack("<IIIfIIffI", 0, 0, 11, 0.0, 1, 2, 0.0, 0.0, 0)
     extra.append(group("SPEL", [record("SPEL", 0x13E07, [sub("EDID", z("VoicePush1")), sub("ETYP", struct.pack("<I", 0x25BEE)), sub("SPIT", spit)])]))

@@ -122,15 +122,19 @@ class GunTypesRow:
     weight: float
     speed: float
     crit_damage: int
+    rate_min: float
+    rate_max: float
+    reload_min: float
+    reload_max: float
 
 
 GUN_TYPES: dict[str, GunTypesRow] = {
-    'pistol': GunTypesRow(id='pistol', package='GD_Weap_Pistol', balance_prefix='Pistol', base_damage=12, base_value=60, weight=4.0, speed=1.3, crit_damage=6),
-    'smg': GunTypesRow(id='smg', package='GD_Weap_SMG', balance_prefix='SMG', base_damage=10, base_value=80, weight=6.0, speed=1.6, crit_damage=3),
-    'assault_rifle': GunTypesRow(id='assault_rifle', package='GD_Weap_AssaultRifle', balance_prefix='AR', base_damage=15, base_value=100, weight=10.0, speed=1.2, crit_damage=5),
-    'shotgun': GunTypesRow(id='shotgun', package='GD_Weap_Shotgun', balance_prefix='SG', base_damage=20, base_value=100, weight=10.0, speed=0.8, crit_damage=4),
-    'sniper': GunTypesRow(id='sniper', package='GD_Weap_SniperRifles', balance_prefix='Sniper', base_damage=26, base_value=120, weight=12.0, speed=0.6, crit_damage=14),
-    'launcher': GunTypesRow(id='launcher', package='GD_Weap_Launchers', balance_prefix='RL', base_damage=34, base_value=150, weight=16.0, speed=0.5, crit_damage=8),
+    'pistol': GunTypesRow(id='pistol', package='GD_Weap_Pistol', balance_prefix='Pistol', base_damage=12, base_value=60, weight=4.0, speed=1.3, crit_damage=6, rate_min=2.5, rate_max=7.0, reload_min=1.4, reload_max=2.4),
+    'smg': GunTypesRow(id='smg', package='GD_Weap_SMG', balance_prefix='SMG', base_damage=10, base_value=80, weight=6.0, speed=1.6, crit_damage=3, rate_min=6.0, rate_max=14.0, reload_min=1.6, reload_max=2.3),
+    'assault_rifle': GunTypesRow(id='assault_rifle', package='GD_Weap_AssaultRifle', balance_prefix='AR', base_damage=15, base_value=100, weight=10.0, speed=1.2, crit_damage=5, rate_min=3.0, rate_max=9.0, reload_min=2.0, reload_max=3.0),
+    'shotgun': GunTypesRow(id='shotgun', package='GD_Weap_Shotgun', balance_prefix='SG', base_damage=20, base_value=100, weight=10.0, speed=0.8, crit_damage=4, rate_min=0.7, rate_max=2.0, reload_min=2.6, reload_max=4.2),
+    'sniper': GunTypesRow(id='sniper', package='GD_Weap_SniperRifles', balance_prefix='Sniper', base_damage=26, base_value=120, weight=12.0, speed=0.6, crit_damage=14, rate_min=0.6, rate_max=2.0, reload_min=2.4, reload_max=3.6),
+    'launcher': GunTypesRow(id='launcher', package='GD_Weap_Launchers', balance_prefix='RL', base_damage=34, base_value=150, weight=16.0, speed=0.5, crit_damage=8, rate_min=0.3, rate_max=1.0, reload_min=3.0, reload_max=4.5),
 }
 
 @dataclass(frozen=True)
@@ -166,18 +170,23 @@ class RaritiesRow:
     damage_mult: float
     value_mult: float
     loot_copies: int
-    speed_mult: float
     element_mult: float
     crit_mult: float
+    stat_lo: float
+    stat_hi: float
+    spread: float
+    roll_chance: float
+    boost_min: float
+    boost_max: float
 
 
 RARITIES: dict[str, RaritiesRow] = {
-    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12, speed_mult=1.0, element_mult=1.0, crit_mult=1.0),
-    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8, speed_mult=1.04, element_mult=1.2, crit_mult=1.1),
-    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4, speed_mult=1.08, element_mult=1.5, crit_mult=1.2),
-    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2, speed_mult=1.12, element_mult=1.9, crit_mult=1.35),
-    'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1, speed_mult=1.16, element_mult=2.4, crit_mult=1.5),
-    'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1, speed_mult=1.12, element_mult=2.8, crit_mult=1.3),
+    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12, element_mult=1.0, crit_mult=1.0, stat_lo=0.0, stat_hi=0.35, spread=0.1, roll_chance=0.02, boost_min=1.6, boost_max=2.2),
+    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8, element_mult=1.2, crit_mult=1.1, stat_lo=0.1, stat_hi=0.5, spread=0.1, roll_chance=0.04, boost_min=1.6, boost_max=2.4),
+    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4, element_mult=1.5, crit_mult=1.2, stat_lo=0.2, stat_hi=0.65, spread=0.12, roll_chance=0.07, boost_min=1.8, boost_max=2.6),
+    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2, element_mult=1.9, crit_mult=1.35, stat_lo=0.35, stat_hi=0.8, spread=0.12, roll_chance=0.1, boost_min=2.0, boost_max=3.0),
+    'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1, element_mult=2.4, crit_mult=1.5, stat_lo=0.5, stat_hi=1.0, spread=0.15, roll_chance=0.22, boost_min=2.0, boost_max=3.5),
+    'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1, element_mult=2.8, crit_mult=1.3, stat_lo=0.4, stat_hi=0.95, spread=0.15, roll_chance=0.12, boost_min=2.0, boost_max=3.0),
 }
 
 @dataclass(frozen=True)

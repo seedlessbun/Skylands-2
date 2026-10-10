@@ -27,7 +27,7 @@ def test_generate_from_both_games(tmp_path):
     data = out / "Data"
     assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsLootBeam.pex").is_file()
     assert (data / "Meshes" / "Skylands" / "Beam_legendary.nif").is_file() and (data / "Textures" / "Skylands" / "beam.dds").is_file()
-    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "ENCH", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI"})
+    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI"})
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert names["Skylands_Pistol_Jakobs"] == "Jakobs Revolver (Common)"
     assert names["Skylands_Pistol_Jakobs_3_Rare_Fire"] == "Incendiary Revolver (Rare)"
@@ -37,9 +37,18 @@ def test_generate_from_both_games(tmp_path):
     assert sigs.index("VMAD") < sigs.index("OBND") < sigs.index("FULL") < sigs.index("MODL") < sigs.index("EITM") < sigs.index("ETYP")
     assert "DESC" not in sigs and "EITM" in sigs
     ench = next(r for r in recs["ENCH"] if r.form_id == struct.unpack_from("<I", fire.first("EITM"))[0])
-    assert ench.edid == "Skylands_Ench_Fire_rare" and struct.unpack("<fII", ench.first("EFIT"))[0] == 15.0  # 10 x rare 1.5
-    assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == pytest.approx(1.3 * 1.08, abs=1e-3)
-    assert struct.unpack_from("<H", fire.first("CRDT"))[0] == round(6 * 1.2)
+    st = rep["stats"]["Skylands_Pistol_Jakobs_3_Rare_Fire"]
+    assert ench.edid == "Skylands_Ench_Skylands_Pistol_Jakobs_3_Rare_Fire" and ench.first("FULL") == b"Gun stats\0"
+    efits = [struct.unpack("<fII", d) for d in ench.all("EFIT")]
+    assert len(efits) == 2 and efits[0][0] == pytest.approx(10.0 * st["element_mult"], abs=0.01) and efits[1][0] == 0.0
+    mg = next(r for r in recs["MGEF"] if r.form_id == struct.unpack_from("<I", ench.all("EFID")[1])[0])
+    assert mg.first("DNAM").decode().startswith(f"Fire rate {st['fire_rate']:.1f}/s, Reload {st['reload']:.1f}s")
+    assert struct.unpack_from("<i", mg.first("DATA"), 68)[0] == 77
+    assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == pytest.approx(st["speed"], abs=1e-3)
+    assert struct.unpack_from("<H", fire.first("CRDT"))[0] == st["crit_damage"]
+    plain = next(r for r in recs["WEAP"] if r.edid == "Skylands_Pistol_Jakobs")
+    pe = next(r for r in recs["ENCH"] if r.form_id == struct.unpack_from("<I", plain.first("EITM"))[0])
+    assert len(pe.all("EFIT")) == 1  # a non-elemental gun still lists its stats
     value, weight, dmg = struct.unpack_from("<IfH", fire.first("DATA"))
     assert dmg == round(12 * 1.3) and value == 150
     assert fire.form_id >> 24 == 3 and fire.first("MODL").startswith(b"dlc01")

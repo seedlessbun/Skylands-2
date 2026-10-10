@@ -23,3 +23,12 @@ Nothing from either game is shipped. Single player.
 ## Status
 Survey tool built and tested on synthetic files. Next: confirm the formats on a real install, then the
 Skyrim writers (plugin, scripts, placeholder models) and the setup step Melty runs before first launch.
+
+## Gun stats (0.4)
+
+Each gun gets its own enchantment listing its stats: fire rate (shots per second) and reload (seconds) rolled
+inside Borderlands 2-like ranges per gun type (`sheets/gun_types.json`), widening toward the top with rarity
+(`sheets/rarities.json`), critical damage, and the element's strength. A gun can roll a rare boost that multiplies
+one of fire rate, element or crit damage ("ultra fire rate" uniques). Rolls are seeded by the gun's id, so a rebuild
+gives the same guns. The fire rate and reload fold into Skyrim's weapon speed (a crossbow has no separate reload
+speed to set); `generate-report.json` lists every gun's rolled stats.
