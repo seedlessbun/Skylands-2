@@ -232,7 +232,12 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         color = rarity_color(bl2["rarities"], row.level)
         mesh = f"Skylands\\Beam_{row.id}.nif"
         (out_data / "Meshes" / "Skylands" / f"Beam_{row.id}.nif").write_bytes(nif.beam(color, BEAM_TEXTURE))
-        beams[row.level] = p.new("ACTI", f"SkylandsBeam_{row.id}").add("OBND", obnd()).add("MODL", esp.zstr(mesh)).form_id
+        beam = p.new("ACTI", f"SkylandsBeam_{row.id}")
+        beam.add("VMAD", esp.vmad([("SkylandsLootBeam", [])])).add("OBND", obnd()).add("MODL", esp.zstr(mesh))
+        beams[row.level] = beam.form_id
+    # Keywords the scripts look for: one on every Skylands gun, and one per rarity (picks the beam).
+    gun_keyword = p.new("KYWD", "SkylandsGun").form_id
+    rarity_keywords = {row.level: p.new("KYWD", f"SkylandsRarity_{row.id}").form_id for row in S.RARITIES.values()}
 
     # ---- guns ---------------------------------------------------------------------------------
     crossbow = m.need("WEAP", S.SKYRIM_BASE["crossbow"].edid)
@@ -258,7 +263,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
             w.drop("DESC", "EITM", "EAMT", "VMAD")
             w.set("EDID", esp.zstr(edid))
             insert_ordered(w, "FULL", esp.zstr(gun_name(g, element, bl2["weapons"]["manufacturers"])), WEAP_ORDER)
-            insert_ordered(w, "VMAD", esp.vmad([("SkylandsLootBeam", [("Beam", esp.P_OBJECT, beams[rr.level])])]), WEAP_ORDER)
+            kwda = w.get("KWDA") or b""
+            keywords = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_keyword, rarity_keywords[rr.level]]
+            insert_ordered(w, "KSIZ", struct.pack("<I", len(keywords)), WEAP_ORDER)
+            insert_ordered(w, "KWDA", struct.pack(f"<{len(keywords)}I", *keywords), WEAP_ORDER)
             st = stats.roll(edid, gt, rr, element is not None)
             ench = gun_enchant(p, edid, st, base_enchant.get(element) or any_enchant, element is not None, element, stats_mgef)
             insert_ordered(w, "EITM", esp.u32(ench), WEAP_ORDER)
@@ -266,8 +274,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
             d = w.get("DATA") or b"\0" * 10
             insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + d[10:], WEAP_ORDER)
             dn = w.get("DNAM")
-            if dn and len(dn) >= 8:
-                w.set("DNAM", dn[:4] + struct.pack("<f", st["speed"]) + dn[8:])
+            if dn and len(dn) >= 12:  # the rolled animation speed rides in the gun's (otherwise unused) reach
+                w.set("DNAM", dn[:8] + struct.pack("<f", st["speed"]) + dn[12:])
             crit = w.get("CRDT")
             if crit and len(crit) >= 2:
                 w.set("CRDT", u16(st["crit_damage"]) + crit[2:])
@@ -355,7 +363,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     quest = p.new("QUST", "SkylandsClassQuest")
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
-        ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id)])], quest=True))
+        ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
+        ("GunKeyword", esp.P_OBJECT, gun_keyword),
+        ("RarityKeywords", esp.P_OBJECT_ARRAY, [rarity_keywords[k] for k in sorted(rarity_keywords)]),
+        ("Beams", esp.P_OBJECT_ARRAY, [beams[k] for k in sorted(beams)])])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 

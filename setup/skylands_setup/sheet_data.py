@@ -120,7 +120,6 @@ class GunTypesRow:
     base_damage: int
     base_value: int
     weight: float
-    speed: float
     crit_damage: int
     rate_min: float
     rate_max: float
@@ -129,12 +128,12 @@ class GunTypesRow:
 
 
 GUN_TYPES: dict[str, GunTypesRow] = {
-    'pistol': GunTypesRow(id='pistol', package='GD_Weap_Pistol', balance_prefix='Pistol', base_damage=12, base_value=60, weight=4.0, speed=1.3, crit_damage=6, rate_min=2.5, rate_max=7.0, reload_min=1.4, reload_max=2.4),
-    'smg': GunTypesRow(id='smg', package='GD_Weap_SMG', balance_prefix='SMG', base_damage=10, base_value=80, weight=6.0, speed=1.6, crit_damage=3, rate_min=6.0, rate_max=14.0, reload_min=1.6, reload_max=2.3),
-    'assault_rifle': GunTypesRow(id='assault_rifle', package='GD_Weap_AssaultRifle', balance_prefix='AR', base_damage=15, base_value=100, weight=10.0, speed=1.2, crit_damage=5, rate_min=3.0, rate_max=9.0, reload_min=2.0, reload_max=3.0),
-    'shotgun': GunTypesRow(id='shotgun', package='GD_Weap_Shotgun', balance_prefix='SG', base_damage=20, base_value=100, weight=10.0, speed=0.8, crit_damage=4, rate_min=0.7, rate_max=2.0, reload_min=2.6, reload_max=4.2),
-    'sniper': GunTypesRow(id='sniper', package='GD_Weap_SniperRifles', balance_prefix='Sniper', base_damage=26, base_value=120, weight=12.0, speed=0.6, crit_damage=14, rate_min=0.6, rate_max=2.0, reload_min=2.4, reload_max=3.6),
-    'launcher': GunTypesRow(id='launcher', package='GD_Weap_Launchers', balance_prefix='RL', base_damage=34, base_value=150, weight=16.0, speed=0.5, crit_damage=8, rate_min=0.3, rate_max=1.0, reload_min=3.0, reload_max=4.5),
+    'pistol': GunTypesRow(id='pistol', package='GD_Weap_Pistol', balance_prefix='Pistol', base_damage=12, base_value=60, weight=4.0, crit_damage=6, rate_min=2.5, rate_max=7.0, reload_min=1.4, reload_max=2.4),
+    'smg': GunTypesRow(id='smg', package='GD_Weap_SMG', balance_prefix='SMG', base_damage=10, base_value=80, weight=6.0, crit_damage=3, rate_min=6.0, rate_max=14.0, reload_min=1.6, reload_max=2.3),
+    'assault_rifle': GunTypesRow(id='assault_rifle', package='GD_Weap_AssaultRifle', balance_prefix='AR', base_damage=15, base_value=100, weight=10.0, crit_damage=5, rate_min=3.0, rate_max=9.0, reload_min=2.0, reload_max=3.0),
+    'shotgun': GunTypesRow(id='shotgun', package='GD_Weap_Shotgun', balance_prefix='SG', base_damage=20, base_value=100, weight=10.0, crit_damage=4, rate_min=0.7, rate_max=2.0, reload_min=2.6, reload_max=4.2),
+    'sniper': GunTypesRow(id='sniper', package='GD_Weap_SniperRifles', balance_prefix='Sniper', base_damage=26, base_value=120, weight=12.0, crit_damage=14, rate_min=0.6, rate_max=2.0, reload_min=2.4, reload_max=3.6),
+    'launcher': GunTypesRow(id='launcher', package='GD_Weap_Launchers', balance_prefix='RL', base_damage=34, base_value=150, weight=16.0, crit_damage=8, rate_min=0.3, rate_max=1.0, reload_min=3.0, reload_max=4.5),
 }
 
 @dataclass(frozen=True)

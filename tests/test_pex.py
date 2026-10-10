@@ -15,18 +15,17 @@ from skylands_setup.skyrim import pex, scripts  # noqa: E402
 CHAMPOLLION = os.environ.get("CHAMPOLLION", "")
 
 EXPECTED = """Event OnUpdate()
+  If !Chosen
+    Self.Choose()
+  EndIf
   If Chosen
-    Return
+    Self.Tick()
   EndIf
-  If Utility.IsInMenuMode()
-    Self.RegisterForSingleUpdate(1.0)
-    Return
-  EndIf
-  If !Game.IsMovementControlsEnabled()
-    Self.RegisterForSingleUpdate(1.0)
-    Return
-  EndIf
-  Int choice = ClassChoice.Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+  Self.RegisterForSingleUpdate(1.0)
+  Return
+EndEvent"""
+
+CHOOSE = """  Int choice = ClassChoice.Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
   Actor player = Game.GetPlayer()
   Shout chosenShout = Shouts[choice]
   player.AddShout(chosenShout)
@@ -37,9 +36,23 @@ EXPECTED = """Event OnUpdate()
   player.AddItem(StarterGun, 1, False)
   player.AddItem(StarterAmmo, 60, False)
   player.EquipItem(StarterGun, False, False)
-  Chosen = True
-  Return
-EndEvent"""
+  Chosen = True"""
+
+TICK = """  Weapon w = player.GetEquippedWeapon(False)
+  Float want = 1.0
+  If w as Bool
+    If w.HasKeyword(GunKeyword)
+      want = w.GetReach()
+    EndIf
+  EndIf
+  If want != Speed
+    Speed = want
+    player.SetActorValue("WeaponSpeedMult", want)"""
+
+BEAMS = """      Bool has = Self.Has(r, kw, corpse)
+      If has
+        Self.Place(r, k, corpse)
+        k = -1"""
 
 
 def test_header_and_layout():
@@ -62,7 +75,10 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
     for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto",
                  "WordOfPower[] Property Words Auto", "Form Property StarterGun Auto", "Form Property StarterAmmo Auto"):
         assert prop in psc
-    assert EXPECTED in psc
+    for prop in ("Keyword Property GunKeyword Auto", "Keyword[] Property RarityKeywords Auto", "Activator[] Property Beams Auto"):
+        assert prop in psc
+    for text in (EXPECTED, CHOOSE, TICK, BEAMS):
+        assert text in psc
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
@@ -72,7 +88,6 @@ def test_loot_beam_decompiles_to_intended_papyrus(tmp_path):
     subprocess.run([CHAMPOLLION, str(f), "-p", str(tmp_path / "out")], check=True, timeout=30, capture_output=True)
     psc = "\n".join(line.rstrip() for line in (tmp_path / "out" / "SkylandsLootBeam.psc").read_text().splitlines())
     assert "ScriptName SkylandsLootBeam Extends ObjectReference" in psc
-    assert "Activator Property Beam Auto" in psc
-    assert "Event OnLoad()\n  If !beamRef as Bool\n    ObjectReference placed = Self.PlaceAtMe(Beam, 1, False, False)" in psc
-    assert "Event OnContainerChanged(ObjectReference akNewContainer, ObjectReference akOldContainer)\n  If akNewContainer as Bool\n    Self.ClearBeam()" in psc
-    assert "beamRef.Disable(False)\n    beamRef.Delete()\n    beamRef = None" in psc
+    assert "Function Track(ObjectReference t, Keyword k, Bool isCorpse, SkylandsClassQuest q)" in psc
+    assert "ok = n > 0" in psc and "ok = !c as Bool" in psc
+    assert "owner.Forget(target)\n  EndIf\n  Self.Disable(False)\n  Self.Delete()" in psc

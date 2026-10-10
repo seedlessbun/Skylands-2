@@ -9,10 +9,10 @@ editor id, so rebuilding gives the same guns.
 
 from __future__ import annotations
 
-import math
 import random
 
-SPEED_MIN, SPEED_MAX = 0.5, 3.0  # Skyrim weapon speed the animations stay sane within
+SPEED_MIN, SPEED_MAX = 0.4, 6.0  # player weapon speed multiplier (1.0 = normal); fast guns look frantic on purpose
+RATE_REF, RELOAD_REF = 2.0, 2.5  # a gun firing 2/s with a 2.5 s reload runs at normal animation speed
 
 
 def roll(edid: str, gt, rr, has_element: bool) -> dict:
@@ -31,8 +31,8 @@ def roll(edid: str, gt, rr, has_element: bool) -> dict:
             crit *= boost
         else:
             element *= boost
-    mid_rate, mid_reload = (gt.rate_min + gt.rate_max) / 2, (gt.reload_min + gt.reload_max) / 2
-    speed = gt.speed * math.sqrt(rate / mid_rate) * math.sqrt(mid_reload / reload)
+    # Animation speed grows with fire rate (steeply) and falls with reload time (gently).
+    speed = (rate / RATE_REF) ** 0.6 * (RELOAD_REF / reload) ** 0.4
     return {
         "fire_rate": round(rate, 2), "reload": round(reload, 2),
         "speed": round(min(SPEED_MAX, max(SPEED_MIN, speed)), 3),

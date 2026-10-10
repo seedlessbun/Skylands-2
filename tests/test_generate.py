@@ -27,14 +27,14 @@ def test_generate_from_both_games(tmp_path):
     data = out / "Data"
     assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsLootBeam.pex").is_file()
     assert (data / "Meshes" / "Skylands" / "Beam_legendary.nif").is_file() and (data / "Textures" / "Skylands" / "beam.dds").is_file()
-    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI"})
+    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI"})
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert names["Skylands_Pistol_Jakobs"] == "Jakobs Revolver (Common)"
     assert names["Skylands_Pistol_Jakobs_3_Rare_Fire"] == "Incendiary Revolver (Rare)"
     assert names["Skylands_Pistol_Jakobs_5_Maggie"] == "Sledge's Maggie (Legendary)"
     fire = next(r for r in recs["WEAP"] if r.edid == "Skylands_Pistol_Jakobs_3_Rare_Fire")
     sigs = [s for s, _ in fire.subrecords]
-    assert sigs.index("VMAD") < sigs.index("OBND") < sigs.index("FULL") < sigs.index("MODL") < sigs.index("EITM") < sigs.index("ETYP")
+    assert "VMAD" not in sigs and sigs.index("OBND") < sigs.index("FULL") < sigs.index("MODL") < sigs.index("EITM") < sigs.index("ETYP")
     assert "DESC" not in sigs and "EITM" in sigs
     ench = next(r for r in recs["ENCH"] if r.form_id == struct.unpack_from("<I", fire.first("EITM"))[0])
     st = rep["stats"]["Skylands_Pistol_Jakobs_3_Rare_Fire"]
@@ -44,7 +44,16 @@ def test_generate_from_both_games(tmp_path):
     mg = next(r for r in recs["MGEF"] if r.form_id == struct.unpack_from("<I", ench.all("EFID")[1])[0])
     assert mg.first("DNAM").decode().startswith(f"Fire rate {st['fire_rate']:.1f}/s, Reload {st['reload']:.1f}s")
     assert struct.unpack_from("<i", mg.first("DATA"), 68)[0] == 77
-    assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == pytest.approx(st["speed"], abs=1e-3)
+    assert struct.unpack_from("<f", fire.first("DNAM"), 8)[0] == pytest.approx(st["speed"], abs=1e-3)  # reach carries the speed
+    assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == 1.0  # the crossbow's own speed is left alone
+    kws = struct.unpack(f"<{len(fire.first('KWDA')) // 4}I", fire.first("KWDA"))
+    kyw = {r.form_id: r.edid for r in recs["KYWD"]}
+    assert struct.unpack("<I", fire.first("KSIZ"))[0] == len(kws) and [kyw[k] for k in kws if k in kyw] == ["SkylandsGun", "SkylandsRarity_rare"]
+    beam_acti = next(r for r in recs["ACTI"] if r.edid == "SkylandsBeam_rare")
+    assert b"SkylandsLootBeam" in beam_acti.first("VMAD")
+    quest = next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest")
+    for prop in (b"GunKeyword", b"RarityKeywords", b"Beams", b"StarterGun", b"StarterAmmo"):
+        assert prop in quest.first("VMAD")
     assert struct.unpack_from("<H", fire.first("CRDT"))[0] == st["crit_damage"]
     plain = next(r for r in recs["WEAP"] if r.edid == "Skylands_Pistol_Jakobs")
     pe = next(r for r in recs["ENCH"] if r.form_id == struct.unpack_from("<I", plain.first("EITM"))[0])

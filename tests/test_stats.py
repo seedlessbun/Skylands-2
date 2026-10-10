@@ -38,3 +38,11 @@ def test_boosts_are_rare_big_and_only_element_when_the_gun_has_one():
     assert all(s["boost"] >= rr.boost_min for s in got if s["boosted"])
     assert "element" not in {s["boosted"] for s in rolls(gt, rr, element=False)}
     assert max(s["fire_rate"] for s in got if s["boosted"] == "fire_rate") > gt.rate_max * 1.5
+
+
+def test_faster_guns_animate_faster():
+    smg = [stats.roll(f"s{i}", S.GUN_TYPES["smg"], S.RARITIES["legendary"], False) for i in range(300)]
+    sniper = [stats.roll(f"n{i}", S.GUN_TYPES["sniper"], S.RARITIES["common"], False) for i in range(300)]
+    assert min(s["speed"] for s in smg if not s["boosted"]) > 2.0
+    assert max(s["speed"] for s in sniper if not s["boosted"]) < 1.0
+    assert max(s["speed"] for s in smg) > 4.0  # a boosted SMG is frantic

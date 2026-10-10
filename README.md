@@ -30,5 +30,12 @@ Each gun gets its own enchantment listing its stats: fire rate (shots per second
 inside Borderlands 2-like ranges per gun type (`sheets/gun_types.json`), widening toward the top with rarity
 (`sheets/rarities.json`), critical damage, and the element's strength. A gun can roll a rare boost that multiplies
 one of fire rate, element or crit damage ("ultra fire rate" uniques). Rolls are seeded by the gun's id, so a rebuild
-gives the same guns. The fire rate and reload fold into Skyrim's weapon speed (a crossbow has no separate reload
-speed to set); `generate-report.json` lists every gun's rolled stats.
+gives the same guns. The fire rate and reload fold into one animation speed. A script on the player (the class quest, ticking once a
+second) reads it from the equipped Skylands gun and sets the player's WeaponSpeedMult; a notification shows the value
+and what the game reports back. `generate-report.json` lists every gun's rolled stats.
+
+## Rarity beams (0.5)
+
+Every Skylands gun carries a Skylands keyword and a rarity keyword. The same script scans the player's cell every
+other second and places a rarity-coloured beam over Skylands guns lying on the ground and over corpses carrying one;
+each beam follows its gun and removes itself when the gun is picked up or looted.
