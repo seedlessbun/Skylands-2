@@ -49,11 +49,14 @@ README = f"""Skylands {VERSION} test build: Skyrim played as a Borderlands vault
 4. About two seconds after you can move, a "Choose your Vault Hunter" box appears. Pick one. You get that
    vault hunter's action skill, a starter pistol (equipped) and 60 bolts. Use a NEW game or a save from
    before you chose: a save that already chose a vault hunter will not get the starter pistol again.
-5. What to look for (no Skyrim script extender is needed): your starter pistol, a "Skylands gun speed" message when you equip a gun, bandits that carry
+5. New in 0.8: when you load a save, a box asks whether to respawn enemies (you can say "always" or "never"); the
+   lesser power "Pandora Respawn" does it any time and changes the setting. In a dungeon you are taken back to where
+   you came in. Beams are plain statics now; a message on screen says whether the beam and the light were made.
+6. What to look for (no Skyrim script extender is needed): your starter pistol, a "Skylands gun speed" message when you equip a gun, bandits that carry
    guns (a message names them), guns dropping on the ground when they die with a coloured beam and light over
    them, and a stats line on every gun. If something is missing, send work\\skylands-setup.log, work\\parts-summary.json
    and a screenshot.
-6. To undo everything: Uninstall-Skylands.bat (removes only the files Skylands installed and its plugin line;
+7. To undo everything: Uninstall-Skylands.bat (removes only the files Skylands installed and its plugin line;
    plugins.txt.skylands-backup next to your plugins.txt is a copy from before the first install).
 
 Includes Python 3.13 (python-build-standalone, PSF license) and lzokay (MIT, LICENSE-lzokay).
@@ -64,7 +67,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-7.zip"
+    out = dist / "Skylands-TestBuild-8.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

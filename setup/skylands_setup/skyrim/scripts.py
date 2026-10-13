@@ -39,31 +39,38 @@ def class_choice_quest() -> Script:
     """SkylandsClassQuest extends Quest.
 
     * Shows the vault hunter choice once the player can move, teaches and equips that vault hunter's
-      shout, and hands over the starter gun and ammo.
-    * Keeps the loot beams: Consider(ref) puts a rarity-coloured beam and light on a Skylands gun lying
-      on the ground (once per gun), Forget(ref) lets a gun get a new beam later.
-
-    Properties: ClassChoice, Shouts, Words, StarterGun, StarterAmmo, RarityKeywords[6], Beams[6], Lights[6], Verbose.
+      shout, and hands over the starter gun, ammo and the respawn power.
+    * Loot beams: Consider(ref) puts a rarity-coloured beam (a static) and light on a Skylands gun lying
+      on the ground; Sweep() (every couple of seconds, from the player's watcher) moves them with the gun
+      and removes them when the gun is picked up or unloaded.
+    * Respawning: hostile people enlist themselves (Enlist); on a save load the player is asked whether to
+      respawn them (Prompt), or the respawn power does it (Settings); Respawn() resets the enlisted ones
+      in the player's area and, in an interior, moves the player to where they first came in (NoteEntrance).
     """
     on_init = Function(
         "OnInit",
         locals=[("::nonevar", "None")],
-        code=[("array_create", ("id", "Tracked"), ("int", 48)),
+        code=[("array_create", ("id", "Tracked"), ("int", 48)), ("array_create", ("id", "TrackedBeams"), ("int", 48)),
+              ("array_create", ("id", "TrackedLights"), ("int", 48)), ("array_create", ("id", "Roster"), ("int", 128)),
+              ("array_create", ("id", "EntryCells"), ("int", 16)), ("array_create", ("id", "EntryMarks"), ("int", 16)),
               ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)],
     )
     on_update = Function(
         "OnUpdate",
         locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
+            ("not", ("id", "::temp0"), ("id", "Chosen")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "ready")),
             call("Choose"),
-            ("jmpf", ("id", "Chosen"), ("lbl", "again")),
-            ("return", None),
-            ("label", "again"),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            ("return", None),
+            ("label", "ready"),
+            ("jmpf", ("id", "PendingPrompt"), ("lbl", "end")),
+            call("Prompt"),
+            ("label", "end"),
             ("return", None),
         ],
     )
-    # NB: jmpf Chosen jumps when NOT chosen: wait one more second and look again.
     choose = Function(
         "Choose",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("choice", "Int"), ("player", "Actor"),
@@ -86,6 +93,7 @@ def class_choice_quest() -> Script:
             ("callstatic", ("id", "Game"), ("id", "TeachWord"), NONE, ("id", "chosenWord")),
             ("callstatic", ("id", "Game"), ("id", "UnlockWord"), NONE, ("id", "chosenWord")),
             ("callmethod", ("id", "EquipShout"), ("id", "player"), NONE, ("id", "chosenShout")),
+            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::RespawnPower_var"), ("bool", False)),
             ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterGun_var"),
              ("int", 1), ("bool", False)),
             ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterAmmo_var"),
@@ -93,6 +101,278 @@ def class_choice_quest() -> Script:
             ("callmethod", ("id", "EquipItem"), ("id", "player"), NONE, ("id", "::StarterGun_var"),
              ("bool", False), ("bool", False)),
             ("assign", ("id", "Chosen"), ("bool", True)),
+            ("return", None),
+        ],
+    )
+    loaded = Function(
+        "LoadedSave",
+        locals=[("::nonevar", "None")],
+        code=[
+            ("assign", ("id", "JustLoaded"), ("bool", True)),
+            ("assign", ("id", "LastCell"), None),
+            ("jmpf", ("id", "Chosen"), ("lbl", "end")),
+            ("assign", ("id", "PendingPrompt"), ("bool", True)),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 3.0)),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    prompt = Function(
+        "Prompt",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("::temp1", "Bool"), ("pick", "Int")],
+        code=[
+            ("callstatic", ("id", "Utility"), ("id", "IsInMenuMode"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "not_menu")),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            ("return", None),
+            ("label", "not_menu"),
+            ("callstatic", ("id", "Game"), ("id", "IsMovementControlsEnabled"), ("id", "::temp1")),
+            ("not", ("id", "::temp0"), ("id", "::temp1")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "free")),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            ("return", None),
+            ("label", "free"),
+            ("assign", ("id", "PendingPrompt"), ("bool", False)),
+            ("cmp_eq", ("id", "::temp0"), ("id", "Mode"), ("int", 2)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "not_never")),
+            ("return", None),
+            ("label", "not_never"),
+            ("cmp_eq", ("id", "::temp0"), ("id", "Mode"), ("int", 1)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "ask")),
+            call("Respawn"),
+            ("return", None),
+            ("label", "ask"),
+            ("callmethod", ("id", "Show"), ("id", "::PromptMsg_var"), ("id", "pick"), *ZERO9),
+            ("cmp_eq", ("id", "::temp0"), ("id", "pick"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "not_now")),
+            call("Respawn"),
+            ("return", None),
+            ("label", "not_now"),
+            ("cmp_eq", ("id", "::temp0"), ("id", "pick"), ("int", 2)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "not_always")),
+            ("assign", ("id", "Mode"), ("int", 1)),
+            call("Respawn"),
+            ("return", None),
+            ("label", "not_always"),
+            ("cmp_eq", ("id", "::temp0"), ("id", "pick"), ("int", 3)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("assign", ("id", "Mode"), ("int", 2)),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    settings = Function(
+        "Settings",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("pick", "Int")],
+        code=[
+            ("callmethod", ("id", "Show"), ("id", "::SettingsMsg_var"), ("id", "pick"), *ZERO9),
+            ("cmp_eq", ("id", "::temp0"), ("id", "pick"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "ask_me")),
+            call("Respawn"),
+            ("return", None),
+            ("label", "ask_me"),
+            ("cmp_eq", ("id", "::temp0"), ("id", "pick"), ("int", 1)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "always")),
+            ("assign", ("id", "Mode"), ("int", 0)),
+            ("return", None),
+            ("label", "always"),
+            ("cmp_eq", ("id", "::temp0"), ("id", "pick"), ("int", 2)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "never")),
+            ("assign", ("id", "Mode"), ("int", 1)),
+            ("return", None),
+            ("label", "never"),
+            ("cmp_eq", ("id", "::temp0"), ("id", "pick"), ("int", 3)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("assign", ("id", "Mode"), ("int", 2)),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    generation = Function(
+        "GenerationNow", return_type="Int", locals=[],
+        code=[("return", ("id", "Generation"))],
+    )
+    reach = Function(
+        "Reach",
+        return_type="Bool",
+        params=[("r", "ObjectReference"), ("cell", "Cell"), ("player", "Actor")],
+        locals=[("::temp0", "Bool"), ("here", "Cell"), ("d", "Float")],
+        code=[
+            ("callmethod", ("id", "IsInterior"), ("id", "cell"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "outside")),
+            ("callmethod", ("id", "GetParentCell"), ("id", "r"), ("id", "here")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "here"), ("id", "cell")),
+            ("return", ("id", "::temp0")),
+            ("label", "outside"),
+            ("callmethod", ("id", "GetDistance"), ("id", "r"), ("id", "d"), ("id", "player")),
+            ("cmp_lt", ("id", "::temp0"), ("id", "d"), ("float", 9000.0)),
+            ("return", ("id", "::temp0")),
+        ],
+    )
+    revive = Function(
+        "Revive",
+        params=[("r", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "Actor")],
+        code=[
+            ("callmethod", ("id", "Reset"), ("id", "r"), NONE, None),
+            ("cast", ("id", "a"), ("id", "r")),
+            ("cast", ("id", "::temp0"), ("id", "a")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "IsDead"), ("id", "a"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "Resurrect"), ("id", "a"), NONE),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    respawn = Function(
+        "Respawn",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("cell", "Cell"), ("i", "Int"),
+                ("n", "Int"), ("r", "ObjectReference"), ("m", "ObjectReference"), ("idx", "Int"), ("msg", "String"),
+                ("count", "String")],
+        code=[
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "GetParentCell"), ("id", "player"), ("id", "cell")),
+            ("iadd", ("id", "Generation"), ("id", "Generation"), ("int", 1)),
+            ("assign", ("id", "i"), ("int", 0)),
+            ("assign", ("id", "n"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("int", 128)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("array_getelement", ("id", "r"), ("id", "Roster"), ("id", "i")),
+            ("cast", ("id", "::temp0"), ("id", "r")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "next")),
+            ("callmethod", ("id", "Reach"), SELF, ("id", "::temp0"), ("id", "r"), ("id", "cell"), ("id", "player")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "next")),
+            call("Revive", ("id", "r")),
+            ("iadd", ("id", "n"), ("id", "n"), ("int", 1)),
+            ("label", "next"),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "done"),
+            ("callmethod", ("id", "EntranceFor"), SELF, ("id", "m"), ("id", "cell")),
+            ("cast", ("id", "::temp0"), ("id", "m")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "say")),
+            ("callmethod", ("id", "MoveTo"), ("id", "player"), NONE, ("id", "m"), F0, F0, F0, ("bool", True)),
+            ("label", "say"),
+            ("cast", ("id", "count"), ("id", "n")),
+            *notify(("str", "Pandora respawned "), ("id", "count"), ("str", " enemies here")),
+            ("return", None),
+        ],
+    )
+    enlist = Function(
+        "Enlist",
+        params=[("r", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference")],
+        code=[
+            ("assign", ("id", "i"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("int", 128)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "add")),
+            ("array_getelement", ("id", "e"), ("id", "Roster"), ("id", "i")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "e"), ("id", "r")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "cont")),
+            ("return", None),
+            ("label", "cont"),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "add"),
+            ("array_setelement", ("id", "Roster"), ("id", "RosterNext"), ("id", "r")),
+            ("iadd", ("id", "RosterNext"), ("id", "RosterNext"), ("int", 1)),
+            ("imod", ("id", "RosterNext"), ("id", "RosterNext"), ("int", 128)),
+            ("return", None),
+        ],
+    )
+    entry_index = Function(
+        "EntryIndex",
+        return_type="Int",
+        params=[("cell", "Cell")],
+        locals=[("::temp0", "Bool"), ("i", "Int"), ("e", "Cell")],
+        code=[
+            ("assign", ("id", "i"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("int", 16)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
+            ("array_getelement", ("id", "e"), ("id", "EntryCells"), ("id", "i")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "e"), ("id", "cell")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "cont")),
+            ("return", ("id", "i")),
+            ("label", "cont"),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "none"),
+            ("return", ("int", -1)),
+        ],
+    )
+    entrance_for = Function(
+        "EntranceFor",
+        return_type="ObjectReference",
+        params=[("cell", "Cell")],
+        locals=[("::temp0", "Bool"), ("idx", "Int"), ("m", "ObjectReference")],
+        code=[
+            ("cast", ("id", "::temp0"), ("id", "cell")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
+            ("callmethod", ("id", "EntryIndex"), SELF, ("id", "idx"), ("id", "cell")),
+            ("cmp_lt", ("id", "::temp0"), ("id", "idx"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "found")),
+            ("return", None),
+            ("label", "found"),
+            ("array_getelement", ("id", "m"), ("id", "EntryMarks"), ("id", "idx")),
+            ("return", ("id", "m")),
+            ("label", "none"),
+            ("return", None),
+        ],
+    )
+    note_entrance = Function(
+        "NoteEntrance",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("cell", "Cell")],
+        code=[
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "GetParentCell"), ("id", "player"), ("id", "cell")),
+            ("cast", ("id", "::temp0"), ("id", "cell")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "nocell")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "cell"), ("id", "LastCell")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "changed")),
+            ("return", None),
+            ("label", "changed"),
+            ("assign", ("id", "LastCell"), ("id", "cell")),
+            ("jmpf", ("id", "JustLoaded"), ("lbl", "arrived")),
+            ("assign", ("id", "JustLoaded"), ("bool", False)),
+            ("return", None),
+            ("label", "arrived"),
+            call("Arrive", ("id", "cell")),
+            ("return", None),
+            ("label", "nocell"),
+            ("return", None),
+        ],
+    )
+    arrive = Function(
+        "Arrive",
+        params=[("cell", "Cell")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("idx", "Int"),
+                ("m", "ObjectReference"), ("old", "ObjectReference")],
+        code=[
+            ("callmethod", ("id", "IsInterior"), ("id", "cell"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "outside")),
+            ("callmethod", ("id", "EntryIndex"), SELF, ("id", "idx"), ("id", "cell")),
+            ("cmp_lt", ("id", "::temp0"), ("id", "idx"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "known")),
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "player"), ("id", "m"), ("id", "::MarkerForm_var"), ("int", 1),
+             ("bool", True), ("bool", False)),
+            ("array_getelement", ("id", "old"), ("id", "EntryMarks"), ("id", "EntryNext")),
+            ("cast", ("id", "::temp0"), ("id", "old")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "store")),
+            ("callmethod", ("id", "Delete"), ("id", "old"), NONE),
+            ("label", "store"),
+            ("array_setelement", ("id", "EntryCells"), ("id", "EntryNext"), ("id", "cell")),
+            ("array_setelement", ("id", "EntryMarks"), ("id", "EntryNext"), ("id", "m")),
+            ("iadd", ("id", "EntryNext"), ("id", "EntryNext"), ("int", 1)),
+            ("imod", ("id", "EntryNext"), ("id", "EntryNext"), ("int", 16)),
+            ("return", None),
+            ("label", "known"),
+            ("return", None),
+            ("label", "outside"),
             ("return", None),
         ],
     )
@@ -132,9 +412,8 @@ def class_choice_quest() -> Script:
     place = Function(
         "Place",
         params=[("r", "ObjectReference"), ("k", "Int")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference"), ("bs", "Activator"),
-                ("lt", "Light"), ("ln", "Int"), ("b", "ObjectReference"), ("lr", "ObjectReference"),
-                ("beam", "SkylandsLootBeam"), ("name", "String"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference"), ("bs", "Form"),
+                ("lt", "Light"), ("ln", "Int"), ("b", "ObjectReference"), ("lr", "ObjectReference"), ("slot", "Int")],
         code=[
             ("assign", ("id", "i"), ("int", 0)),
             ("label", "find"),
@@ -158,71 +437,140 @@ def class_choice_quest() -> Script:
             ("callmethod", ("id", "PlaceAtMe"), ("id", "r"), ("id", "lr"), ("id", "lt"), ("int", 1), ("bool", False),
              ("bool", False)),
             ("label", "nolight"),
-            ("cast", ("id", "beam"), ("id", "b")),
-            ("cast", ("id", "::temp0"), ("id", "beam")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "broken")),
-            ("callmethod", ("id", "Track"), ("id", "beam"), NONE, ("id", "r"), SELF, ("id", "lr")),
-            ("array_setelement", ("id", "Tracked"), ("id", "TrackedNext"), ("id", "r")),
-            ("iadd", ("id", "TrackedNext"), ("id", "TrackedNext"), ("int", 1)),
+            ("assign", ("id", "slot"), ("id", "TrackedNext")),
+            call("Clear", ("id", "slot")),
+            ("array_setelement", ("id", "Tracked"), ("id", "slot"), ("id", "r")),
+            ("array_setelement", ("id", "TrackedBeams"), ("id", "slot"), ("id", "b")),
+            ("array_setelement", ("id", "TrackedLights"), ("id", "slot"), ("id", "lr")),
+            ("iadd", ("id", "TrackedNext"), ("id", "slot"), ("int", 1)),
             ("imod", ("id", "TrackedNext"), ("id", "TrackedNext"), ("int", 48)),
-            ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
-            ("callmethod", ("id", "GetDisplayName"), ("id", "r"), ("id", "name")),
-            *notify(("str", "Skylands beam: "), ("id", "name")),
-            ("label", "end"),
-            ("return", None),
-            ("label", "broken"),
-            call("Complain", ("id", "b")),
+            call("Report", ("id", "r"), ("id", "b"), ("id", "lr")),
             ("return", None),
         ],
     )
-    complain = Function(
-        "Complain",
-        params=[("b", "ObjectReference")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
+    report = Function(
+        "Report",
+        params=[("r", "ObjectReference"), ("b", "ObjectReference"), ("lr", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("name", "String"), ("msg", "String"), ("beam", "String"),
+                ("lamp", "String")],
         code=[
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
+            ("assign", ("id", "beam"), ("str", "ok")),
             ("cast", ("id", "::temp0"), ("id", "b")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "nomake")),
-            *notify(("str", "Skylands: beam made but its script is not attached")),
-            ("return", None),
-            ("label", "nomake"),
-            *notify(("str", "Skylands: the game did not make the beam")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "nobeam")),
+            ("jmp", ("lbl", "lamp")),
+            ("label", "nobeam"),
+            ("assign", ("id", "beam"), ("str", "FAILED")),
+            ("label", "lamp"),
+            ("assign", ("id", "lamp"), ("str", "ok")),
+            ("cast", ("id", "::temp0"), ("id", "lr")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "nolamp")),
+            ("jmp", ("lbl", "say")),
+            ("label", "nolamp"),
+            ("assign", ("id", "lamp"), ("str", "FAILED")),
+            ("label", "say"),
+            ("callmethod", ("id", "GetDisplayName"), ("id", "r"), ("id", "name")),
+            *notify(("str", "Skylands beam "), ("id", "beam"), ("str", ", light "), ("id", "lamp"), ("str", ": "), ("id", "name")),
             ("label", "end"),
             ("return", None),
         ],
     )
-    forget = Function(
-        "Forget",
-        params=[("t", "ObjectReference")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference")],
+    clear = Function(
+        "Clear",
+        params=[("i", "Int")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("b", "ObjectReference"), ("lr", "ObjectReference")],
+        code=[
+            ("array_getelement", ("id", "b"), ("id", "TrackedBeams"), ("id", "i")),
+            ("cast", ("id", "::temp0"), ("id", "b")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "lamp")),
+            ("callmethod", ("id", "Disable"), ("id", "b"), NONE, ("bool", False)),
+            ("callmethod", ("id", "Delete"), ("id", "b"), NONE),
+            ("label", "lamp"),
+            ("array_getelement", ("id", "lr"), ("id", "TrackedLights"), ("id", "i")),
+            ("cast", ("id", "::temp0"), ("id", "lr")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "wipe")),
+            ("callmethod", ("id", "Disable"), ("id", "lr"), NONE, ("bool", False)),
+            ("callmethod", ("id", "Delete"), ("id", "lr"), NONE),
+            ("label", "wipe"),
+            ("array_setelement", ("id", "Tracked"), ("id", "i"), None),
+            ("array_setelement", ("id", "TrackedBeams"), ("id", "i"), None),
+            ("array_setelement", ("id", "TrackedLights"), ("id", "i"), None),
+            ("return", None),
+        ],
+    )
+    alive = Function(
+        "Alive",
+        return_type="Bool",
+        params=[("g", "ObjectReference")],
+        locals=[("::temp0", "Bool"), ("c", "ObjectReference")],
+        code=[
+            ("callmethod", ("id", "GetContainer"), ("id", "g"), ("id", "c")),
+            ("cast", ("id", "::temp0"), ("id", "c")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "free")),
+            ("return", ("bool", False)),
+            ("label", "free"),
+            ("callmethod", ("id", "Is3DLoaded"), ("id", "g"), ("id", "::temp0")),
+            ("return", ("id", "::temp0")),
+        ],
+    )
+    follow = Function(
+        "Follow",
+        params=[("i", "Int"), ("g", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("b", "ObjectReference"), ("lr", "ObjectReference")],
+        code=[
+            ("array_getelement", ("id", "b"), ("id", "TrackedBeams"), ("id", "i")),
+            ("cast", ("id", "::temp0"), ("id", "b")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "lamp")),
+            ("callmethod", ("id", "MoveTo"), ("id", "b"), NONE, ("id", "g"), F0, F0, F0, ("bool", False)),
+            ("label", "lamp"),
+            ("array_getelement", ("id", "lr"), ("id", "TrackedLights"), ("id", "i")),
+            ("cast", ("id", "::temp0"), ("id", "lr")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "MoveTo"), ("id", "lr"), NONE, ("id", "g"), F0, F0, F0, ("bool", False)),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    sweep = Function(
+        "Sweep",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("g", "ObjectReference")],
         code=[
             ("assign", ("id", "i"), ("int", 0)),
             ("label", "loop"),
             ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("int", 48)),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("array_getelement", ("id", "e"), ("id", "Tracked"), ("id", "i")),
-            ("cmp_eq", ("id", "::temp0"), ("id", "e"), ("id", "t")),
-            ("not", ("id", "::temp0"), ("id", "::temp0")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "clear")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("array_getelement", ("id", "g"), ("id", "Tracked"), ("id", "i")),
+            ("cast", ("id", "::temp0"), ("id", "g")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "next")),
+            ("callmethod", ("id", "Alive"), SELF, ("id", "::temp0"), ("id", "g")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "gone")),
+            call("Follow", ("id", "i"), ("id", "g")),
             ("jmp", ("lbl", "next")),
-            ("label", "clear"),
-            ("array_setelement", ("id", "Tracked"), ("id", "i"), None),
+            ("label", "gone"),
+            call("Clear", ("id", "i")),
             ("label", "next"),
             ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
             ("jmp", ("lbl", "loop")),
-            ("label", "end"),
+            ("label", "done"),
             ("return", None),
         ],
     )
     return Script(
         name="SkylandsClassQuest",
         parent="Quest",
-        variables=[("Chosen", "Bool", ("bool", False)), ("TrackedNext", "Int", ("int", 0)),
-                   ("Tracked", "ObjectReference[]", None)],
+        variables=[("Chosen", "Bool", ("bool", False)), ("PendingPrompt", "Bool", ("bool", False)),
+                   ("JustLoaded", "Bool", ("bool", False)), ("Mode", "Int", ("int", 0)),
+                   ("Generation", "Int", ("int", 0)), ("TrackedNext", "Int", ("int", 0)), ("RosterNext", "Int", ("int", 0)),
+                   ("EntryNext", "Int", ("int", 0)), ("LastCell", "Cell", None),
+                   ("Tracked", "ObjectReference[]", None), ("TrackedBeams", "ObjectReference[]", None),
+                   ("TrackedLights", "ObjectReference[]", None), ("Roster", "ObjectReference[]", None),
+                   ("EntryCells", "Cell[]", None), ("EntryMarks", "ObjectReference[]", None)],
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
                          ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("RarityKeywords", "Keyword[]"),
-                         ("Beams", "Activator[]"), ("Lights", "Light[]"), ("Verbose", "Bool")],
-        functions=[on_init, on_update, choose, consider, place, complain, forget],
+                         ("Beams", "Form[]"), ("Lights", "Light[]"), ("Verbose", "Bool"), ("PromptMsg", "Message"),
+                         ("SettingsMsg", "Message"), ("MarkerForm", "Form"), ("RespawnPower", "Spell")],
+        functions=[on_init, on_update, choose, loaded, prompt, settings, generation, reach, revive, respawn, enlist,
+                   entry_index, entrance_for, note_entrance, arrive, consider, place, report, clear, alive, follow, sweep],
     )
 
 
@@ -254,7 +602,7 @@ def watcher() -> Script:
             ("assign", ("id", "IsPlayer"), ("bool", True)),
             ("callmethod", ("id", "GetEquippedWeapon"), ("id", "Me"), ("id", "w"), ("bool", False)),
             call("ApplySpeed", ("id", "w")),
-            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 0.5)),
             ("return", None),
             ("label", "other"),
             ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 1.5), ("float", 4.0)),
@@ -264,14 +612,66 @@ def watcher() -> Script:
     )
     on_update = Function(
         "OnUpdate",
-        locals=[("::nonevar", "None")],
+        locals=[("::nonevar", "None"), ("::temp0", "Int"), ("::temp1", "Bool"), ("delay", "Float")],
         code=[
             ("jmpf", ("id", "IsPlayer"), ("lbl", "other")),
-            call("Scan"),
-            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)),
+            call("PlayerTick"),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 0.5)),
             ("return", None),
             ("label", "other"),
+            call("Maintain"),
+            ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 5.0), ("float", 8.0)),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "delay")),
+            ("return", None),
+        ],
+    )
+    player_tick = Function(
+        "PlayerTick",
+        locals=[("::nonevar", "None"), ("::temp0", "Int"), ("::temp1", "Bool")],
+        code=[
+            ("callmethod", ("id", "NoteEntrance"), ("id", "::Owner_var"), NONE),
+            ("iadd", ("id", "Ticks"), ("id", "Ticks"), ("int", 1)),
+            ("imod", ("id", "::temp0"), ("id", "Ticks"), ("int", 4)),
+            ("cmp_eq", ("id", "::temp1"), ("id", "::temp0"), ("int", 0)),
+            ("jmpf", ("id", "::temp1"), ("lbl", "end")),
+            call("Scan"),
+            ("callmethod", ("id", "Sweep"), ("id", "::Owner_var"), NONE),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    on_load = Function(
+        "OnPlayerLoadGame",
+        locals=[("::nonevar", "None")],
+        code=[
+            ("jmpf", ("id", "IsPlayer"), ("lbl", "end")),
+            ("callmethod", ("id", "LoadedSave"), ("id", "::Owner_var"), NONE),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    maintain = Function(
+        "Maintain",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("g", "Int")],
+        code=[
+            ("not", ("id", "::temp0"), ("id", "Checked")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "checked")),
+            ("assign", ("id", "Checked"), ("bool", True)),
+            ("callmethod", ("id", "Eligible"), SELF, ("id", "Foe")),
+            ("jmpf", ("id", "Foe"), ("lbl", "checked")),
+            ("callmethod", ("id", "Enlist"), ("id", "::Owner_var"), NONE, ("id", "Me")),
+            ("label", "checked"),
+            ("jmpf", ("id", "Foe"), ("lbl", "end")),
+            ("callmethod", ("id", "GenerationNow"), ("id", "::Owner_var"), ("id", "g")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "g"), ("id", "MyGen")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "renew")),
+            ("jmp", ("lbl", "arm")),
+            ("label", "renew"),
+            ("assign", ("id", "MyGen"), ("id", "g")),
+            ("assign", ("id", "Armed"), ("bool", False)),
+            ("label", "arm"),
             call("TryArm"),
+            ("label", "end"),
             ("return", None),
         ],
     )
@@ -474,8 +874,6 @@ def watcher() -> Script:
             ("jmpf", ("id", "::temp0"), ("lbl", "bare")),
             ("return", None),
             ("label", "bare"),
-            ("callmethod", ("id", "Eligible"), SELF, ("id", "::temp0")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::ArmChance_var")),
             ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             call("Equip"),
@@ -590,103 +988,34 @@ def watcher() -> Script:
         name="SkylandsWatcher",
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("IsPlayer", "Bool", ("bool", False)), ("Armed", "Bool", ("bool", False)),
-                   ("Speed", "Float", ("float", 0.0))],
+                   ("Foe", "Bool", ("bool", False)), ("Checked", "Bool", ("bool", False)), ("MyGen", "Int", ("int", 0)),
+                   ("Ticks", "Int", ("int", 0)), ("Speed", "Float", ("float", 0.0))],
         auto_properties=[("Owner", "SkylandsClassQuest"), ("GunKeyword", "Keyword"), ("SpeedKeywords", "Keyword[]"),
                          ("GunList", "FormList"), ("GunDrop", "Form"), ("GunDropGood", "Form"), ("NpcKeyword", "Keyword"),
                          ("Bolts", "Form"), ("ArmChance", "Int"), ("DropChance", "Int"), ("GoodLevel", "Int"),
                          ("ScanRadius", "Float"), ("Verbose", "Bool")],
-        functions=[on_start, on_update, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+        functions=[on_start, on_update, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 
 
-def loot_beam() -> Script:
-    """SkylandsLootBeam extends ObjectReference: attached to the beam activators, which the class quest
-    places over Skylands guns lying on the ground. The beam (and the light the quest placed with it)
-    follows its gun and removes itself when the gun is picked up, gone or far away.
+def respawn_power() -> Script:
+    """SkylandsRespawn extends ActiveMagicEffect: the effect of the lesser power "Pandora Respawn" - it opens
+    the respawn settings (Owner.Settings()).
 
-      ObjectReference target
-      ObjectReference lamp
-      SkylandsClassQuest owner
-
-      Function Track(ObjectReference t, SkylandsClassQuest q, ObjectReference l)
-        target = t
-        owner = q
-        lamp = l
-        RegisterForSingleUpdate(1.0)
-      EndFunction
-
-      Event OnUpdate()
-        Bool ok = False
-        If target
-          If !target.GetContainer()
-            ok = target.Is3DLoaded()
-          EndIf
-        EndIf
-        If ok
-          MoveTo(target, 0.0, 0.0, 0.0, False)
-          If lamp
-            lamp.MoveTo(target, 0.0, 0.0, 0.0, False)
-          EndIf
-          RegisterForSingleUpdate(1.0)
-        Else
-          ... Forget, delete lamp, Disable, Delete
-        EndIf
+      Event OnEffectStart(Actor akTarget, Actor akCaster)
+        Owner.Settings()
       EndEvent
     """
-    track = Function(
-        "Track",
-        params=[("t", "ObjectReference"), ("q", "SkylandsClassQuest"), ("l", "ObjectReference")],
+    on_start = Function(
+        "OnEffectStart",
+        params=[("akTarget", "Actor"), ("akCaster", "Actor")],
         locals=[("::nonevar", "None")],
-        code=[
-            ("assign", ("id", "target"), ("id", "t")),
-            ("assign", ("id", "owner"), ("id", "q")),
-            ("assign", ("id", "lamp"), ("id", "l")),
-            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
-            ("return", None),
-        ],
-    )
-    on_update = Function(
-        "OnUpdate",
-        locals=[("::nonevar", "None"), ("ok", "Bool"), ("::temp0", "Bool"), ("c", "ObjectReference")],
-        code=[
-            ("assign", ("id", "ok"), ("bool", False)),
-            ("cast", ("id", "::temp0"), ("id", "target")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "decide")),
-            ("callmethod", ("id", "GetContainer"), ("id", "target"), ("id", "c")),
-            ("cast", ("id", "::temp0"), ("id", "c")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "free")),
-            ("jmp", ("lbl", "decide")),
-            ("label", "free"),
-            ("callmethod", ("id", "Is3DLoaded"), ("id", "target"), ("id", "ok")),
-            ("label", "decide"),
-            ("jmpf", ("id", "ok"), ("lbl", "gone")),
-            ("callmethod", ("id", "MoveTo"), SELF, NONE, ("id", "target"), F0, F0, F0, ("bool", False)),
-            ("cast", ("id", "::temp0"), ("id", "lamp")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "again")),
-            ("callmethod", ("id", "MoveTo"), ("id", "lamp"), NONE, ("id", "target"), F0, F0, F0, ("bool", False)),
-            ("label", "again"),
-            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
-            ("return", None),
-            ("label", "gone"),
-            ("cast", ("id", "::temp0"), ("id", "owner")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "nolight")),
-            ("callmethod", ("id", "Forget"), ("id", "owner"), NONE, ("id", "target")),
-            ("label", "nolight"),
-            ("cast", ("id", "::temp0"), ("id", "lamp")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "kill")),
-            ("callmethod", ("id", "Disable"), ("id", "lamp"), NONE, ("bool", False)),
-            ("callmethod", ("id", "Delete"), ("id", "lamp"), NONE),
-            ("label", "kill"),
-            ("callmethod", ("id", "Disable"), SELF, NONE, ("bool", False)),
-            ("callmethod", ("id", "Delete"), SELF, NONE),
-            ("return", None),
-        ],
+        code=[("callmethod", ("id", "Settings"), ("id", "::Owner_var"), NONE), ("return", None)],
     )
     return Script(
-        name="SkylandsLootBeam",
-        parent="ObjectReference",
-        variables=[("target", "ObjectReference", None), ("lamp", "ObjectReference", None),
-                   ("owner", "SkylandsClassQuest", None)],
-        functions=[track, on_update],
+        name="SkylandsRespawn",
+        parent="ActiveMagicEffect",
+        auto_properties=[("Owner", "SkylandsClassQuest")],
+        functions=[on_start],
     )

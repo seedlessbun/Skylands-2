@@ -15,24 +15,33 @@ from skylands_setup.skyrim import pex, scripts  # noqa: E402
 CHAMPOLLION = os.environ.get("CHAMPOLLION", "")
 
 QUEST_EXPECTED = """Event OnUpdate()
-  Self.Choose()
-  If Chosen
+  If !Chosen
+    Self.Choose()
+    Self.RegisterForSingleUpdate(1.0)
     Return
   EndIf
-  Self.RegisterForSingleUpdate(1.0)"""
+  If PendingPrompt
+    Self.Prompt()
+  EndIf
+  Return
+EndEvent"""
 
-CHOOSE = """  Int choice = ClassChoice.Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-  Actor player = Game.GetPlayer()
-  Shout chosenShout = Shouts[choice]
-  player.AddShout(chosenShout)
-  WordOfPower chosenWord = Words[choice]
-  Game.TeachWord(chosenWord)
-  Game.UnlockWord(chosenWord)
-  player.EquipShout(chosenShout)
+CHOOSE = """  player.EquipShout(chosenShout)
+  player.AddSpell(RespawnPower, False)
   player.AddItem(StarterGun, 1, False)
   player.AddItem(StarterAmmo, 60, False)
   player.EquipItem(StarterGun, False, False)
   Chosen = True"""
+
+PROMPT = """  PendingPrompt = False
+  If Mode == 2
+    Return
+  EndIf
+  If Mode == 1
+    Self.Respawn()
+    Return
+  EndIf
+  Int pick = PromptMsg.Show("""
 
 BEAMS = """    Bool has = base.HasKeyword(kw)
     If has
@@ -40,8 +49,12 @@ BEAMS = """    Bool has = base.HasKeyword(kw)
       Self.Place(r, k)
       k = -1"""
 
-PLACE = """    beam.Track(r, Self, lr)
-    Tracked[TrackedNext] = r"""
+PLACE = """  Form bs = Beams[k]
+  ObjectReference b = r.PlaceAtMe(bs, 1, False, False)"""
+
+CLEAR = """  Tracked[i] = None
+  TrackedBeams[i] = None
+  TrackedLights[i] = None"""
 
 WATCHER = {
     "start": """Event OnEffectStart(Actor akTarget, Actor akCaster)
@@ -51,8 +64,26 @@ WATCHER = {
     IsPlayer = True
     Weapon w = Me.GetEquippedWeapon(False)
     Self.ApplySpeed(w)
-    Self.RegisterForSingleUpdate(2.0)
+    Self.RegisterForSingleUpdate(0.5)
     Return
+  EndIf""",
+    "tick": """Function PlayerTick()
+  Owner.NoteEntrance()
+  Ticks += 1
+  If Ticks % 4 == 0
+    Self.Scan()
+    Owner.Sweep()
+  EndIf""",
+    "maintain": """  If !Checked
+    Checked = True
+    Foe = Self.Eligible()
+    If Foe
+      Owner.Enlist(Me)
+    EndIf
+  EndIf""",
+    "load": """Event OnPlayerLoadGame()
+  If IsPlayer
+    Owner.LoadedSave()
   EndIf""",
     "speed": """      Int n = SpeedKeywords.Length
       Int i = 0
@@ -60,8 +91,6 @@ WATCHER = {
         Keyword k = SpeedKeywords[i]
         If w.HasKeyword(k)
           Float f = i as Float""",
-    "apply": """  Self.ApplySpeed(w)
-    Self.RegisterForSingleUpdate(2.0)""",
     "scan": "Game.FindRandomReferenceOfAnyTypeInList(GunList, x, y, z, ScanRadius)",
     "arm": """  Armed = True
   If Me.IsDead()
@@ -108,10 +137,10 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
     psc = decompile(tmp_path, scripts.class_choice_quest(), "SkylandsClassQuest")
     assert "ScriptName SkylandsClassQuest Extends Quest" in psc
     for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto", "Form Property StarterGun Auto",
-                 "Form Property StarterAmmo Auto", "Keyword[] Property RarityKeywords Auto", "Activator[] Property Beams Auto",
+                 "Form Property StarterAmmo Auto", "Keyword[] Property RarityKeywords Auto", "Form[] Property Beams Auto", "Message Property PromptMsg Auto", "Form Property MarkerForm Auto", "Spell Property RespawnPower Auto",
                  "Light[] Property Lights Auto", "Bool Property Verbose Auto"):
         assert prop in psc
-    for text in (QUEST_EXPECTED, CHOOSE, BEAMS, PLACE):
+    for text in (QUEST_EXPECTED, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
         assert text in psc
 
 
@@ -127,9 +156,6 @@ def test_watcher_decompiles_to_intended_papyrus(tmp_path):
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
-def test_loot_beam_decompiles_to_intended_papyrus(tmp_path):
-    psc = decompile(tmp_path, scripts.loot_beam(), "SkylandsLootBeam")
-    assert "ScriptName SkylandsLootBeam Extends ObjectReference" in psc
-    assert "Function Track(ObjectReference t, SkylandsClassQuest q, ObjectReference l)" in psc
-    assert "ok = target.Is3DLoaded()" in psc and "lamp.Delete()" in psc
-    assert "owner.Forget(target)\n  EndIf" in psc and "Self.Disable(False)\n  Self.Delete()" in psc
+def test_respawn_power_decompiles_to_intended_papyrus(tmp_path):
+    psc = decompile(tmp_path, scripts.respawn_power(), "SkylandsRespawn")
+    assert "ScriptName SkylandsRespawn Extends ActiveMagicEffect" in psc and "Owner.Settings()" in psc

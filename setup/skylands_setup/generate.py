@@ -27,6 +27,7 @@ from .skyrim.strings import parse_table
 MASTERS = ["Skyrim.esm", "Update.esm", "Dawnguard.esm"]
 PLUGIN = "Skylands.esp"
 BEAM_TEXTURE = "textures\\skylands\\beam.dds"
+XMARKER = 0x0000003B  # Skyrim.esm: the invisible marker object
 ACTOR_TYPE_NPC = 0x00013794  # Skyrim.esm keyword: humanoids
 SPEED_BUCKETS, SPEED_BASE, SPEED_STEP = 48, 0.5, 0.05  # SkylandsSpeed_n keywords: speed = base + step * n
 RACES = r"^(Nord|Breton|Imperial|Redguard|Orc|DarkElf|HighElf|WoodElf|Khajiit|Argonian)Race(Vampire)?$"
@@ -35,6 +36,7 @@ LIST_LIMIT = 200  # entries per leveled list (Skyrim allows 255)
 
 # SPIT spell types / cast types / delivery (Skyrim SE)
 SPELL_ABILITY, CAST_CONSTANT, DELIVERY_SELF = 4, 0, 0
+SPELL_LESSER_POWER, CAST_FIRE_FORGET = 3, 1
 DELIVERY = {"self": 0, "aimed": 2}
 QUEST_START_GAME_ENABLED = 0x0001
 
@@ -272,13 +274,10 @@ class Texts:
         return self.tables[kind].get(string_id)
 
 
-def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: dict) -> int:
-    """The ability that runs the SkylandsWatcher script, given to every humanoid race (so to everybody).
-    Returns the ability's form id."""
-    template = m.need("MGEF", "AbWeaknessFireConstant")
+def script_effect(p: esp.Plugin, template: Record, edid: str, name: str, script: str, props: list, fire_and_forget: bool = False) -> int:
+    """A magic effect (copied from a plain vanilla one) whose only job is to run a script."""
     mg = esp.Rec("MGEF", p.new_id(), [])
-    mg.add("EDID", esp.zstr("SkylandsWatcher")).add("VMAD", esp.vmad([("SkylandsWatcher", props)]))
-    mg.add("FULL", esp.zstr("Skylands"))
+    mg.add("EDID", esp.zstr(edid)).add("VMAD", esp.vmad([(script, props)])).add("FULL", esp.zstr(name))
     data = bytearray(template.first("DATA") or b"\0" * 152)
     if len(data) >= 92:
         flags = struct.unpack_from("<I", data)[0] & ~0x5  # not hostile, not detrimental
@@ -289,11 +288,41 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
         for at in MGEF_ART_AT:
             if len(data) >= at + 4:
                 struct.pack_into("<I", data, at, 0)
+        if fire_and_forget:
+            struct.pack_into("<II", data, 80, 1, 0)  # casting type: fire and forget, delivery: self
     mg.add("DATA", bytes(data))
     p.override(mg)
+    return mg.form_id
+
+
+def make_message(p: esp.Plugin, edid: str, title: str, body: str, buttons: list[str]) -> esp.Rec:
+    msg = p.new("MESG", edid)
+    msg.add("DESC", esp.zstr(body)).add("FULL", esp.zstr(title)).add("INAM", esp.u32(0))
+    msg.add("DNAM", esp.u32(1)).add("TNAM", esp.u32(0))
+    for b in buttons:
+        msg.add("ITXT", esp.zstr(b))
+    return msg
+
+
+def make_respawn_power(p: esp.Plugin, m: "Masters", quest_id: int) -> int:
+    """The lesser power "Pandora Respawn": opens the respawn settings."""
+    template = m.need("MGEF", "AbWeaknessFireConstant")
+    fx = script_effect(p, template, "SkylandsRespawnEffect", "Pandora Respawn", "SkylandsRespawn",
+                       [("Owner", esp.P_OBJECT, quest_id)], fire_and_forget=True)
+    return spell(p, "SkylandsRespawnPower", "Pandora Respawn",
+                 "Respawn the enemies around you, or choose when enemies respawn.",
+                 struct.pack("<IIIfIIffI", 0, 0, SPELL_LESSER_POWER, 0, CAST_FIRE_FORGET, DELIVERY_SELF, 0, 0, 0),
+                 [(fx, 0.0, 0, 0)]).form_id
+
+
+def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: dict) -> int:
+    """The ability that runs the SkylandsWatcher script, given to every humanoid race (so to everybody).
+    Returns the ability's form id."""
+    template = m.need("MGEF", "AbWeaknessFireConstant")
+    effect = script_effect(p, template, "SkylandsWatcher", "Skylands", "SkylandsWatcher", props)
     ability = spell(p, "SkylandsWatcherAbility", "", "",
                     struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0),
-                    [(mg.form_id, 0.0, 0, 0)])
+                    [(effect, 0.0, 0, 0)])
     races = 0
     for race in sorted(m.by_type["RACE"].values(), key=lambda r: r.edid):
         if not re.match(RACES, race.edid):
@@ -342,8 +371,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         color = rarity_color(bl2["rarities"], row.level)
         mesh = f"Skylands\\Beam_{row.id}.nif"
         (out_data / "Meshes" / "Skylands" / f"Beam_{row.id}.nif").write_bytes(nif.beam(color, BEAM_TEXTURE))
-        beam = p.new("ACTI", f"SkylandsBeam_{row.id}")
-        beam.add("VMAD", esp.vmad([("SkylandsLootBeam", [])])).add("OBND", obnd()).add("MODL", esp.zstr(mesh))
+        beam = p.new("STAT", f"SkylandsBeam_{row.id}")
+        beam.add("OBND", struct.pack("<6h", -10, -10, 0, 10, 10, 150)).add("MODL", esp.zstr(mesh)).add("DNAM", struct.pack("<fI", 30.0, 0))
         beams[row.level] = beam.form_id
     # Keywords the scripts look for: one on every Skylands gun, and one per rarity (picks the beam).
     gun_keyword = p.new("KYWD", "SkylandsGun").form_id
@@ -498,13 +527,24 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     msg.add("DNAM", esp.u32(1)).add("TNAM", esp.u32(0))
     for b in buttons:
         msg.add("ITXT", esp.zstr(b))
+    prompt_msg = make_message(p, "SkylandsRespawnPrompt", "Respawn enemies?",
+                              "Pandora's enemies can come back every time you load a save, so you can farm them and the bosses "
+                              "for loot. In a dungeon you are taken back to where you came in.",
+                              ["Respawn enemies here", "Not this time", "Always respawn when I load", "Never ask again"])
+    settings_msg = make_message(p, "SkylandsRespawnSettings", "Pandora Respawn",
+                                "Respawn the enemies around you now, or choose what happens when you load a save.",
+                                ["Respawn enemies now", "Ask me every time I load", "Always respawn when I load",
+                                 "Never respawn when I load", "Cancel"])
+    respawn_power = make_respawn_power(p, m, quest.form_id)
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
         ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
         ("RarityKeywords", esp.P_OBJECT_ARRAY, [rarity_keywords[k] for k in sorted(rarity_keywords)]),
         ("Beams", esp.P_OBJECT_ARRAY, [beams[k] for k in sorted(beams)]),
         ("Lights", esp.P_OBJECT_ARRAY, [lights[k] for k in sorted(lights)] if len(lights) == len(beams) else []),
-        ("Verbose", esp.P_BOOL, bool(G.verbose))])], quest=True))
+        ("Verbose", esp.P_BOOL, bool(G.verbose)), ("PromptMsg", esp.P_OBJECT, prompt_msg.form_id),
+        ("SettingsMsg", esp.P_OBJECT, settings_msg.form_id), ("MarkerForm", esp.P_OBJECT, XMARKER),
+        ("RespawnPower", esp.P_OBJECT, respawn_power)])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 
@@ -539,7 +579,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     # ---- files ------------------------------------------------------------------------------------
     (out_data / PLUGIN).write_bytes(p.encode())
     (out_data / "Scripts" / "SkylandsClassQuest.pex").write_bytes(pex.write(scripts.class_choice_quest()))
-    (out_data / "Scripts" / "SkylandsLootBeam.pex").write_bytes(pex.write(scripts.loot_beam()))
+    (out_data / "Scripts" / "SkylandsRespawn.pex").write_bytes(pex.write(scripts.respawn_power()))
     (out_data / "Scripts" / "SkylandsWatcher.pex").write_bytes(pex.write(scripts.watcher()))
     report["records"] = len(p.records)
     return report

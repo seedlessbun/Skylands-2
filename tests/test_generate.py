@@ -26,9 +26,9 @@ def test_generate_from_both_games(tmp_path):
     out = tmp_path / "out"
     rep = generate.generate(bl2, sky, out)
     data = out / "Data"
-    assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsLootBeam.pex").is_file()
+    assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsWatcher.pex").is_file() and (data / "Scripts" / "SkylandsRespawn.pex").is_file()
     assert (data / "Meshes" / "Skylands" / "Beam_legendary.nif").is_file() and (data / "Textures" / "Skylands" / "beam.dds").is_file()
-    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI", "LIGH", "RACE", "FLST"})
+    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "STAT", "LIGH", "RACE", "FLST"})
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert len(names) == rep["guns"] == 9  # 3 common + 4 rare + 2 legendary variants
     assert names["Skylands_Pistol_Jakobs_5_Maggie_1"] == "Sledge's Maggie (Legendary)"
@@ -54,14 +54,21 @@ def test_generate_from_both_games(tmp_path):
     kws = struct.unpack(f"<{len(fire.first('KWDA')) // 4}I", fire.first("KWDA"))
     kyw = {r.form_id: r.edid for r in recs["KYWD"]}
     assert struct.unpack("<I", fire.first("KSIZ"))[0] == len(kws) and [kyw[k] for k in kws if k in kyw] == ["SkylandsGun", "SkylandsRarity_rare", f"SkylandsSpeed_{round((half - 0.5) / 0.05)}"]
-    beam_acti = next(r for r in recs["ACTI"] if r.edid == "SkylandsBeam_rare")
-    assert b"SkylandsLootBeam" in beam_acti.first("VMAD")
+    beam = next(r for r in recs["STAT"] if r.edid == "SkylandsBeam_rare")  # a plain static: no script that could fail to attach
+    assert beam.first("MODL") == b"Skylands\\Beam_rare.nif\0" and "VMAD" not in [sg for sg, _ in beam.subrecords]
     lights = {r.edid: r for r in recs["LIGH"]}
     assert len(lights) == 6 and lights["SkylandsLight_common"].first("DATA")[8:12] == bytes([40, 100, 50, 0])
     assert struct.unpack_from("<I", lights["SkylandsLight_rare"].first("DATA"), 4)[0] == generate.LIGHT_RADIUS and "MODL" not in [s for s, _ in lights["SkylandsLight_rare"].subrecords]
     quest = next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest")
-    for prop in (b"ClassChoice", b"RarityKeywords", b"Beams", b"Lights", b"Verbose", b"StarterGun", b"StarterAmmo"):
+    for prop in (b"ClassChoice", b"RarityKeywords", b"Beams", b"Lights", b"Verbose", b"StarterGun", b"StarterAmmo", b"PromptMsg",
+                 b"SettingsMsg", b"MarkerForm", b"RespawnPower"):
         assert prop in quest.first("VMAD")
+    power = next(r for r in recs["SPEL"] if r.edid == "SkylandsRespawnPower")
+    assert struct.unpack_from("<I", power.first("SPIT"), 8)[0] == 3  # a lesser power
+    power_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsRespawnEffect")
+    assert b"SkylandsRespawn" in power_fx.first("VMAD") and struct.unpack_from("<I", power_fx.first("DATA"), 80)[0] == 1
+    boxes = {r.edid: [d.rstrip(b"\0").decode() for d in r.all("ITXT")] for r in recs["MESG"]}
+    assert boxes["SkylandsRespawnPrompt"][0] == "Respawn enemies here" and len(boxes["SkylandsRespawnSettings"]) == 5
     # the watcher: an ability whose effect runs the script, carried by every humanoid race
     watch_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsWatcher")
     for prop in (b"SkylandsWatcher", b"Owner", b"GunKeyword", b"SpeedKeywords", b"GunList", b"GunDrop", b"NpcKeyword", b"Bolts",
@@ -115,7 +122,7 @@ def test_build_installs_and_enables(tmp_path, monkeypatch):
     done = tmp_path / "managed" / "setup-done.txt"
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
     assert done.read_text().startswith(f"ok {build.VERSION}")
-    assert (sky / "Data" / "Skylands.esp").is_file() and (sky / "Data" / "Scripts" / "SkylandsLootBeam.pex").is_file()
+    assert (sky / "Data" / "Skylands.esp").is_file() and (sky / "Data" / "Scripts" / "SkylandsWatcher.pex").is_file()
     assert plugins.read_text().splitlines() == ["# keep me", "*Unofficial Patch.esp", "*Skylands.esp"]
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
     assert plugins.read_text().count("Skylands.esp") == 1
@@ -137,7 +144,7 @@ def test_uninstall_removes_only_what_was_installed(tmp_path, monkeypatch):
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
     assert (plugins.parent / "plugins.txt.skylands-backup").read_text() == "*Unofficial Patch.esp\n"
     assert build.uninstall_main(["--work", str(done.parent)]) == 0
-    assert not (sky / "Data" / "Skylands.esp").exists() and not (sky / "Data" / "Scripts" / "SkylandsLootBeam.pex").exists()
+    assert not (sky / "Data" / "Skylands.esp").exists() and not (sky / "Data" / "Scripts" / "SkylandsWatcher.pex").exists()
     assert not (sky / "Data" / "Meshes" / "Skylands").exists()
     assert (sky / "Data" / "Other.esp").read_bytes() == b"keep me" and (sky / "Data" / "Skyrim.esm").exists()
     assert plugins.read_text().splitlines() == ["*Unofficial Patch.esp"]

@@ -40,13 +40,22 @@ parts it was built from) and can roll a rare boost on one stat (`sheets/rarities
 animation speed: half goes into the weapon's own speed, half into the player's weapon speed, which a script on the
 player (the class quest, ticking once a second) reads from the stats effect of the equipped gun.
 
-## Guns in the world (0.7)
+## Guns in the world (0.8)
 
 Skylands needs no script extender, so its scripts use only what plain Skyrim offers. Every humanoid race (and so
 every person and the player) carries one ability whose effect runs the `SkylandsWatcher` script.
 * On the player it applies the equipped gun's speed to the player's weapon speed (the speed is a `SkylandsSpeed_n`
-  keyword on the gun) and every two seconds looks for guns lying nearby (through a form list of every gun) to give
-  them a rarity-coloured beam and light, which follow the gun and go away when it is picked up.
+  keyword on the gun); every two seconds it looks for guns lying nearby (through a form list of every gun) and the
+  quest gives each a rarity-coloured beam (a plain static) and light, which follow the gun and go away when it is
+  picked up.
 * On everyone else, a few seconds after they load, a hostile humanoid may be handed a gun and ammo and wield it
   (`sheets/generation.json`: arm_chance). When a humanoid dies its gun is dropped on the ground with a beam, or
   sometimes a new gun is (drop_chance). On-screen messages report what the scripts do (verbose in the sheet).
+
+## Respawning enemies (0.8)
+
+Hostile people note themselves on the quest's roster when they load. When you load a save, a box asks whether to
+respawn them (respawn here / not this time / always / never ask); the lesser power "Pandora Respawn" does it at
+any time and changes the setting. Respawning resets the rostered people in your cell (or within a short distance
+outdoors), brings back the dead ones, and gives guns another roll. In an interior you are moved back to where you
+first came in (the quest keeps an invisible marker at each interior's entrance, set when you arrive).
