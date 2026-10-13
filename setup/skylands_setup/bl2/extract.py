@@ -135,8 +135,100 @@ def _part_name(ix: Index, name_part: str | None) -> str:
     return ((ix.props(name_part) or {}).get("PartName") or "") if name_part else ""
 
 
+SLOTS = ("BodyPartData", "BarrelPartData", "GripPartData", "StockPartData", "SightPartData",
+         "Accessory1PartData", "Accessory2PartData", "MaterialPartData", "ElementalPartData")
+MODIFIER_TYPES = (("scale", "scale"), ("preadd", "preadd"), ("postadd", "postadd"))
+
+
+def _leaf(path: str) -> str:
+    return re.split(r"[.:]", path)[-1]
+
+
+def _modifier_type(value) -> str:
+    text = str(value).lower()
+    for needle, name in MODIFIER_TYPES:
+        if needle in text:
+            return name
+    return ""
+
+
+def parse_effect(ix: Index, item, errors: list[str], what: str, samples: list) -> dict | None:
+    """One attribute effect of a part: which attribute, how it combines, by how much."""
+    if not isinstance(item, dict):
+        return None
+    attr = next((v for k, v in item.items() if "AttributeToModify" in k and isinstance(v, str)), None)
+    if attr is None:
+        attr = next((v for v in item.values() if isinstance(v, str) and "Attributes." in v), None)
+    if attr is None:
+        if len(samples) < 12:
+            samples.append({"where": what, "unparsed": {k: (v if not isinstance(v, dict) else "{...}") for k, v in item.items()}})
+        return None
+    kind = next((_modifier_type(v) for k, v in item.items() if "ModifierType" in k), "")
+    init = next((v for k, v in item.items() if "ModifierValue" in k and isinstance(v, dict)), None)
+    value = _attr_value(ix, init, errors, what) if init else None
+    if value is None:
+        return None
+    if len(samples) < 12:
+        samples.append({"where": what, "attr": _leaf(attr), "type": kind, "value": value})
+    return {"attr": _leaf(attr), "type": kind, "value": value}
+
+
+def _effects_of(ix: Index, props: dict, keys: tuple[str, ...], errors: list[str], what: str, samples: list) -> list[dict]:
+    out = []
+    for key in keys:
+        value = props.get(key)
+        items = _first_list(value) if isinstance(value, dict) and value.get("type") == "Array" else ([value] if isinstance(value, dict) else [])
+        for item in items:
+            e = parse_effect(ix, item, errors, what, samples)
+            if e:
+                out.append(e)
+    return out
+
+
+def part_info(ix: Index, path: str, cache: dict, errors: list[str], samples: list) -> dict:
+    """What one gun part is called and which stats it changes (memoised)."""
+    if path in cache:
+        return cache[path]
+    p = ix.props(path) or {}
+    info = {"prefix": _part_name(ix, _first(p.get("PrefixList"))), "title": _part_name(ix, _first(p.get("TitleList"))), "effects": []}
+    info["effects"] += _effects_of(ix, p, ("WeaponAttributeEffects", "ExternalAttributeEffects"), errors, path, samples)
+    provider = p.get("BehaviorProviderDefinition")
+    if isinstance(provider, str):
+        for child in ix.children(provider):
+            cp = ix.props(child) or {}
+            info["effects"] += _effects_of(ix, cp, ("AttributeEffect", "AttributeEffects"), errors, child, samples)
+    cache[path] = info
+    return info
+
+
+def slot_parts(ix: Index, chain: list[dict]) -> dict[str, list[str]]:
+    """Every enabled slot of a balance and its candidate parts (the first balance in the chain that defines a slot wins)."""
+    out: dict[str, list[str]] = {}
+    for slot in SLOTS:
+        parts = _parts(ix, chain, slot)
+        if parts:
+            out[slot.removesuffix("PartData")] = parts
+    return out
+
+
+def type_base(ix: Index, errors: list[str]) -> dict:
+    """The player's own base numbers for each gun type, for the record (and to tune the sheets from)."""
+    out = {}
+    for gt in S.GUN_TYPES.values():
+        found = ix.children(f"{gt.package}.A_Weapons", "WeaponTypeDefinition")
+        types = {}
+        for path in found[:6]:
+            p = ix.props(path) or {}
+            row = {k: (float(p[k]) if isinstance(p.get(k), (int, float)) else _attr_value(ix, p.get(k), errors, f"{path} {k}"))
+                   for k in ("FireRate", "ReloadTime", "ClipSize", "Spread")}
+            row["pellets"] = p.get("ProjectilesPerShot")
+            types[_leaf(path)] = row
+        out[gt.id] = types
+    return out
+
+
 def guns(ix: Index, errors: list[str], say=None) -> dict:
-    out: dict = {"guns": [], "manufacturers": {}}
+    out: dict = {"guns": [], "manufacturers": {}, "parts": {}, "effect_samples": []}
     try:
         _guns_into(ix, errors, say, out)
     except TimeoutError as e:  # keep what was read so far
@@ -192,7 +284,12 @@ def _guns_into(ix: Index, errors: list[str], say, out: dict) -> None:
                     grade = _first_list(mp.get("Grades"))
                     out["manufacturers"][mfr] = grade[0].get("DisplayName", mfr) if grade else mfr
                 dmg = wtp.get("InstantHitDamage") or {}
+                slots = slot_parts(ix, chain)
+                for plist in slots.values():
+                    for part in plist:
+                        part_info(ix, part, out["parts"], errors, out["effect_samples"])
                 out["guns"].append({
+                    "slots": slots,
                     "balance": bal, "type": gt.id, "manufacturer": mfr, "rarity": rarity, "title": title,
                     "unique_name": unique, "elements": elements,
                     "element_prefixes": {e: prefixes[e] for e in elements if prefixes.get(e)},
@@ -235,7 +332,7 @@ def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget
     if budget_minutes:
         ix.deadline = time.process_time() + budget_minutes * 60
     data: dict = {"packages": len(ix.files), "index_errors": len(ix.errors)}
-    for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies)):
+    for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies), ("type_base", type_base)):
         t = time.time()
         say(f"Reading {key} ...")
         try:
@@ -248,3 +345,27 @@ def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget
     data["log"] = log
     data["slow_lookups"] = ix.slow
     return data
+
+
+def summarize_parts(weapons: dict) -> dict:
+    """A small digest of the gun parts read: how many, what they change, and what the sheets do not cover yet."""
+    from .. import assemble
+
+    parts = weapons.get("parts", {})
+    attrs: dict[str, int] = {}
+    for info in parts.values():
+        for eff in info.get("effects", []):
+            attrs[eff["attr"]] = attrs.get(eff["attr"], 0) + 1
+    mapped = {a: n for a, n in attrs.items() if assemble.rule_for(a)}
+    unmapped = {a: n for a, n in sorted(attrs.items(), key=lambda kv: -kv[1]) if not assemble.rule_for(a)}
+    pools: dict[str, list[int]] = {}
+    for g in weapons.get("guns", []):
+        for slot, plist in (g.get("slots") or {}).items():
+            pools.setdefault(slot, []).append(len(plist))
+    return {
+        "parts": len(parts), "parts_with_effects": sum(1 for i in parts.values() if i.get("effects")),
+        "balances": len(weapons.get("guns", [])), "balances_with_parts": sum(1 for g in weapons.get("guns", []) if g.get("slots")),
+        "attributes_mapped": mapped, "attributes_not_mapped": dict(list(unmapped.items())[:40]),
+        "pool_sizes": {slot: {"balances": len(v), "max": max(v), "avg": round(sum(v) / len(v), 1)} for slot, v in pools.items()},
+        "effect_samples": weapons.get("effect_samples", []),
+    }

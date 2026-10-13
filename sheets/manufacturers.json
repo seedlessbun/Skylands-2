@@ -1,0 +1,96 @@
+{
+  "sheet": "manufacturers",
+  "description": "Each Borderlands manufacturer's character, applied on top of the stats its parts carry (ids are the names in Borderlands' balance names).",
+  "columns": {
+    "id": "manufacturer name as in BL2 balance names",
+    "damage": "x damage",
+    "fire_rate": "x fire rate",
+    "reload": "x reload TIME (below 1 = faster)",
+    "crit": "x crit damage",
+    "element": "x element strength",
+    "note": "flavour",
+    "in_game": "yes once seen"
+  },
+  "rows": [
+    {
+      "id": "Bandit",
+      "damage": 1.0,
+      "fire_rate": 1.0,
+      "reload": 1.1,
+      "crit": 1.0,
+      "element": 1.0,
+      "note": "Cheap, big magazines",
+      "in_game": "no"
+    },
+    {
+      "id": "Dahl",
+      "damage": 0.95,
+      "fire_rate": 1.05,
+      "reload": 0.95,
+      "crit": 1.0,
+      "element": 1.0,
+      "note": "Burst and control",
+      "in_game": "no"
+    },
+    {
+      "id": "Hyperion",
+      "damage": 0.95,
+      "fire_rate": 0.95,
+      "reload": 1.0,
+      "crit": 1.15,
+      "element": 1.0,
+      "note": "Accurate, precise",
+      "in_game": "no"
+    },
+    {
+      "id": "Jakobs",
+      "damage": 1.2,
+      "fire_rate": 0.85,
+      "reload": 1.05,
+      "crit": 1.1,
+      "element": 1.0,
+      "note": "Hits hard, fires slowly",
+      "in_game": "no"
+    },
+    {
+      "id": "Maliwan",
+      "damage": 0.95,
+      "fire_rate": 1.0,
+      "reload": 1.0,
+      "crit": 1.0,
+      "element": 1.35,
+      "note": "Elemental",
+      "in_game": "no"
+    },
+    {
+      "id": "Tediore",
+      "damage": 0.9,
+      "fire_rate": 1.0,
+      "reload": 0.8,
+      "crit": 1.0,
+      "element": 1.0,
+      "note": "Fast reloads",
+      "in_game": "no"
+    },
+    {
+      "id": "Torgue",
+      "damage": 1.15,
+      "fire_rate": 0.9,
+      "reload": 1.1,
+      "crit": 1.0,
+      "element": 1.15,
+      "note": "Heavy and explosive",
+      "in_game": "no"
+    },
+    {
+      "id": "Vladof",
+      "damage": 0.9,
+      "fire_rate": 1.3,
+      "reload": 1.0,
+      "crit": 0.95,
+      "element": 1.0,
+      "note": "Fast fire",
+      "in_game": "no"
+    }
+  ]
+}

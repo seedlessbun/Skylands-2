@@ -39,20 +39,42 @@ CHOOSE = """  Int choice = ClassChoice.Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0
   Chosen = True"""
 
 TICK = """  Weapon w = player.GetEquippedWeapon(False)
-  Float want = 1.0
-  If w as Bool
-    If w.HasKeyword(GunKeyword)
-      want = w.GetReach()
-    EndIf
-  EndIf
+  Float want = Self.SpeedOf(w)
   If want != Speed
     Speed = want
     player.SetActorValue("WeaponSpeedMult", want)"""
 
-BEAMS = """      Bool has = Self.Has(r, kw, corpse)
+SPEED_OF = """      Enchantment e = w.GetEnchantment()
+      If e as Bool
+        Int n = e.GetNumEffects()"""
+
+ARMED = """  Self.Note(ArmSeen, ArmNext, a)
+  ArmNext += 1
+  ArmNext %= 64"""
+
+WORTHY = """  If a.HasKeyword(NpcKeyword)
+    Actor player = Game.GetPlayer()
+    Actor killer = a.GetKiller()"""
+
+MOURN = """  ObjectReference drop = Self.OwnDrop(a)
+  If drop as Bool
+    Self.Announce(drop)
+    Return"""
+
+DROP = """  a.UnequipItem(w, False, True)
+  ObjectReference drop = a.DropObject(w, 1)"""
+
+EQUIP = """    a.AddItem(g, 1, True)
+    a.AddItem(StarterAmmo, 30, True)
+    a.EquipItem(f, False, True)"""
+
+BEAMS = """      Bool has = base.HasKeyword(kw)
       If has
-        Self.Place(r, k, corpse)
+        Self.Place(r, k)
         k = -1"""
+
+PLACE = """    beam.Track(r, Self, lr)
+    Tracked[TrackedNext] = r"""
 
 
 def test_header_and_layout():
@@ -75,9 +97,11 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
     for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto",
                  "WordOfPower[] Property Words Auto", "Form Property StarterGun Auto", "Form Property StarterAmmo Auto"):
         assert prop in psc
-    for prop in ("Keyword Property GunKeyword Auto", "Keyword[] Property RarityKeywords Auto", "Activator[] Property Beams Auto"):
+    for prop in ("Keyword Property GunKeyword Auto", "Keyword[] Property RarityKeywords Auto", "Activator[] Property Beams Auto",
+                 "Light[] Property Lights Auto", "Form Property GunDrop Auto", "Keyword Property NpcKeyword Auto",
+                 "Int Property ArmChance Auto", "Bool Property Verbose Auto"):
         assert prop in psc
-    for text in (EXPECTED, CHOOSE, TICK, BEAMS):
+    for text in (EXPECTED, CHOOSE, TICK, SPEED_OF, ARMED, WORTHY, MOURN, DROP, EQUIP, BEAMS, PLACE):
         assert text in psc
 
 
@@ -88,6 +112,6 @@ def test_loot_beam_decompiles_to_intended_papyrus(tmp_path):
     subprocess.run([CHAMPOLLION, str(f), "-p", str(tmp_path / "out")], check=True, timeout=30, capture_output=True)
     psc = "\n".join(line.rstrip() for line in (tmp_path / "out" / "SkylandsLootBeam.psc").read_text().splitlines())
     assert "ScriptName SkylandsLootBeam Extends ObjectReference" in psc
-    assert "Function Track(ObjectReference t, Keyword k, Bool isCorpse, SkylandsClassQuest q)" in psc
-    assert "ok = n > 0" in psc and "ok = !c as Bool" in psc
-    assert "owner.Forget(target)\n  EndIf\n  Self.Disable(False)\n  Self.Delete()" in psc
+    assert "Function Track(ObjectReference t, SkylandsClassQuest q, ObjectReference l)" in psc
+    assert "ok = target.Is3DLoaded()" in psc and "lamp.Delete()" in psc
+    assert "owner.Forget(target)\n  EndIf" in psc and "Self.Disable(False)\n  Self.Delete()" in psc

@@ -1,6 +1,6 @@
 {
   "sheet": "loot_injection",
-  "description": "Vanilla Skyrim leveled lists that get Skylands guns added (the player's own record is copied and extended).",
+  "description": "Vanilla leveled lists (chests) that get Skylands guns added (the player's own record is copied and extended). Enemy guns are not here: enemies carry guns and drop them physically (sheet: generation).",
   "columns": {
     "id": "row id",
     "skyrim_lvli": "vanilla LVLI editor id",
@@ -9,27 +9,6 @@
     "in_game": "yes once seen"
   },
   "rows": [
-    {
-      "id": "bandit_weapon15",
-      "skyrim_lvli": "LootBanditWeapon15",
-      "list": "any",
-      "count": 6,
-      "in_game": "no"
-    },
-    {
-      "id": "bandit_weapon50",
-      "skyrim_lvli": "LootBanditWeapon50",
-      "list": "any",
-      "count": 6,
-      "in_game": "no"
-    },
-    {
-      "id": "bandit_weapon100",
-      "skyrim_lvli": "LootBanditWeapon100",
-      "list": "any",
-      "count": 6,
-      "in_game": "no"
-    },
     {
       "id": "bandit_boss_chest",
       "skyrim_lvli": "LootBanditChestBossBase",

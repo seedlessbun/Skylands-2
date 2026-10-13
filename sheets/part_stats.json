@@ -1,0 +1,94 @@
+{
+  "sheet": "part_stats",
+  "description": "Which Borderlands attribute a gun part modifies becomes which Skylands stat. Rules are tried in order; the first whose pattern matches the attribute's name wins.",
+  "columns": {
+    "id": "row id",
+    "attr": "regular expression on the attribute's name (e.g. WeaponDamage)",
+    "stat": "damage | fire_rate | reload | clip | accuracy | crit | element",
+    "invert": "yes when a higher attribute value means a lower Skylands stat (fire interval, spread, reload speed)",
+    "power": "how strongly the part's multiplier counts (1 = fully)",
+    "in_game": "yes once seen"
+  },
+  "rows": [
+    {
+      "id": "damage",
+      "attr": "^WeaponDamage$",
+      "stat": "damage",
+      "invert": "no",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "fire_interval",
+      "attr": "^WeaponFireInterval$",
+      "stat": "fire_rate",
+      "invert": "yes",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "fire_rate",
+      "attr": "FireRate",
+      "stat": "fire_rate",
+      "invert": "no",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "reload_speed",
+      "attr": "^WeaponReloadSpeed$",
+      "stat": "reload",
+      "invert": "yes",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "reload_time",
+      "attr": "ReloadTime",
+      "stat": "reload",
+      "invert": "no",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "clip",
+      "attr": "ClipSize",
+      "stat": "clip",
+      "invert": "no",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "spread",
+      "attr": "^WeaponSpread$",
+      "stat": "accuracy",
+      "invert": "yes",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "crit",
+      "attr": "Crit",
+      "stat": "crit",
+      "invert": "no",
+      "power": 1.0,
+      "in_game": "no"
+    },
+    {
+      "id": "status_chance",
+      "attr": "StatusEffectChance",
+      "stat": "element",
+      "invert": "no",
+      "power": 0.6,
+      "in_game": "no"
+    },
+    {
+      "id": "status_damage",
+      "attr": "StatusEffectDamage",
+      "stat": "element",
+      "invert": "no",
+      "power": 1.0,
+      "in_game": "no"
+    }
+  ]
+}

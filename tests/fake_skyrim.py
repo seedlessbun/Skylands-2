@@ -184,6 +184,10 @@ def build_full(root: Path) -> Path:
     enchs = ["EnchWeaponFireDamage03", "EnchWeaponShockDamage03", "EnchWeaponAbsorbHealth02", "EnchWeaponMagickaDamage03"]
     extra.append(group("ENCH", [record("ENCH", 0x6000 + i, [sub("EDID", z(e)), sub("FULL", sid(3)), sub("ENIT", b"\0" * 36), sub("EFID", struct.pack("<I", 0x5000)),
                                                        sub("EFIT", struct.pack("<fII", 10.0, 0, 0))]) for i, e in enumerate(enchs)]))
+    light = struct.pack("<iI4sIffffffIf", -1, 256, bytes([255, 255, 255, 0]), 1, 1.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0)
+    extra.append(group("LIGH", [record("LIGH", 0x7100, [sub("EDID", z("FXPlainLight")), sub("OBND", b"\0" * 12), sub("DATA", light),
+                                                        sub("FNAM", struct.pack("<f", 1.0))]),
+                                record("LIGH", 0x7101, [sub("EDID", z("AAFlickerLight")), sub("MODL", z("x.nif")), sub("DATA", light)])]))
     spit = struct.pack("<IIIfIIffI", 0, 0, 11, 0.0, 1, 2, 0.0, 0.0, 0)
     extra.append(group("SPEL", [record("SPEL", 0x13E07, [sub("EDID", z("VoicePush1")), sub("ETYP", struct.pack("<I", 0x25BEE)), sub("SPIT", spit)])]))
     extra.append(group("EQUP", [record("EQUP", 0x25BEE, [sub("EDID", z("VoiceEquipSlot"))])]))
@@ -193,7 +197,7 @@ def build_full(root: Path) -> Path:
             record("NPC_", 0x7002, [sub("EDID", z("EncBandit03Boss1HNordM")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24)])]
     extra.append(group("NPC_", npcs))
     lv = struct.pack("<HHIHH", 1, 0, 0x1234, 1, 0)
-    extra.append(group("LVLI", [record("LVLI", 0x8000, [sub("EDID", z("LootBanditWeapon15")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"),
+    extra.append(group("LVLI", [record("LVLI", 0x8000, [sub("EDID", z("LootBanditChestBossBase")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"),
                                                         sub("LLCT", b"\x01"), sub("LVLO", lv)])]))
     (data / "Skyrim.esm").write_bytes(bytes(esm) + b"".join(extra))
     tes = record("TES4", 0, [sub("HEDR", struct.pack("<fII", 1.7, 0, 0)), sub("MAST", z("Skyrim.esm")), sub("DATA", b"\0" * 8)])
@@ -201,7 +205,7 @@ def build_full(root: Path) -> Path:
     # Update.esm overrides the loot list (adds an entry); the generator must build on this newer version.
     lv2 = struct.pack("<HHIHH", 1, 0, 0x1235, 1, 0)
     (data / "Update.esm").write_bytes(tes + group("LVLI", [record("LVLI", 0x8000, [
-        sub("EDID", z("LootBanditWeapon15")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"), sub("LLCT", b"\x02"), sub("LVLO", lv), sub("LVLO", lv2)])]))
+        sub("EDID", z("LootBanditChestBossBase")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"), sub("LLCT", b"\x02"), sub("LVLO", lv), sub("LVLO", lv2)])]))
     tes_dg = record("TES4", 0, [sub("HEDR", struct.pack("<fII", 1.7, 0, 0)), sub("MAST", z("Skyrim.esm")), sub("DATA", b"\0" * 8),
                                 sub("MAST", z("Update.esm")), sub("DATA", b"\0" * 8)])
     tes_dg = tes_dg[:8] + struct.pack("<I", 0x81) + tes_dg[12:]

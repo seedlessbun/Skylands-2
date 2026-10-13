@@ -10,6 +10,7 @@ no remapping) and edited: nothing of Skyrim is shipped.
 
 from __future__ import annotations
 
+import math
 import random
 import re
 import struct
@@ -17,13 +18,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import sheet_data as S
-from . import stats
+from . import assemble, stats
 from .skyrim import esp, nif, pex, scripts
 from .skyrim.esm import Record, read_plugin
 
 MASTERS = ["Skyrim.esm", "Update.esm", "Dawnguard.esm"]
 PLUGIN = "Skylands.esp"
 BEAM_TEXTURE = "textures\\skylands\\beam.dds"
+ACTOR_TYPE_NPC = 0x00013794  # Skyrim.esm keyword: humanoids
+LIGHT_RADIUS = 360  # game units
 LIST_LIMIT = 200  # entries per leveled list (Skyrim allows 255)
 
 # SPIT spell types / cast types / delivery (Skyrim SE)
@@ -191,9 +194,10 @@ def stats_effect(p: esp.Plugin, edid: str, text: str, template: Record) -> int:
     return r.form_id
 
 
-def gun_enchant(p: esp.Plugin, edid: str, st: dict, donor: Record, with_element: bool, element_word: str | None,
-                template: Record) -> int:
-    """One enchantment per gun: the vanilla element effect scaled by the gun's roll, plus its stats line."""
+def gun_enchant(p: esp.Plugin, edid: str, av_speed: float, text: str, element_mult: float, donor: Record,
+                with_element: bool, template: Record) -> int:
+    """One enchantment per gun: the vanilla element effect scaled by the gun's roll, plus its stats line.
+    The stats effect's magnitude carries the player weapon speed to apply while the gun is equipped."""
     head, effects = [], []
     for sig, d in donor.subrecords:
         if sig == "EFID":
@@ -207,19 +211,51 @@ def gun_enchant(p: esp.Plugin, edid: str, st: dict, donor: Record, with_element:
     insert_ordered(e, "FULL", esp.zstr("Gun stats"), ["EDID", "VMAD", "OBND", "FULL", "ENIT"])
     if with_element:
         for group in effects:
-            e.subs.extend((sig, scale_efit(d, st["element_mult"]) if sig == "EFIT" else d) for sig, d in group)
-    mg = stats_effect(p, edid, stats.describe(st, element_word), template)
-    e.add("EFID", esp.u32(mg)).add("EFIT", struct.pack("<fII", 0.0, 0, 0))
+            e.subs.extend((sig, scale_efit(d, element_mult) if sig == "EFIT" else d) for sig, d in group)
+    mg = stats_effect(p, edid, text, template)
+    e.add("EFID", esp.u32(mg)).add("EFIT", struct.pack("<fII", av_speed, 0, 0))
     p.override(e)
     return e.form_id
 
 
+LIGHT_BAD_FLAGS = 0x8 | 0x20 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800 | 0x1000 | 0x2000 | 0x4000  # flicker, off, pulse, spot, shadows
+LIGHT_KEEP = ("EDID", "OBND", "DATA", "FNAM")
+
+
+def make_lights(p: esp.Plugin, m: Masters, colors: dict[int, tuple[int, int, int]], report: dict) -> dict[int, int]:
+    """One coloured point light per rarity, copied from a plain vanilla light (radius and colour changed)."""
+    template = None
+    for r in sorted(m.by_type["LIGH"].values(), key=lambda r: r.edid):
+        d = r.first("DATA")
+        if d and len(d) >= 12 and not r.first("MODL"):
+            _, radius, _color, flags = struct.unpack_from("<iI4sI", d)
+            if flags & 1 and not flags & LIGHT_BAD_FLAGS and 128 <= radius <= 1024:
+                template = r
+                break
+    if template is None:
+        report["lights"] = "no plain vanilla light found: beams only"
+        return {}
+    out = {}
+    for level, (red, green, blue) in colors.items():
+        row = rarity_row(level)
+        lt = esp.Rec("LIGH", p.new_id(), [(sig, d) for sig, d in template.subrecords if sig in LIGHT_KEEP])
+        lt.set("EDID", esp.zstr(f"SkylandsLight_{row.id}"))
+        d = bytearray(lt.get("DATA"))
+        struct.pack_into("<I", d, 4, LIGHT_RADIUS)
+        d[8:12] = bytes([red, green, blue, 0])
+        lt.set("DATA", bytes(d))
+        p.override(lt)
+        out[level] = lt.form_id
+    return out
+
+
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     data_dir = Path(skyrim_dir) / "Data"
-    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL"})
+    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH"})
     p = esp.Plugin(PLUGIN, MASTERS)
     report: dict = {"guns": 0, "renamed_enemies": 0, "loot_lists": 0, "classes": []}
     rnd = random.Random(seed)
+    G = S.GENERATION["main"]
 
     # ---- loot beams (one activator per rarity level, coloured from Borderlands' table) ------
     out_data = Path(out_dir) / "Data"
@@ -238,6 +274,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     # Keywords the scripts look for: one on every Skylands gun, and one per rarity (picks the beam).
     gun_keyword = p.new("KYWD", "SkylandsGun").form_id
     rarity_keywords = {row.level: p.new("KYWD", f"SkylandsRarity_{row.id}").form_id for row in S.RARITIES.values()}
+    lights = make_lights(p, m, {row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()}, report)
 
     # ---- guns ---------------------------------------------------------------------------------
     crossbow = m.need("WEAP", S.SKYRIM_BASE["crossbow"].edid)
@@ -249,33 +286,43 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     gun_types = {g.id: g for g in S.GUN_TYPES.values()}
     by_rarity: dict[int, list[int]] = {}
     starters: list[int] = []
+    parts = bl2["weapons"].get("parts", {})
+    manufacturers = bl2["weapons"]["manufacturers"]
     for g in bl2["weapons"]["guns"]:
         gt = gun_types[g["type"]]
         rr = rarity_row(g["rarity"])
-        type_scales = [x["damage_scale"] for x in bl2["weapons"]["guns"] if x["type"] == g["type"]] or [1.0]
-        scale = g["damage_scale"] / (sum(type_scales) / len(type_scales)) if g["damage_scale"] else 1.0
-        damage = max(1, round(gt.base_damage * rr.damage_mult * min(1.5, max(0.7, scale))))
         value = round(gt.base_value * rr.value_mult)
-        for element in [None, *g["elements"]]:
+        taken: set = set()
+        for k in range(max(1, int(rr.variants))):
+            built = assemble.pick(g, {**parts}, k, taken)
+            element = built["element"]
+            if element is None and not g.get("slots", {}).get("Elemental") and g["elements"]:
+                element = [None, *g["elements"]][k % (len(g["elements"]) + 1)]  # no readable element parts: one variant per element
+            edid = f"Skylands_{g['balance'].rsplit('.', 1)[1]}_{k + 1}"
+            st = stats.roll(edid, gt, rr, element is not None, built["mods"])
+            damage = max(1, round(gt.base_damage * rr.damage_mult * st["damage_mult"]))
+            half = round(math.sqrt(st["speed"]), 3)  # half the speed goes into the weapon, half into the player's weapon speed
+            name = assemble.name_of(g, built["parts"], parts, element, manufacturers, rr.word)
             w = copy(crossbow)
-            edid = f"Skylands_{g['balance'].rsplit('.', 1)[1]}{'_' + element if element else ''}"
             w.form_id = p.new_id()
             w.drop("DESC", "EITM", "EAMT", "VMAD")
             w.set("EDID", esp.zstr(edid))
-            insert_ordered(w, "FULL", esp.zstr(gun_name(g, element, bl2["weapons"]["manufacturers"])), WEAP_ORDER)
+            insert_ordered(w, "FULL", esp.zstr(name), WEAP_ORDER)
             kwda = w.get("KWDA") or b""
             keywords = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_keyword, rarity_keywords[rr.level]]
             insert_ordered(w, "KSIZ", struct.pack("<I", len(keywords)), WEAP_ORDER)
             insert_ordered(w, "KWDA", struct.pack(f"<{len(keywords)}I", *keywords), WEAP_ORDER)
-            st = stats.roll(edid, gt, rr, element is not None)
-            ench = gun_enchant(p, edid, st, base_enchant.get(element) or any_enchant, element is not None, element, stats_mgef)
+            text = stats.describe(st, element, manufacturers.get(g["manufacturer"], g["manufacturer"]),
+                                  g.get("clip", 0), assemble.parts_line(built["parts"]))
+            ench = gun_enchant(p, edid, half, text, st["element_mult"], base_enchant.get(element) or any_enchant,
+                               element is not None, stats_mgef)
             insert_ordered(w, "EITM", esp.u32(ench), WEAP_ORDER)
             insert_ordered(w, "EAMT", u16(65535), WEAP_ORDER)
             d = w.get("DATA") or b"\0" * 10
             insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + d[10:], WEAP_ORDER)
             dn = w.get("DNAM")
-            if dn and len(dn) >= 12:  # the rolled animation speed rides in the gun's (otherwise unused) reach
-                w.set("DNAM", dn[:8] + struct.pack("<f", st["speed"]) + dn[12:])
+            if dn and len(dn) >= 8:
+                w.set("DNAM", dn[:4] + struct.pack("<f", half) + dn[8:])
             crit = w.get("CRDT")
             if crit and len(crit) >= 2:
                 w.set("CRDT", u16(st["crit_damage"]) + crit[2:])
@@ -284,7 +331,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
             if g["type"] == "pistol" and rr.level == 1 and element is None:
                 starters.append(w.form_id)
             report["guns"] += 1
-            report.setdefault("stats", {})[edid] = {k: v for k, v in st.items() if v is not None}
+            report.setdefault("stats", {})[edid] = {"name": name, "parts": built["parts"], "element": element,
+                                                   **{k2: v for k2, v in st.items() if v is not None}}
     if not by_rarity:
         raise GenerateError("no Borderlands guns were extracted")
 
@@ -366,7 +414,13 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
         ("GunKeyword", esp.P_OBJECT, gun_keyword),
         ("RarityKeywords", esp.P_OBJECT_ARRAY, [rarity_keywords[k] for k in sorted(rarity_keywords)]),
-        ("Beams", esp.P_OBJECT_ARRAY, [beams[k] for k in sorted(beams)])])], quest=True))
+        ("Beams", esp.P_OBJECT_ARRAY, [beams[k] for k in sorted(beams)]),
+        ("Lights", esp.P_OBJECT_ARRAY, [lights[k] for k in sorted(lights)] if len(lights) == len(beams) else []),
+        ("GunDrop", esp.P_OBJECT, drop_any.form_id), ("GunDropGood", esp.P_OBJECT, drop_good.form_id),
+        ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC),
+        ("ArmChance", esp.P_INT, int(G.arm_chance)), ("DropChance", esp.P_INT, int(G.drop_chance)),
+        ("GoodLevel", esp.P_INT, int(G.good_level)), ("ArmPerScan", esp.P_INT, int(G.arm_per_scan)),
+        ("ScanRadius", esp.P_FLOAT, float(G.scan_radius)), ("Verbose", esp.P_BOOL, bool(G.verbose))])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 

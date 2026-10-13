@@ -111,6 +111,23 @@ ENEMIES: dict[str, EnemiesRow] = {
 }
 
 @dataclass(frozen=True)
+class GenerationRow:
+    """How guns reach the world: who carries them, how often a dead enemy drops one, and what the on-screen debug messages do."""
+
+    id: str
+    arm_chance: int
+    drop_chance: int
+    good_level: int
+    arm_per_scan: int
+    scan_radius: int
+    verbose: int
+
+
+GENERATION: dict[str, GenerationRow] = {
+    'main': GenerationRow(id='main', arm_chance=35, drop_chance=40, good_level=25, arm_per_scan=2, scan_radius=5000, verbose=1),
+}
+
+@dataclass(frozen=True)
 class GunTypesRow:
     """Borderlands gun types. Package and balance naming are Borderlands 2's; Skyrim numbers are this mashup's balance (crossbow-based, before rarity)."""
 
@@ -138,7 +155,7 @@ GUN_TYPES: dict[str, GunTypesRow] = {
 
 @dataclass(frozen=True)
 class LootInjectionRow:
-    """Vanilla Skyrim leveled lists that get Skylands guns added (the player's own record is copied and extended)."""
+    """Vanilla leveled lists (chests) that get Skylands guns added (the player's own record is copied and extended). Enemy guns are not here: enemies carry guns and drop them physically (sheet: generation)."""
 
     id: str
     skyrim_lvli: str
@@ -147,9 +164,6 @@ class LootInjectionRow:
 
 
 LOOT_INJECTION: dict[str, LootInjectionRow] = {
-    'bandit_weapon15': LootInjectionRow(id='bandit_weapon15', skyrim_lvli='LootBanditWeapon15', list='any', count=6),
-    'bandit_weapon50': LootInjectionRow(id='bandit_weapon50', skyrim_lvli='LootBanditWeapon50', list='any', count=6),
-    'bandit_weapon100': LootInjectionRow(id='bandit_weapon100', skyrim_lvli='LootBanditWeapon100', list='any', count=6),
     'bandit_boss_chest': LootInjectionRow(id='bandit_boss_chest', skyrim_lvli='LootBanditChestBossBase', list='good', count=3),
     'draugr_boss_chest': LootInjectionRow(id='draugr_boss_chest', skyrim_lvli='LootDraugrChestBossBase', list='good', count=3),
     'dwarven_boss_chest': LootInjectionRow(id='dwarven_boss_chest', skyrim_lvli='LootDwarvenChestBossBase', list='good', count=3),
@@ -157,6 +171,54 @@ LOOT_INJECTION: dict[str, LootInjectionRow] = {
     'forsworn_boss_chest': LootInjectionRow(id='forsworn_boss_chest', skyrim_lvli='LootForswornChestBossBase', list='good', count=3),
     'vampire_boss_chest': LootInjectionRow(id='vampire_boss_chest', skyrim_lvli='LootVampireChestBossBase', list='good', count=3),
     'warlock_boss_chest': LootInjectionRow(id='warlock_boss_chest', skyrim_lvli='LootWarlockChestBossBase', list='good', count=3),
+}
+
+@dataclass(frozen=True)
+class ManufacturersRow:
+    """Each Borderlands manufacturer's character, applied on top of the stats its parts carry (ids are the names in Borderlands' balance names)."""
+
+    id: str
+    damage: float
+    fire_rate: float
+    reload: float
+    crit: float
+    element: float
+    note: str
+
+
+MANUFACTURERS: dict[str, ManufacturersRow] = {
+    'Bandit': ManufacturersRow(id='Bandit', damage=1.0, fire_rate=1.0, reload=1.1, crit=1.0, element=1.0, note='Cheap, big magazines'),
+    'Dahl': ManufacturersRow(id='Dahl', damage=0.95, fire_rate=1.05, reload=0.95, crit=1.0, element=1.0, note='Burst and control'),
+    'Hyperion': ManufacturersRow(id='Hyperion', damage=0.95, fire_rate=0.95, reload=1.0, crit=1.15, element=1.0, note='Accurate, precise'),
+    'Jakobs': ManufacturersRow(id='Jakobs', damage=1.2, fire_rate=0.85, reload=1.05, crit=1.1, element=1.0, note='Hits hard, fires slowly'),
+    'Maliwan': ManufacturersRow(id='Maliwan', damage=0.95, fire_rate=1.0, reload=1.0, crit=1.0, element=1.35, note='Elemental'),
+    'Tediore': ManufacturersRow(id='Tediore', damage=0.9, fire_rate=1.0, reload=0.8, crit=1.0, element=1.0, note='Fast reloads'),
+    'Torgue': ManufacturersRow(id='Torgue', damage=1.15, fire_rate=0.9, reload=1.1, crit=1.0, element=1.15, note='Heavy and explosive'),
+    'Vladof': ManufacturersRow(id='Vladof', damage=0.9, fire_rate=1.3, reload=1.0, crit=0.95, element=1.0, note='Fast fire'),
+}
+
+@dataclass(frozen=True)
+class PartStatsRow:
+    """Which Borderlands attribute a gun part modifies becomes which Skylands stat. Rules are tried in order; the first whose pattern matches the attribute's name wins."""
+
+    id: str
+    attr: str
+    stat: str
+    invert: str
+    power: float
+
+
+PART_STATS: dict[str, PartStatsRow] = {
+    'damage': PartStatsRow(id='damage', attr='^WeaponDamage$', stat='damage', invert='no', power=1.0),
+    'fire_interval': PartStatsRow(id='fire_interval', attr='^WeaponFireInterval$', stat='fire_rate', invert='yes', power=1.0),
+    'fire_rate': PartStatsRow(id='fire_rate', attr='FireRate', stat='fire_rate', invert='no', power=1.0),
+    'reload_speed': PartStatsRow(id='reload_speed', attr='^WeaponReloadSpeed$', stat='reload', invert='yes', power=1.0),
+    'reload_time': PartStatsRow(id='reload_time', attr='ReloadTime', stat='reload', invert='no', power=1.0),
+    'clip': PartStatsRow(id='clip', attr='ClipSize', stat='clip', invert='no', power=1.0),
+    'spread': PartStatsRow(id='spread', attr='^WeaponSpread$', stat='accuracy', invert='yes', power=1.0),
+    'crit': PartStatsRow(id='crit', attr='Crit', stat='crit', invert='no', power=1.0),
+    'status_chance': PartStatsRow(id='status_chance', attr='StatusEffectChance', stat='element', invert='no', power=0.6),
+    'status_damage': PartStatsRow(id='status_damage', attr='StatusEffectDamage', stat='element', invert='no', power=1.0),
 }
 
 @dataclass(frozen=True)
@@ -177,15 +239,16 @@ class RaritiesRow:
     roll_chance: float
     boost_min: float
     boost_max: float
+    variants: int
 
 
 RARITIES: dict[str, RaritiesRow] = {
-    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12, element_mult=1.0, crit_mult=1.0, stat_lo=0.0, stat_hi=0.35, spread=0.1, roll_chance=0.02, boost_min=1.6, boost_max=2.2),
-    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8, element_mult=1.2, crit_mult=1.1, stat_lo=0.1, stat_hi=0.5, spread=0.1, roll_chance=0.04, boost_min=1.6, boost_max=2.4),
-    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4, element_mult=1.5, crit_mult=1.2, stat_lo=0.2, stat_hi=0.65, spread=0.12, roll_chance=0.07, boost_min=1.8, boost_max=2.6),
-    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2, element_mult=1.9, crit_mult=1.35, stat_lo=0.35, stat_hi=0.8, spread=0.12, roll_chance=0.1, boost_min=2.0, boost_max=3.0),
-    'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1, element_mult=2.4, crit_mult=1.5, stat_lo=0.5, stat_hi=1.0, spread=0.15, roll_chance=0.22, boost_min=2.0, boost_max=3.5),
-    'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1, element_mult=2.8, crit_mult=1.3, stat_lo=0.4, stat_hi=0.95, spread=0.15, roll_chance=0.12, boost_min=2.0, boost_max=3.0),
+    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12, element_mult=1.0, crit_mult=1.0, stat_lo=0.0, stat_hi=0.35, spread=0.1, roll_chance=0.02, boost_min=1.6, boost_max=2.2, variants=3),
+    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8, element_mult=1.2, crit_mult=1.1, stat_lo=0.1, stat_hi=0.5, spread=0.1, roll_chance=0.04, boost_min=1.6, boost_max=2.4, variants=3),
+    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4, element_mult=1.5, crit_mult=1.2, stat_lo=0.2, stat_hi=0.65, spread=0.12, roll_chance=0.07, boost_min=1.8, boost_max=2.6, variants=4),
+    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2, element_mult=1.9, crit_mult=1.35, stat_lo=0.35, stat_hi=0.8, spread=0.12, roll_chance=0.1, boost_min=2.0, boost_max=3.0, variants=4),
+    'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1, element_mult=2.4, crit_mult=1.5, stat_lo=0.5, stat_hi=1.0, spread=0.15, roll_chance=0.22, boost_min=2.0, boost_max=3.5, variants=2),
+    'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1, element_mult=2.8, crit_mult=1.3, stat_lo=0.4, stat_hi=0.95, spread=0.15, roll_chance=0.12, boost_min=2.0, boost_max=3.0, variants=3),
 }
 
 @dataclass(frozen=True)

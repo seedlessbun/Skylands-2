@@ -1,3 +1,4 @@
+import math
 import struct
 import sys
 from pathlib import Path
@@ -27,42 +28,47 @@ def test_generate_from_both_games(tmp_path):
     data = out / "Data"
     assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsLootBeam.pex").is_file()
     assert (data / "Meshes" / "Skylands" / "Beam_legendary.nif").is_file() and (data / "Textures" / "Skylands" / "beam.dds").is_file()
-    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI"})
+    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI", "LIGH"})
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
-    assert names["Skylands_Pistol_Jakobs"] == "Jakobs Revolver (Common)"
-    assert names["Skylands_Pistol_Jakobs_3_Rare_Fire"] == "Incendiary Revolver (Rare)"
-    assert names["Skylands_Pistol_Jakobs_5_Maggie"] == "Sledge's Maggie (Legendary)"
-    fire = next(r for r in recs["WEAP"] if r.edid == "Skylands_Pistol_Jakobs_3_Rare_Fire")
+    assert len(names) == rep["guns"] == 9  # 3 common + 4 rare + 2 legendary variants
+    assert names["Skylands_Pistol_Jakobs_5_Maggie_1"] == "Sledge's Maggie (Legendary)"
+    rare_ids = sorted(e for e in names if e.startswith("Skylands_Pistol_Jakobs_3_Rare_"))
+    assert len(rare_ids) == 4 and {names[e] for e in rare_ids} == {"Incendiary Revolver (Rare)"}
+    assert {rep["stats"][e]["parts"]["Barrel"].rsplit("_", 1)[-1] for e in rare_ids} == {"Heavy", "Quick"}  # different parts, different guns
+    fire = next(r for r in recs["WEAP"] if r.edid == rare_ids[0])
     sigs = [s for s, _ in fire.subrecords]
     assert "VMAD" not in sigs and sigs.index("OBND") < sigs.index("FULL") < sigs.index("MODL") < sigs.index("EITM") < sigs.index("ETYP")
     assert "DESC" not in sigs and "EITM" in sigs
     ench = next(r for r in recs["ENCH"] if r.form_id == struct.unpack_from("<I", fire.first("EITM"))[0])
-    st = rep["stats"]["Skylands_Pistol_Jakobs_3_Rare_Fire"]
-    assert ench.edid == "Skylands_Ench_Skylands_Pistol_Jakobs_3_Rare_Fire" and ench.first("FULL") == b"Gun stats\0"
+    st = rep["stats"][rare_ids[0]]
+    half = math.sqrt(st["speed"])
+    assert ench.edid == f"Skylands_Ench_{rare_ids[0]}" and ench.first("FULL") == b"Gun stats\0"
     efits = [struct.unpack("<fII", d) for d in ench.all("EFIT")]
-    assert len(efits) == 2 and efits[0][0] == pytest.approx(10.0 * st["element_mult"], abs=0.01) and efits[1][0] == 0.0
+    assert len(efits) == 2 and efits[0][0] == pytest.approx(10.0 * st["element_mult"], abs=0.01)
+    assert efits[1][0] == pytest.approx(half, abs=1e-3)  # the stats effect's magnitude is the player weapon speed
     mg = next(r for r in recs["MGEF"] if r.form_id == struct.unpack_from("<I", ench.all("EFID")[1])[0])
-    assert mg.first("DNAM").decode().startswith(f"Fire rate {st['fire_rate']:.1f}/s, Reload {st['reload']:.1f}s")
+    text = mg.first("DNAM").decode()
+    assert text.startswith(f"Jakobs. Fire rate {st['fire_rate']:.1f}/s, Reload {st['reload']:.1f}s") and "Parts: Barrel" in text
     assert struct.unpack_from("<i", mg.first("DATA"), 68)[0] == 77
-    assert struct.unpack_from("<f", fire.first("DNAM"), 8)[0] == pytest.approx(st["speed"], abs=1e-3)  # reach carries the speed
-    assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == 1.0  # the crossbow's own speed is left alone
+    assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == pytest.approx(half, abs=1e-3)  # half of the speed is the gun's own
     kws = struct.unpack(f"<{len(fire.first('KWDA')) // 4}I", fire.first("KWDA"))
     kyw = {r.form_id: r.edid for r in recs["KYWD"]}
     assert struct.unpack("<I", fire.first("KSIZ"))[0] == len(kws) and [kyw[k] for k in kws if k in kyw] == ["SkylandsGun", "SkylandsRarity_rare"]
     beam_acti = next(r for r in recs["ACTI"] if r.edid == "SkylandsBeam_rare")
     assert b"SkylandsLootBeam" in beam_acti.first("VMAD")
+    lights = {r.edid: r for r in recs["LIGH"]}
+    assert len(lights) == 6 and lights["SkylandsLight_common"].first("DATA")[8:12] == bytes([40, 100, 50, 0])
+    assert struct.unpack_from("<I", lights["SkylandsLight_rare"].first("DATA"), 4)[0] == generate.LIGHT_RADIUS and "MODL" not in [s for s, _ in lights["SkylandsLight_rare"].subrecords]
     quest = next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest")
-    for prop in (b"GunKeyword", b"RarityKeywords", b"Beams", b"StarterGun", b"StarterAmmo"):
+    for prop in (b"GunKeyword", b"RarityKeywords", b"Beams", b"Lights", b"GunDrop", b"GunDropGood", b"NpcKeyword", b"ArmChance",
+                 b"DropChance", b"Verbose", b"StarterGun", b"StarterAmmo"):
         assert prop in quest.first("VMAD")
     assert struct.unpack_from("<H", fire.first("CRDT"))[0] == st["crit_damage"]
-    plain = next(r for r in recs["WEAP"] if r.edid == "Skylands_Pistol_Jakobs")
-    pe = next(r for r in recs["ENCH"] if r.form_id == struct.unpack_from("<I", plain.first("EITM"))[0])
-    assert len(pe.all("EFIT")) == 1  # a non-elemental gun still lists its stats
     value, weight, dmg = struct.unpack_from("<IfH", fire.first("DATA"))
-    assert dmg == round(12 * 1.3) and value == 150
+    assert dmg == round(12 * 1.3 * st["damage_mult"]) and value == 150
     assert fire.form_id >> 24 == 3 and fire.first("MODL").startswith(b"dlc01")
-    loot = next(r for r in recs["LVLI"] if r.edid == "LootBanditWeapon15")
-    assert loot.form_id == 0x8000 and loot.first("LLCT") == b"\x09" and len(loot.all("LVLO")) == 9  # built on Update.esm's version
+    loot = next(r for r in recs["LVLI"] if r.edid == "LootBanditChestBossBase")
+    assert loot.form_id == 0x8000 and loot.first("LLCT") == b"\x06" and len(loot.all("LVLO")) == 6  # 2 (Update.esm's version) + 3 gun lists + ammo
     assert len(recs["SHOU"]) == 5 and {r.edid for r in recs["WOOP"]} >= {"SkylandsWord_assassin", "SkylandsWord_mechromancer"}
     zer0 = next(r for r in recs["SHOU"] if r.edid == "SkylandsShout_assassin")
     word, spell_id, recharge = struct.unpack("<IIf", zer0.all("SNAM")[0])
@@ -77,7 +83,7 @@ def test_generate_from_both_games(tmp_path):
     assert struct.unpack("<I", npcs["EncBandit02TemplateMelee"].first("SPCT"))[0] == 2
     assert npcs["EncBandit03Boss1HNordM"].first("FULL") == b"Badass Nomad\0"
     assert "EncBandit02Melee1HNordM" not in npcs  # unnamed records keep inheriting from their template
-    assert rep["guns"] == 6 and rep["renamed_enemies"] == 2 and rep["missing_classes"] == ["psycho"]
+    assert rep["renamed_enemies"] == 2 and rep["missing_classes"] == ["psycho"]
 
 
 def test_build_installs_and_enables(tmp_path, monkeypatch):

@@ -21,7 +21,7 @@ from . import generate
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 
 def enable_plugin(plugin: str) -> Path | None:
@@ -133,6 +133,10 @@ def main(argv: list[str]) -> int:
         say(f"Skylands {VERSION} setup. Borderlands 2: {bl2}  Skyrim SE: {sky}")
         data = extract.extract(bl2, work / "cache", say, budget_minutes=40)
         (work / "pandora.json").write_text(json.dumps(data, indent=1), encoding="utf-8")
+        digest = extract.summarize_parts(data.get("weapons", {}))
+        (work / "parts-summary.json").write_text(json.dumps(digest, indent=1), encoding="utf-8")
+        say(f"Gun parts read: {digest['parts']} ({digest['parts_with_effects']} with stat effects) for "
+            f"{digest['balances_with_parts']}/{digest['balances']} gun balances.")
         say(f"Read Borderlands 2: {len(data.get('classes', []))} vault hunters, "
             f"{len(data.get('weapons', {}).get('guns', []))} gun balances, {len(data.get('enemies', {}))} enemy types, "
             f"{len(data.get('rarities', []))} rarity colours")

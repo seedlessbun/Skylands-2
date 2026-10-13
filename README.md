@@ -24,18 +24,25 @@ Nothing from either game is shipped. Single player.
 Survey tool built and tested on synthetic files. Next: confirm the formats on a real install, then the
 Skyrim writers (plugin, scripts, placeholder models) and the setup step Melty runs before first launch.
 
-## Gun stats (0.4)
+## Guns from parts (0.6)
 
-Each gun gets its own enchantment listing its stats: fire rate (shots per second) and reload (seconds) rolled
-inside Borderlands 2-like ranges per gun type (`sheets/gun_types.json`), widening toward the top with rarity
-(`sheets/rarities.json`), critical damage, and the element's strength. A gun can roll a rare boost that multiplies
-one of fire rate, element or crit damage ("ultra fire rate" uniques). Rolls are seeded by the gun's id, so a rebuild
-gives the same guns. The fire rate and reload fold into one animation speed. A script on the player (the class quest, ticking once a
-second) reads it from the equipped Skylands gun and sets the player's WeaponSpeedMult; a notification shows the value
-and what the game reports back. `generate-report.json` lists every gun's rolled stats.
+Guns are assembled the way Borderlands 2 does it. A Borderlands balance (say `Pistol_Jakobs_3_Rare`) names the pool
+of parts (body, barrel, grip, stock, sight, accessories, material, element) a gun of that make and rarity may be built
+from. Setup reads those pools and every part's stat effects (damage, fire interval, reload speed, clip size, spread,
+status chance ...) from the player's own Borderlands 2 files, then builds several guns per balance by picking one part
+per slot: each gun is a different combination, named from its parts' prefix and title, with stats combined from its
+parts and its manufacturer (`sheets/part_stats.json` maps Borderlands attributes to Skylands stats,
+`sheets/manufacturers.json` is each maker's character). Parts without a readable effect still nudge stats by a small
+fixed amount derived from their name. Nothing of the parts is shown; they only change the stats and the name.
 
-## Rarity beams (0.5)
+Each gun carries a stats line on its enchantment (fire rate, reload, magazine, crit damage, element strength, the
+parts it was built from) and can roll a rare boost on one stat (`sheets/rarities.json`). Fire rate and reload fold into
+animation speed: half goes into the weapon's own speed, half into the player's weapon speed, which a script on the
+player (the class quest, ticking once a second) reads from the stats effect of the equipped gun.
 
-Every Skylands gun carries a Skylands keyword and a rarity keyword. The same script scans the player's cell every
-other second and places a rarity-coloured beam over Skylands guns lying on the ground and over corpses carrying one;
-each beam follows its gun and removes itself when the gun is picked up or looted.
+## Guns in the world (0.6)
+
+The same script scans the player's cell every other second. Hostile humanoids get a gun and ammo and wield it
+(`sheets/generation.json`: arm_chance); when a hostile humanoid dies its gun drops on the ground, or sometimes a new
+one does (drop_chance), and every Skylands gun lying on the ground gets a rarity-coloured beam and light that follow
+it and go away when it is picked up. Messages on screen report what the script does (verbose in the sheet).

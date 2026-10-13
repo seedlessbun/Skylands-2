@@ -152,10 +152,26 @@ def survey_generate(sky: Path, report: dict, stage: Path) -> None:
     t0 = time.time()
     try:
         rep = generate.generate(report.get("extract") or {}, sky, stage)
+        if "stats" in rep:  # every gun's roll is in the full build's report; the survey keeps a sample
+            rep["stats"] = dict(list(rep["stats"].items())[:40])
         esp = stage / "Data" / generate.PLUGIN
         report["generate"] = {"ok": True, **rep, "esp_bytes": esp.stat().st_size, "seconds": round(time.time() - t0, 1)}
     except Exception:  # noqa: BLE001
         report["generate"] = {"ok": False, "error": traceback.format_exc()[-1500:], "seconds": round(time.time() - t0, 1)}
+
+
+def trim_extract(report: dict) -> None:
+    """Keep the survey report small: per-gun part lists and the part table become a digest."""
+    from .bl2 import extract
+
+    weapons = (report.get("extract") or {}).get("weapons")
+    if not weapons:
+        return
+    report["parts_summary"] = extract.summarize_parts(weapons)
+    weapons.pop("parts", None)
+    weapons.pop("effect_samples", None)
+    for g in weapons.get("guns", []):
+        g["slots"] = {slot: len(plist) for slot, plist in (g.get("slots") or {}).items()}
 
 
 def survey_skyrim(sky: Path, report: dict) -> None:
@@ -219,10 +235,11 @@ def main(argv: list[str]) -> int:
         print("Run again with --bl2 \"<folder>\" --skyrim \"<folder>\".")
         return 1
     print(f"Borderlands 2: {a.bl2}\nSkyrim SE: {a.skyrim}\nReading... this can take a few minutes.")
-    report: dict = {"tool": "skylands survey 5", "python": sys.version}
+    report: dict = {"tool": "skylands survey 6", "python": sys.version}
     cache = Path(a.out).parent / "skylands-cache"
     for fn, args in ((survey_extract, (Path(a.bl2), report, cache)), (survey_skyrim, (Path(a.skyrim), report)),
-                     (survey_generate, (Path(a.skyrim), report, Path(a.out).parent / "survey-stage"))):
+                     (survey_generate, (Path(a.skyrim), report, Path(a.out).parent / "survey-stage")),
+                     (trim_extract, (report,))):
         try:
             fn(*args)
         except Exception:  # noqa: BLE001

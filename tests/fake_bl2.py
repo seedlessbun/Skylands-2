@@ -248,6 +248,23 @@ def pandora_install(root) -> None:
     g.obj("GD_Weap_Pistol.Name.Prefix.Prefix_Elemental_Incendiary", "WeaponNamePartDefinition", g.s("PartName", "Incendiary"))
     g.obj("GD_Weap_Pistol.Name.Title_Jakobs.Title_Maggie", "WeaponNamePartDefinition", g.s("PartName", "Maggie"))
     g.obj("GD_Weap_Pistol.elemental.Pistol_Elemental_Fire", "WeaponPartDefinition", b"")
+    g.obj("D_Attributes.Weapon.WeaponDamage", "AttributeDefinition", b"")
+    g.obj("D_Attributes.Weapon.WeaponFireInterval", "AttributeDefinition", b"")
+
+    def effect(attr, kind, value):
+        return (g.o("AttributeToModify", attr) + g.prop("ModifierType", "ByteProperty", g.n(kind), enum="EModifierType") +
+                g.st("BaseModifierValue", "AttributeInitializationData", g.f("BaseValueConstant", value) + g.f("BaseValueScaleConstant", 1.0)))
+
+    # a barrel with the effect on the part itself, and one whose effect lives in its behavior provider
+    g.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Heavy", "WeaponPartDefinition",
+          g.arr_structs("WeaponAttributeEffects", [effect("D_Attributes.Weapon.WeaponDamage", "MT_Scale", 1.25)]))
+    g.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Quick", "WeaponPartDefinition", b"")
+    g.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Quick:BehaviorProviderDefinition_3", "BehaviorProviderDefinition", b"")
+    g.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Quick:BehaviorProviderDefinition_3:Behavior_AttributeEffect_1",
+          "Behavior_AttributeEffect", g.st("AttributeEffect", "AttributeSlotEffectData", effect("D_Attributes.Weapon.WeaponFireInterval", "MT_Scale", 0.8)))
+    g.exports[g.paths["GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Quick"] - 1]["body"] = (
+        struct.pack("<i", -1) + g.o("BehaviorProviderDefinition", "GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Quick:BehaviorProviderDefinition_3")
+        + g.none())
     g.obj("GD_Weap_Pistol.Name.Prefix_Jakobs.Prefix_Sledges", "WeaponNamePartDefinition", g.s("PartName", "Sledge's"))
     g.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Maggie", "WeaponPartDefinition",
           g.arr_objs("TitleList", ["GD_Weap_Pistol.Name.Title_Jakobs.Title_Maggie"]) +
@@ -260,6 +277,8 @@ def pandora_install(root) -> None:
     g.obj("GD_Weap_Pistol.A_Weapons.Pistol_Jakobs", "WeaponBalanceDefinition", b"")
     g.obj("GD_Weap_Pistol.A_Weapons.Pistol_Jakobs:PartList", "WeaponPartListCollectionDefinition",
           g.o("AssociatedWeaponType", "GD_Weap_Pistol.A_Weapons.WeaponType_Jakobs_Pistol") +
+          g.st("BarrelPartData", "PartListData", g.b("bEnabled", True) + g.arr_structs("WeightedParts", [
+              weighted("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Heavy"), weighted("GD_Weap_Pistol.Barrel.Pistol_Barrel_Jakobs_Quick")])) +
           g.st("ElementalPartData", "PartListData", g.b("bEnabled", True) +
                g.arr_structs("WeightedParts", [weighted("GD_Weap_Pistol.elemental.Pistol_Elemental_Fire")])))
     g.exports[g.paths["GD_Weap_Pistol.A_Weapons.Pistol_Jakobs"] - 1]["body"] = (
