@@ -13,8 +13,8 @@
   "rows": [
     {
       "id": "main",
-      "arm_chance": 35,
-      "drop_chance": 40,
+      "arm_chance": 30,
+      "drop_chance": 25,
       "good_level": 25,
       "scan_radius": 5000,
       "verbose": 1,

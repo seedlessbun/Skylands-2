@@ -123,7 +123,7 @@ class GenerationRow:
 
 
 GENERATION: dict[str, GenerationRow] = {
-    'main': GenerationRow(id='main', arm_chance=35, drop_chance=40, good_level=25, scan_radius=5000, verbose=1),
+    'main': GenerationRow(id='main', arm_chance=30, drop_chance=25, good_level=25, scan_radius=5000, verbose=1),
 }
 
 @dataclass(frozen=True)
@@ -242,10 +242,10 @@ class RaritiesRow:
 
 
 RARITIES: dict[str, RaritiesRow] = {
-    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=12, element_mult=1.0, crit_mult=1.0, stat_lo=0.0, stat_hi=0.35, spread=0.1, roll_chance=0.02, boost_min=1.6, boost_max=2.2, variants=3),
-    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=8, element_mult=1.2, crit_mult=1.1, stat_lo=0.1, stat_hi=0.5, spread=0.1, roll_chance=0.04, boost_min=1.6, boost_max=2.4, variants=3),
-    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=4, element_mult=1.5, crit_mult=1.2, stat_lo=0.2, stat_hi=0.65, spread=0.12, roll_chance=0.07, boost_min=1.8, boost_max=2.6, variants=4),
-    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=2, element_mult=1.9, crit_mult=1.35, stat_lo=0.35, stat_hi=0.8, spread=0.12, roll_chance=0.1, boost_min=2.0, boost_max=3.0, variants=4),
+    'common': RaritiesRow(id='common', level=1, word='Common', damage_mult=1.0, value_mult=1.0, loot_copies=122, element_mult=1.0, crit_mult=1.0, stat_lo=0.0, stat_hi=0.35, spread=0.1, roll_chance=0.02, boost_min=1.6, boost_max=2.2, variants=3),
+    'uncommon': RaritiesRow(id='uncommon', level=2, word='Uncommon', damage_mult=1.15, value_mult=1.6, loot_copies=50, element_mult=1.2, crit_mult=1.1, stat_lo=0.1, stat_hi=0.5, spread=0.1, roll_chance=0.04, boost_min=1.6, boost_max=2.4, variants=3),
+    'rare': RaritiesRow(id='rare', level=3, word='Rare', damage_mult=1.3, value_mult=2.5, loot_copies=20, element_mult=1.5, crit_mult=1.2, stat_lo=0.2, stat_hi=0.65, spread=0.12, roll_chance=0.07, boost_min=1.8, boost_max=2.6, variants=4),
+    'epic': RaritiesRow(id='epic', level=4, word='Epic', damage_mult=1.5, value_mult=4.0, loot_copies=6, element_mult=1.9, crit_mult=1.35, stat_lo=0.35, stat_hi=0.8, spread=0.12, roll_chance=0.1, boost_min=2.0, boost_max=3.0, variants=4),
     'legendary': RaritiesRow(id='legendary', level=5, word='Legendary', damage_mult=1.8, value_mult=8.0, loot_copies=1, element_mult=2.4, crit_mult=1.5, stat_lo=0.5, stat_hi=1.0, spread=0.15, roll_chance=0.22, boost_min=2.0, boost_max=3.5, variants=2),
     'etech': RaritiesRow(id='etech', level=6, word='E-tech', damage_mult=1.6, value_mult=5.0, loot_copies=1, element_mult=2.8, crit_mult=1.3, stat_lo=0.4, stat_hi=0.95, spread=0.15, roll_chance=0.12, boost_min=2.0, boost_max=3.0, variants=3),
 }

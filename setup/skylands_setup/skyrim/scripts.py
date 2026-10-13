@@ -100,7 +100,7 @@ def class_choice_quest() -> Script:
         "Consider",
         params=[("r", "ObjectReference")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("k", "Int"), ("kw", "Keyword"), ("base", "Form"),
-                ("has", "Bool")],
+                ("has", "Bool"), ("hit", "Bool"), ("name", "String"), ("msg", "String")],
         code=[
             ("callmethod", ("id", "GetBaseObject"), ("id", "r"), ("id", "base")),
             ("assign", ("id", "k"), ("int", 5)),
@@ -110,6 +110,7 @@ def class_choice_quest() -> Script:
             ("array_getelement", ("id", "kw"), ("id", "::RarityKeywords_var"), ("id", "k")),
             ("callmethod", ("id", "HasKeyword"), ("id", "base"), ("id", "has"), ("id", "kw")),
             ("jmpf", ("id", "has"), ("lbl", "lower")),
+            ("assign", ("id", "hit"), ("bool", True)),
             call("Place", ("id", "r"), ("id", "k")),
             ("assign", ("id", "k"), ("int", -1)),  # found the highest rarity: stop
             ("jmp", ("lbl", "again")),
@@ -118,6 +119,13 @@ def class_choice_quest() -> Script:
             ("label", "again"),
             ("jmp", ("lbl", "loop")),
             ("label", "end"),
+            ("jmpf", ("id", "hit"), ("lbl", "miss")),
+            ("return", None),
+            ("label", "miss"),
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "out")),
+            ("callmethod", ("id", "GetDisplayName"), ("id", "r"), ("id", "name")),
+            *notify(("str", "Skylands: no rarity keyword on "), ("id", "name")),
+            ("label", "out"),
             ("return", None),
         ],
     )
@@ -152,7 +160,7 @@ def class_choice_quest() -> Script:
             ("label", "nolight"),
             ("cast", ("id", "beam"), ("id", "b")),
             ("cast", ("id", "::temp0"), ("id", "beam")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "broken")),
             ("callmethod", ("id", "Track"), ("id", "beam"), NONE, ("id", "r"), SELF, ("id", "lr")),
             ("array_setelement", ("id", "Tracked"), ("id", "TrackedNext"), ("id", "r")),
             ("iadd", ("id", "TrackedNext"), ("id", "TrackedNext"), ("int", 1)),
@@ -160,6 +168,25 @@ def class_choice_quest() -> Script:
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
             ("callmethod", ("id", "GetDisplayName"), ("id", "r"), ("id", "name")),
             *notify(("str", "Skylands beam: "), ("id", "name")),
+            ("label", "end"),
+            ("return", None),
+            ("label", "broken"),
+            call("Complain", ("id", "b")),
+            ("return", None),
+        ],
+    )
+    complain = Function(
+        "Complain",
+        params=[("b", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
+        code=[
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
+            ("cast", ("id", "::temp0"), ("id", "b")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "nomake")),
+            *notify(("str", "Skylands: beam made but its script is not attached")),
+            ("return", None),
+            ("label", "nomake"),
+            *notify(("str", "Skylands: the game did not make the beam")),
             ("label", "end"),
             ("return", None),
         ],
@@ -195,7 +222,7 @@ def class_choice_quest() -> Script:
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
                          ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("RarityKeywords", "Keyword[]"),
                          ("Beams", "Activator[]"), ("Lights", "Light[]"), ("Verbose", "Bool")],
-        functions=[on_init, on_update, choose, consider, place, forget],
+        functions=[on_init, on_update, choose, consider, place, complain, forget],
     )
 
 

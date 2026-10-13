@@ -30,7 +30,7 @@ BEAM_TEXTURE = "textures\\skylands\\beam.dds"
 ACTOR_TYPE_NPC = 0x00013794  # Skyrim.esm keyword: humanoids
 SPEED_BUCKETS, SPEED_BASE, SPEED_STEP = 48, 0.5, 0.05  # SkylandsSpeed_n keywords: speed = base + step * n
 RACES = r"^(Nord|Breton|Imperial|Redguard|Orc|DarkElf|HighElf|WoodElf|Khajiit|Argonian)Race(Vampire)?$"
-LIGHT_RADIUS = 360  # game units
+LIGHT_RADIUS = 600  # game units
 LIST_LIMIT = 200  # entries per leveled list (Skyrim allows 255)
 
 # SPIT spell types / cast types / delivery (Skyrim SE)
@@ -416,7 +416,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     tier_lists = {lvl: leveled_list(p, f"SkylandsGuns_{rarity_row(lvl).id}", [(f, 1) for f in ids]).form_id
                   for lvl, ids in sorted(by_rarity.items())}
     any_entries = [(tier_lists[lvl], 1) for lvl in tier_lists for _ in range(rarity_row(lvl).loot_copies)]
-    good_entries = [(tier_lists[lvl], 1) for lvl in tier_lists if lvl >= 3 for _ in range(rarity_row(lvl).loot_copies)]
+    good_entries = [(tier_lists[lvl], 1) for lvl in tier_lists if lvl >= 2 for _ in range(rarity_row(lvl).loot_copies)]
     gun_any = leveled_list(p, "SkylandsGunsAny", any_entries)
     gun_good = leveled_list(p, "SkylandsGunsGood", good_entries or any_entries)
     # Drops are plain lists (no "use all"): one gun per roll. Ammo is its own entry in the loot lists.

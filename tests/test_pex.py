@@ -36,6 +36,7 @@ CHOOSE = """  Int choice = ClassChoice.Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0
 
 BEAMS = """    Bool has = base.HasKeyword(kw)
     If has
+      hit = True
       Self.Place(r, k)
       k = -1"""
 
