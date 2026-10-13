@@ -28,7 +28,7 @@ def test_generate_from_both_games(tmp_path):
     data = out / "Data"
     assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsLootBeam.pex").is_file()
     assert (data / "Meshes" / "Skylands" / "Beam_legendary.nif").is_file() and (data / "Textures" / "Skylands" / "beam.dds").is_file()
-    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI", "LIGH"})
+    tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "ACTI", "LIGH", "RACE", "FLST"})
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert len(names) == rep["guns"] == 9  # 3 common + 4 rare + 2 legendary variants
     assert names["Skylands_Pistol_Jakobs_5_Maggie_1"] == "Sledge's Maggie (Legendary)"
@@ -45,7 +45,7 @@ def test_generate_from_both_games(tmp_path):
     assert ench.edid == f"Skylands_Ench_{rare_ids[0]}" and ench.first("FULL") == b"Gun stats\0"
     efits = [struct.unpack("<fII", d) for d in ench.all("EFIT")]
     assert len(efits) == 2 and efits[0][0] == pytest.approx(10.0 * st["element_mult"], abs=0.01)
-    assert efits[1][0] == pytest.approx(half, abs=1e-3)  # the stats effect's magnitude is the player weapon speed
+    assert efits[1][0] == 0.0  # the stats effect only displays text
     mg = next(r for r in recs["MGEF"] if r.form_id == struct.unpack_from("<I", ench.all("EFID")[1])[0])
     text = mg.first("DNAM").decode()
     assert text.startswith(f"Jakobs. Fire rate {st['fire_rate']:.1f}/s, Reload {st['reload']:.1f}s") and "Parts: Barrel" in text
@@ -53,16 +53,33 @@ def test_generate_from_both_games(tmp_path):
     assert struct.unpack_from("<f", fire.first("DNAM"), 4)[0] == pytest.approx(half, abs=1e-3)  # half of the speed is the gun's own
     kws = struct.unpack(f"<{len(fire.first('KWDA')) // 4}I", fire.first("KWDA"))
     kyw = {r.form_id: r.edid for r in recs["KYWD"]}
-    assert struct.unpack("<I", fire.first("KSIZ"))[0] == len(kws) and [kyw[k] for k in kws if k in kyw] == ["SkylandsGun", "SkylandsRarity_rare"]
+    assert struct.unpack("<I", fire.first("KSIZ"))[0] == len(kws) and [kyw[k] for k in kws if k in kyw] == ["SkylandsGun", "SkylandsRarity_rare", f"SkylandsSpeed_{round((half - 0.5) / 0.05)}"]
     beam_acti = next(r for r in recs["ACTI"] if r.edid == "SkylandsBeam_rare")
     assert b"SkylandsLootBeam" in beam_acti.first("VMAD")
     lights = {r.edid: r for r in recs["LIGH"]}
     assert len(lights) == 6 and lights["SkylandsLight_common"].first("DATA")[8:12] == bytes([40, 100, 50, 0])
     assert struct.unpack_from("<I", lights["SkylandsLight_rare"].first("DATA"), 4)[0] == generate.LIGHT_RADIUS and "MODL" not in [s for s, _ in lights["SkylandsLight_rare"].subrecords]
     quest = next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest")
-    for prop in (b"GunKeyword", b"RarityKeywords", b"Beams", b"Lights", b"GunDrop", b"GunDropGood", b"NpcKeyword", b"ArmChance",
-                 b"DropChance", b"Verbose", b"StarterGun", b"StarterAmmo"):
+    for prop in (b"ClassChoice", b"RarityKeywords", b"Beams", b"Lights", b"Verbose", b"StarterGun", b"StarterAmmo"):
         assert prop in quest.first("VMAD")
+    # the watcher: an ability whose effect runs the script, carried by every humanoid race
+    watch_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsWatcher")
+    for prop in (b"SkylandsWatcher", b"Owner", b"GunKeyword", b"SpeedKeywords", b"GunList", b"GunDrop", b"NpcKeyword", b"Bolts",
+                 b"ArmChance", b"DropChance", b"GoodLevel", b"ScanRadius"):
+        assert prop in watch_fx.first("VMAD")
+    assert struct.unpack_from("<I", watch_fx.first("DATA"), 64)[0] == generate.MGEF_ARCHETYPE_SCRIPT
+    ability = next(r for r in recs["SPEL"] if r.edid == "SkylandsWatcherAbility")
+    assert struct.unpack_from("<I", ability.first("SPIT"), 8)[0] == 4 and struct.unpack_from("<I", ability.first("EFID"))[0] == watch_fx.form_id
+    races = {r.edid: r for r in recs["RACE"]}
+    assert set(races) == {"NordRace", "BretonRace", "NordRaceVampire"} and rep["watched_races"] == 3  # not the Dremora
+    nord = races["NordRace"]
+    assert nord.first("FULL") == b"Nord\0" and nord.first("DESC").endswith(b"\0") and len(nord.first("DESC")) > 4  # names written out, not string ids
+    spells = [struct.unpack("<I", d)[0] for d in nord.all("SPLO")]
+    assert ability.form_id in spells and struct.unpack("<I", nord.first("SPCT"))[0] == len(spells)
+    guns = next(r for r in recs["FLST"] if r.edid == "SkylandsGunList")
+    assert len(guns.all("LNAM")) == rep["guns"]
+    speeds = [r for r in recs["KYWD"] if r.edid.startswith("SkylandsSpeed_")]
+    assert len(speeds) == 48
     assert struct.unpack_from("<H", fire.first("CRDT"))[0] == st["crit_damage"]
     value, weight, dmg = struct.unpack_from("<IfH", fire.first("DATA"))
     assert dmg == round(12 * 1.3 * st["damage_mult"]) and value == 150

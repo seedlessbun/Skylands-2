@@ -40,9 +40,13 @@ parts it was built from) and can roll a rare boost on one stat (`sheets/rarities
 animation speed: half goes into the weapon's own speed, half into the player's weapon speed, which a script on the
 player (the class quest, ticking once a second) reads from the stats effect of the equipped gun.
 
-## Guns in the world (0.6)
+## Guns in the world (0.7)
 
-The same script scans the player's cell every other second. Hostile humanoids get a gun and ammo and wield it
-(`sheets/generation.json`: arm_chance); when a hostile humanoid dies its gun drops on the ground, or sometimes a new
-one does (drop_chance), and every Skylands gun lying on the ground gets a rarity-coloured beam and light that follow
-it and go away when it is picked up. Messages on screen report what the script does (verbose in the sheet).
+Skylands needs no script extender, so its scripts use only what plain Skyrim offers. Every humanoid race (and so
+every person and the player) carries one ability whose effect runs the `SkylandsWatcher` script.
+* On the player it applies the equipped gun's speed to the player's weapon speed (the speed is a `SkylandsSpeed_n`
+  keyword on the gun) and every two seconds looks for guns lying nearby (through a form list of every gun) to give
+  them a rarity-coloured beam and light, which follow the gun and go away when it is picked up.
+* On everyone else, a few seconds after they load, a hostile humanoid may be handed a gun and ammo and wield it
+  (`sheets/generation.json`: arm_chance). When a humanoid dies its gun is dropped on the ground with a beam, or
+  sometimes a new gun is (drop_chance). On-screen messages report what the scripts do (verbose in the sheet).

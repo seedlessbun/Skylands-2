@@ -14,16 +14,12 @@ from skylands_setup.skyrim import pex, scripts  # noqa: E402
 
 CHAMPOLLION = os.environ.get("CHAMPOLLION", "")
 
-EXPECTED = """Event OnUpdate()
-  If !Chosen
-    Self.Choose()
-  EndIf
+QUEST_EXPECTED = """Event OnUpdate()
+  Self.Choose()
   If Chosen
-    Self.Tick()
+    Return
   EndIf
-  Self.RegisterForSingleUpdate(1.0)
-  Return
-EndEvent"""
+  Self.RegisterForSingleUpdate(1.0)"""
 
 CHOOSE = """  Int choice = ClassChoice.Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
   Actor player = Game.GetPlayer()
@@ -38,43 +34,55 @@ CHOOSE = """  Int choice = ClassChoice.Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0
   player.EquipItem(StarterGun, False, False)
   Chosen = True"""
 
-TICK = """  Weapon w = player.GetEquippedWeapon(False)
-  Float want = Self.SpeedOf(w)
-  If want != Speed
-    Speed = want
-    player.SetActorValue("WeaponSpeedMult", want)"""
-
-SPEED_OF = """      Enchantment e = w.GetEnchantment()
-      If e as Bool
-        Int n = e.GetNumEffects()"""
-
-ARMED = """  Self.Note(ArmSeen, ArmNext, a)
-  ArmNext += 1
-  ArmNext %= 64"""
-
-WORTHY = """  If a.HasKeyword(NpcKeyword)
-    Actor player = Game.GetPlayer()
-    Actor killer = a.GetKiller()"""
-
-MOURN = """  ObjectReference drop = Self.OwnDrop(a)
-  If drop as Bool
-    Self.Announce(drop)
-    Return"""
-
-DROP = """  a.UnequipItem(w, False, True)
-  ObjectReference drop = a.DropObject(w, 1)"""
-
-EQUIP = """    a.AddItem(g, 1, True)
-    a.AddItem(StarterAmmo, 30, True)
-    a.EquipItem(f, False, True)"""
-
-BEAMS = """      Bool has = base.HasKeyword(kw)
-      If has
-        Self.Place(r, k)
-        k = -1"""
+BEAMS = """    Bool has = base.HasKeyword(kw)
+    If has
+      Self.Place(r, k)
+      k = -1"""
 
 PLACE = """    beam.Track(r, Self, lr)
     Tracked[TrackedNext] = r"""
+
+WATCHER = {
+    "start": """Event OnEffectStart(Actor akTarget, Actor akCaster)
+  Me = akTarget
+  Actor player = Game.GetPlayer()
+  If Me == player
+    IsPlayer = True
+    Weapon w = Me.GetEquippedWeapon(False)
+    Self.ApplySpeed(w)
+    Self.RegisterForSingleUpdate(2.0)
+    Return
+  EndIf""",
+    "speed": """      Int n = SpeedKeywords.Length
+      Int i = 0
+      While i < n
+        Keyword k = SpeedKeywords[i]
+        If w.HasKeyword(k)
+          Float f = i as Float""",
+    "apply": """  Self.ApplySpeed(w)
+    Self.RegisterForSingleUpdate(2.0)""",
+    "scan": "Game.FindRandomReferenceOfAnyTypeInList(GunList, x, y, z, ScanRadius)",
+    "arm": """  Armed = True
+  If Me.IsDead()
+    Return
+  EndIf
+  If Self.Carrying()
+    Return
+  EndIf""",
+    "equip": """    Me.AddItem(g, 1, True)
+    Me.AddItem(Bolts, 30, True)
+    Me.EquipItem(f, False, True)""",
+    "drop": """  Me.UnequipItem(w, False, True)
+  ObjectReference drop = Me.DropObject(w, 1)""",
+    "death": """Event OnDeath(Actor akKiller)
+  If IsPlayer
+    Return
+  EndIf
+  Self.Cleanup(akKiller)""",
+    "worthy": """  If Me.HasKeyword(NpcKeyword)
+    Actor player = Game.GetPlayer()
+    If killer == player""",
+}
 
 
 def test_header_and_layout():
@@ -87,30 +95,39 @@ def test_jump_labels_resolve():
     assert pex.write(s)
 
 
+def decompile(tmp_path, script, name):
+    f = tmp_path / f"{name}.pex"
+    f.write_bytes(pex.write(script))
+    subprocess.run([CHAMPOLLION, str(f), "-p", str(tmp_path / "out")], check=True, timeout=30, capture_output=True)
+    return "\n".join(line.rstrip() for line in (tmp_path / "out" / f"{name}.psc").read_text().splitlines())
+
+
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
-    f = tmp_path / "SkylandsClassQuest.pex"
-    f.write_bytes(pex.write(scripts.class_choice_quest()))
-    subprocess.run([CHAMPOLLION, str(f), "-p", str(tmp_path / "out")], check=True, timeout=30, capture_output=True)
-    psc = "\n".join(line.rstrip() for line in (tmp_path / "out" / "SkylandsClassQuest.psc").read_text().splitlines())
+    psc = decompile(tmp_path, scripts.class_choice_quest(), "SkylandsClassQuest")
     assert "ScriptName SkylandsClassQuest Extends Quest" in psc
-    for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto",
-                 "WordOfPower[] Property Words Auto", "Form Property StarterGun Auto", "Form Property StarterAmmo Auto"):
+    for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto", "Form Property StarterGun Auto",
+                 "Form Property StarterAmmo Auto", "Keyword[] Property RarityKeywords Auto", "Activator[] Property Beams Auto",
+                 "Light[] Property Lights Auto", "Bool Property Verbose Auto"):
         assert prop in psc
-    for prop in ("Keyword Property GunKeyword Auto", "Keyword[] Property RarityKeywords Auto", "Activator[] Property Beams Auto",
-                 "Light[] Property Lights Auto", "Form Property GunDrop Auto", "Keyword Property NpcKeyword Auto",
-                 "Int Property ArmChance Auto", "Bool Property Verbose Auto"):
+    for text in (QUEST_EXPECTED, CHOOSE, BEAMS, PLACE):
+        assert text in psc
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_watcher_decompiles_to_intended_papyrus(tmp_path):
+    psc = decompile(tmp_path, scripts.watcher(), "SkylandsWatcher")
+    assert "ScriptName SkylandsWatcher Extends ActiveMagicEffect" in psc
+    for prop in ("SkylandsClassQuest Property Owner Auto", "Keyword[] Property SpeedKeywords Auto", "FormList Property GunList Auto",
+                 "Form Property GunDrop Auto", "Int Property ArmChance Auto", "Float Property ScanRadius Auto"):
         assert prop in psc
-    for text in (EXPECTED, CHOOSE, TICK, SPEED_OF, ARMED, WORTHY, MOURN, DROP, EQUIP, BEAMS, PLACE):
+    for text in WATCHER.values():
         assert text in psc
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_loot_beam_decompiles_to_intended_papyrus(tmp_path):
-    f = tmp_path / "SkylandsLootBeam.pex"
-    f.write_bytes(pex.write(scripts.loot_beam()))
-    subprocess.run([CHAMPOLLION, str(f), "-p", str(tmp_path / "out")], check=True, timeout=30, capture_output=True)
-    psc = "\n".join(line.rstrip() for line in (tmp_path / "out" / "SkylandsLootBeam.psc").read_text().splitlines())
+    psc = decompile(tmp_path, scripts.loot_beam(), "SkylandsLootBeam")
     assert "ScriptName SkylandsLootBeam Extends ObjectReference" in psc
     assert "Function Track(ObjectReference t, SkylandsClassQuest q, ObjectReference l)" in psc
     assert "ok = target.Is3DLoaded()" in psc and "lamp.Delete()" in psc

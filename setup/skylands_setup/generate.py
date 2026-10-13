@@ -20,12 +20,16 @@ from pathlib import Path
 from . import sheet_data as S
 from . import assemble, stats
 from .skyrim import esp, nif, pex, scripts
-from .skyrim.esm import Record, read_plugin
+from .skyrim.bsa import BSA
+from .skyrim.esm import Record, is_localized, read_plugin
+from .skyrim.strings import parse_table
 
 MASTERS = ["Skyrim.esm", "Update.esm", "Dawnguard.esm"]
 PLUGIN = "Skylands.esp"
 BEAM_TEXTURE = "textures\\skylands\\beam.dds"
 ACTOR_TYPE_NPC = 0x00013794  # Skyrim.esm keyword: humanoids
+SPEED_BUCKETS, SPEED_BASE, SPEED_STEP = 48, 0.5, 0.05  # SkylandsSpeed_n keywords: speed = base + step * n
+RACES = r"^(Nord|Breton|Imperial|Redguard|Orc|DarkElf|HighElf|WoodElf|Khajiit|Argonian)Race(Vampire)?$"
 LIGHT_RADIUS = 360  # game units
 LIST_LIMIT = 200  # entries per leveled list (Skyrim allows 255)
 
@@ -167,6 +171,7 @@ def gun_name(g: dict, element: str | None, manufacturers: dict) -> str:
 
 AV_VARIABLE10 = 77  # an actor value nothing uses: the stats effect only displays numbers
 MGEF_AV_AT = 68
+MGEF_ARCHETYPE_SCRIPT = 1
 MGEF_ART_AT = (24, 32, 36, 72, 76, 92, 96, 100, 108, 116, 128, 132, 136)  # light, shaders, projectile, arts, ability, perk
 
 
@@ -249,9 +254,78 @@ def make_lights(p: esp.Plugin, m: Masters, colors: dict[int, tuple[int, int, int
     return out
 
 
+
+class Texts:
+    """Skyrim's own text for string ids (the masters are localized; this plugin is not, so copied names are written out)."""
+
+    def __init__(self, data_dir: Path) -> None:
+        self.dir = Path(data_dir)
+        self.tables: dict[str, dict[int, str]] = {}
+
+    def text(self, kind: str, string_id: int) -> str | None:
+        if kind not in self.tables:
+            try:
+                data = BSA(self.dir / "Skyrim - Interface.bsa").read(f"strings/skyrim_english.{kind}")
+                self.tables[kind] = parse_table(data, kind != "strings")
+            except Exception:  # noqa: BLE001 - reported by the caller as "not localised"
+                self.tables[kind] = {}
+        return self.tables[kind].get(string_id)
+
+
+def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: dict) -> int:
+    """The ability that runs the SkylandsWatcher script, given to every humanoid race (so to everybody).
+    Returns the ability's form id."""
+    template = m.need("MGEF", "AbWeaknessFireConstant")
+    mg = esp.Rec("MGEF", p.new_id(), [])
+    mg.add("EDID", esp.zstr("SkylandsWatcher")).add("VMAD", esp.vmad([("SkylandsWatcher", props)]))
+    mg.add("FULL", esp.zstr("Skylands"))
+    data = bytearray(template.first("DATA") or b"\0" * 152)
+    if len(data) >= 92:
+        flags = struct.unpack_from("<I", data)[0] & ~0x5  # not hostile, not detrimental
+        struct.pack_into("<I", data, 0, flags)
+        struct.pack_into("<I", data, 64, MGEF_ARCHETYPE_SCRIPT)
+        struct.pack_into("<i", data, MGEF_AV_AT, -1)
+        struct.pack_into("<i", data, 88, -1)
+        for at in MGEF_ART_AT:
+            if len(data) >= at + 4:
+                struct.pack_into("<I", data, at, 0)
+    mg.add("DATA", bytes(data))
+    p.override(mg)
+    ability = spell(p, "SkylandsWatcherAbility", "", "",
+                    struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0),
+                    [(mg.form_id, 0.0, 0, 0)])
+    races = 0
+    for race in sorted(m.by_type["RACE"].values(), key=lambda r: r.edid):
+        if not re.match(RACES, race.edid):
+            continue
+        rec = copy(race)
+        ok = True
+        for sig, kind in (("FULL", "strings"), ("DESC", "dlstrings")):
+            d = rec.get(sig)
+            if d is not None and len(d) == 4:
+                text = texts.text(kind, struct.unpack("<I", d)[0])
+                if text is None:
+                    ok = False
+                    break
+                rec.set(sig, esp.zstr(text))
+        if not ok:
+            report.setdefault("race_skipped", []).append(race.edid)
+            continue
+        spells = [d for sg, d in rec.subs if sg == "SPLO"] + [esp.u32(ability.form_id)]
+        anchor = next((i for i, (sg, _) in enumerate(rec.subs) if sg in ("SPCT", "SPLO")), None)
+        if anchor is None:
+            anchor = next((i + 1 for i, (sg, _) in reversed(list(enumerate(rec.subs))) if sg in ("DESC", "FULL")), len(rec.subs))
+        rec.drop("SPCT", "SPLO")
+        rec.subs[anchor:anchor] = [("SPCT", esp.u32(len(spells)))] + [("SPLO", d) for d in spells]
+        p.override(rec)
+        races += 1
+    report["watched_races"] = races
+    return ability.form_id
+
+
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     data_dir = Path(skyrim_dir) / "Data"
-    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH"})
+    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE"})
     p = esp.Plugin(PLUGIN, MASTERS)
     report: dict = {"guns": 0, "renamed_enemies": 0, "loot_lists": 0, "classes": []}
     rnd = random.Random(seed)
@@ -274,6 +348,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     # Keywords the scripts look for: one on every Skylands gun, and one per rarity (picks the beam).
     gun_keyword = p.new("KYWD", "SkylandsGun").form_id
     rarity_keywords = {row.level: p.new("KYWD", f"SkylandsRarity_{row.id}").form_id for row in S.RARITIES.values()}
+    quest = p.new("QUST", "SkylandsClassQuest")
+    speed_keywords = [p.new("KYWD", f"SkylandsSpeed_{i}").form_id for i in range(SPEED_BUCKETS)]
     lights = make_lights(p, m, {row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()}, report)
 
     # ---- guns ---------------------------------------------------------------------------------
@@ -309,12 +385,13 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
             w.set("EDID", esp.zstr(edid))
             insert_ordered(w, "FULL", esp.zstr(name), WEAP_ORDER)
             kwda = w.get("KWDA") or b""
-            keywords = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_keyword, rarity_keywords[rr.level]]
+            bucket = min(SPEED_BUCKETS - 1, max(0, round((half - SPEED_BASE) / SPEED_STEP)))
+            keywords = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_keyword, rarity_keywords[rr.level], speed_keywords[bucket]]
             insert_ordered(w, "KSIZ", struct.pack("<I", len(keywords)), WEAP_ORDER)
             insert_ordered(w, "KWDA", struct.pack(f"<{len(keywords)}I", *keywords), WEAP_ORDER)
             text = stats.describe(st, element, manufacturers.get(g["manufacturer"], g["manufacturer"]),
                                   g.get("clip", 0), assemble.parts_line(built["parts"]))
-            ench = gun_enchant(p, edid, half, text, st["element_mult"], base_enchant.get(element) or any_enchant,
+            ench = gun_enchant(p, edid, 0.0, text, st["element_mult"], base_enchant.get(element) or any_enchant,
                                element is not None, stats_mgef)
             insert_ordered(w, "EITM", esp.u32(ench), WEAP_ORDER)
             insert_ordered(w, "EAMT", u16(65535), WEAP_ORDER)
@@ -364,6 +441,19 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         p.override(lst)
         report["loot_lists"] += 1
     starter_gun = rnd.choice(starters) if starters else next(iter(by_rarity[min(by_rarity)]))
+    gun_list = p.new("FLST", "SkylandsGunList")  # every gun: the player's script finds ones lying nearby with it
+    for ids in by_rarity.values():
+        for fid in ids:
+            gun_list.add("LNAM", esp.u32(fid))
+    watcher_props = [
+        ("Owner", esp.P_OBJECT, quest.form_id), ("GunKeyword", esp.P_OBJECT, gun_keyword),
+        ("SpeedKeywords", esp.P_OBJECT_ARRAY, speed_keywords), ("GunList", esp.P_OBJECT, gun_list.form_id),
+        ("GunDrop", esp.P_OBJECT, drop_any.form_id), ("GunDropGood", esp.P_OBJECT, drop_good.form_id),
+        ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC), ("Bolts", esp.P_OBJECT, bolts.form_id),
+        ("ArmChance", esp.P_INT, int(G.arm_chance)), ("DropChance", esp.P_INT, int(G.drop_chance)),
+        ("GoodLevel", esp.P_INT, int(G.good_level)), ("ScanRadius", esp.P_FLOAT, float(G.scan_radius)),
+        ("Verbose", esp.P_BOOL, bool(G.verbose))]
+    make_watcher(p, m, Texts(data_dir), watcher_props, report)
 
     # ---- vault hunters ---------------------------------------------------------------------------
     fus = next((w for w in m.by_type["WOOP"].values() if w.edid == "WordFus"), None)
@@ -408,19 +498,13 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     msg.add("DNAM", esp.u32(1)).add("TNAM", esp.u32(0))
     for b in buttons:
         msg.add("ITXT", esp.zstr(b))
-    quest = p.new("QUST", "SkylandsClassQuest")
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
         ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
-        ("GunKeyword", esp.P_OBJECT, gun_keyword),
         ("RarityKeywords", esp.P_OBJECT_ARRAY, [rarity_keywords[k] for k in sorted(rarity_keywords)]),
         ("Beams", esp.P_OBJECT_ARRAY, [beams[k] for k in sorted(beams)]),
         ("Lights", esp.P_OBJECT_ARRAY, [lights[k] for k in sorted(lights)] if len(lights) == len(beams) else []),
-        ("GunDrop", esp.P_OBJECT, drop_any.form_id), ("GunDropGood", esp.P_OBJECT, drop_good.form_id),
-        ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC),
-        ("ArmChance", esp.P_INT, int(G.arm_chance)), ("DropChance", esp.P_INT, int(G.drop_chance)),
-        ("GoodLevel", esp.P_INT, int(G.good_level)), ("ArmPerScan", esp.P_INT, int(G.arm_per_scan)),
-        ("ScanRadius", esp.P_FLOAT, float(G.scan_radius)), ("Verbose", esp.P_BOOL, bool(G.verbose))])], quest=True))
+        ("Verbose", esp.P_BOOL, bool(G.verbose))])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 
@@ -456,5 +540,6 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     (out_data / PLUGIN).write_bytes(p.encode())
     (out_data / "Scripts" / "SkylandsClassQuest.pex").write_bytes(pex.write(scripts.class_choice_quest()))
     (out_data / "Scripts" / "SkylandsLootBeam.pex").write_bytes(pex.write(scripts.loot_beam()))
+    (out_data / "Scripts" / "SkylandsWatcher.pex").write_bytes(pex.write(scripts.watcher()))
     report["records"] = len(p.records)
     return report

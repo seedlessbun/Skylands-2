@@ -44,6 +44,8 @@ def _attr_value(ix: Index, init: dict | None, errors: list[str], what: str) -> f
         return round(float(base["BaseValueConstant"]) * float(base.get("BaseValueScaleConstant", 1.0))
                      * float(init.get("BaseValueScaleConstant", 1.0)), 3)
     resolver = _first(props.get("ValueResolverChain"))
+    if resolver and "ManufacturerAttributeValueResolver" in str(resolver):
+        return None  # "this gun is made by X" markers: no number to read, nothing to report
     if not resolver:
         errors.append(f"{what}: {attr} has no value resolver")
         return None

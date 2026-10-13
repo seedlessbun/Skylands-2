@@ -49,7 +49,7 @@ README = f"""Skylands {VERSION} test build: Skyrim played as a Borderlands vault
 4. About two seconds after you can move, a "Choose your Vault Hunter" box appears. Pick one. You get that
    vault hunter's action skill, a starter pistol (equipped) and 60 bolts. Use a NEW game or a save from
    before you chose: a save that already chose a vault hunter will not get the starter pistol again.
-5. What to look for: your starter pistol, a "Skylands gun speed" message when you equip a gun, bandits that carry
+5. What to look for (no Skyrim script extender is needed): your starter pistol, a "Skylands gun speed" message when you equip a gun, bandits that carry
    guns (a message names them), guns dropping on the ground when they die with a coloured beam and light over
    them, and a stats line on every gun. If something is missing, send work\\skylands-setup.log, work\\parts-summary.json
    and a screenshot.
@@ -64,7 +64,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-5.zip"
+    out = dist / "Skylands-TestBuild-6.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

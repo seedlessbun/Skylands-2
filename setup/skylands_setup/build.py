@@ -21,7 +21,7 @@ from . import generate
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 
 def enable_plugin(plugin: str) -> Path | None:
@@ -147,7 +147,9 @@ def main(argv: list[str]) -> int:
         report = generate.generate(data, sky, stage)
         (work / "generate-report.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
         say(f"Built Skylands.esp: {report['records']} records, {report['guns']} guns, "
-            f"{report['renamed_enemies']} bandit records renamed, {report['loot_lists']} loot lists extended")
+            f"{report['renamed_enemies']} bandit records renamed, {report['loot_lists']} loot lists extended, "
+            f"{report.get('watched_races', 0)} races carry the Skylands ability"
+            + (f" (skipped: {', '.join(report['race_skipped'])})" if report.get("race_skipped") else ""))
         if a.stage_only:
             say(f"Staged only, in {stage}")
             return 0

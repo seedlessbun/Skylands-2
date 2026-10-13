@@ -118,13 +118,12 @@ class GenerationRow:
     arm_chance: int
     drop_chance: int
     good_level: int
-    arm_per_scan: int
     scan_radius: int
     verbose: int
 
 
 GENERATION: dict[str, GenerationRow] = {
-    'main': GenerationRow(id='main', arm_chance=35, drop_chance=40, good_level=25, arm_per_scan=2, scan_radius=5000, verbose=1),
+    'main': GenerationRow(id='main', arm_chance=35, drop_chance=40, good_level=25, scan_radius=5000, verbose=1),
 }
 
 @dataclass(frozen=True)

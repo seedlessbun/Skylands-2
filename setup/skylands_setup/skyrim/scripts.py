@@ -36,39 +36,34 @@ def notify(*parts, msg=("id", "msg")):
 
 
 def class_choice_quest() -> Script:
-    """SkylandsClassQuest extends Quest: the vault hunter choice, then a once-a-second tick that
+    """SkylandsClassQuest extends Quest.
 
-      * applies the equipped Skylands gun's speed to the player (the speed is the magnitude of the
-        last effect of the gun's enchantment),
-      * every other tick scans the player's cell: puts rarity beams and lights on Skylands guns lying
-        on the ground, hands guns to some hostile humanoids (they wield them), and when a hostile
-        humanoid is dead drops its gun - or, sometimes, a new one - on the ground with a beam.
+    * Shows the vault hunter choice once the player can move, teaches and equips that vault hunter's
+      shout, and hands over the starter gun and ammo.
+    * Keeps the loot beams: Consider(ref) puts a rarity-coloured beam and light on a Skylands gun lying
+      on the ground (once per gun), Forget(ref) lets a gun get a new beam later.
 
-    Properties: ClassChoice, Shouts, Words, StarterGun, StarterAmmo, GunKeyword, RarityKeywords[6], Beams[6],
-    Lights[6], GunDrop, GunDropGood, NpcKeyword, ArmChance, DropChance, GoodLevel, ArmPerScan, ScanRadius, Verbose.
+    Properties: ClassChoice, Shouts, Words, StarterGun, StarterAmmo, RarityKeywords[6], Beams[6], Lights[6], Verbose.
     """
     on_init = Function(
         "OnInit",
         locals=[("::nonevar", "None")],
-        code=[("array_create", ("id", "Tracked"), ("int", 48)), ("array_create", ("id", "DeadSeen"), ("int", 64)),
-              ("array_create", ("id", "ArmSeen"), ("int", 64)),
+        code=[("array_create", ("id", "Tracked"), ("int", 48)),
               ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)],
     )
     on_update = Function(
         "OnUpdate",
         locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
-            ("not", ("id", "::temp0"), ("id", "Chosen")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "ticking")),
             call("Choose"),
-            ("label", "ticking"),
             ("jmpf", ("id", "Chosen"), ("lbl", "again")),
-            call("Tick"),
+            ("return", None),
             ("label", "again"),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
             ("return", None),
         ],
     )
+    # NB: jmpf Chosen jumps when NOT chosen: wait one more second and look again.
     choose = Function(
         "Choose",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("choice", "Int"), ("player", "Actor"),
@@ -101,351 +96,12 @@ def class_choice_quest() -> Script:
             ("return", None),
         ],
     )
-    speed_of = Function(
-        "SpeedOf",
-        return_type="Float",
-        params=[("w", "Weapon")],
-        locals=[("::temp0", "Bool"), ("::temp1", "Bool"), ("e", "Enchantment"), ("n", "Int"), ("v", "Float")],
-    )
-    speed_of.code = [
-        ("cast", ("id", "::temp1"), ("id", "w")),
-        ("jmpf", ("id", "::temp1"), ("lbl", "none")),
-        ("callmethod", ("id", "HasKeyword"), ("id", "w"), ("id", "::temp0"), ("id", "::GunKeyword_var")),
-        ("jmpf", ("id", "::temp0"), ("lbl", "none")),
-        ("callmethod", ("id", "GetEnchantment"), ("id", "w"), ("id", "e")),
-        ("cast", ("id", "::temp1"), ("id", "e")),
-        ("jmpf", ("id", "::temp1"), ("lbl", "none")),
-        ("callmethod", ("id", "GetNumEffects"), ("id", "e"), ("id", "n")),
-        ("cmp_lt", ("id", "::temp0"), ("id", "n"), ("int", 1)),
-        ("jmpf", ("id", "::temp0"), ("lbl", "read")),
-        ("return", ("float", 1.0)),
-        ("label", "read"),
-        ("isub", ("id", "n"), ("id", "n"), ("int", 1)),
-        ("callmethod", ("id", "GetNthEffectMagnitude"), ("id", "e"), ("id", "v"), ("id", "n")),
-        ("cmp_lt", ("id", "::temp0"), ("id", "v"), ("float", 0.2)),
-        ("jmpf", ("id", "::temp0"), ("lbl", "ok")),
-        ("return", ("float", 1.0)),
-        ("label", "ok"),
-        ("return", ("id", "v")),
-        ("label", "none"),
-        ("return", ("float", 1.0)),
-    ]
-    tick = Function(
-        "Tick",
-        locals=[("::nonevar", "None"), ("player", "Actor"), ("w", "Weapon"), ("want", "Float"), ("::temp0", "Bool"),
-                ("::temp1", "Bool"), ("msg", "String"), ("part", "String"), ("got", "Float")],
-        code=[
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "GetEquippedWeapon"), ("id", "player"), ("id", "w"), ("bool", False)),
-            ("callmethod", ("id", "SpeedOf"), SELF, ("id", "want"), ("id", "w")),
-            ("cmp_eq", ("id", "::temp0"), ("id", "want"), ("id", "Speed")),
-            ("not", ("id", "::temp1"), ("id", "::temp0")),
-            ("jmpf", ("id", "::temp1"), ("lbl", "scan")),  # unchanged: nothing to apply
-            ("assign", ("id", "Speed"), ("id", "want")),
-            ("callmethod", ("id", "SetActorValue"), ("id", "player"), NONE, ("str", "WeaponSpeedMult"), ("id", "want")),
-            ("cmp_eq", ("id", "::temp0"), ("id", "want"), ("float", 1.0)),
-            ("not", ("id", "::temp1"), ("id", "::temp0")),
-            ("jmpf", ("id", "::temp1"), ("lbl", "scan")),  # back to normal speed: no message
-            ("cast", ("id", "msg"), ("id", "want")),
-            ("callmethod", ("id", "GetActorValue"), ("id", "player"), ("id", "got"), ("str", "WeaponSpeedMult")),
-            ("cast", ("id", "part"), ("id", "got")),
-            ("strcat", ("id", "msg"), ("str", "Skylands gun speed x"), ("id", "msg")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " (game reports ")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "part")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ")")),
-            ("callstatic", ("id", "Debug"), ("id", "Notification"), NONE, ("id", "msg")),
-            ("label", "scan"),
-            ("not", ("id", "ScanNow"), ("id", "ScanNow")),
-            ("jmpf", ("id", "ScanNow"), ("lbl", "end")),
-            call("Scan"),
-            ("label", "end"),
-            ("return", None),
-        ],
-    )
-
-    def scan_loop(kind: int, actors: bool) -> list[tuple]:
-        tag = "a" if actors else "w"
-        return [
-            ("callmethod", ("id", "GetNumRefs"), ("id", "cell"), ("id", "n"), ("int", kind)),
-            ("assign", ("id", "i"), ("int", 0)),
-            ("label", f"{tag}_loop"),
-            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("id", "n")),
-            ("jmpf", ("id", "::temp0"), ("lbl", f"{tag}_done")),
-            ("callmethod", ("id", "GetNthRef"), ("id", "cell"), ("id", "r"), ("id", "i"), ("int", kind)),
-            call("Handle" if actors else "Consider", ("id", "r")),
-            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
-            ("jmp", ("lbl", f"{tag}_loop")),
-            ("label", f"{tag}_done"),
-        ]
-
-    scan = Function(
-        "Scan",
-        locals=[("::nonevar", "None"), ("player", "Actor"), ("cell", "Cell"), ("n", "Int"), ("i", "Int"),
-                ("r", "ObjectReference"), ("::temp0", "Bool")],
-        code=[
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "GetParentCell"), ("id", "player"), ("id", "cell")),
-            ("cast", ("id", "::temp0"), ("id", "cell")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "nocell")),
-            ("assign", ("id", "Budget"), ("id", "::ArmPerScan_var")),
-            *scan_loop(41, False),  # weapons lying in the world
-            *scan_loop(43, True),   # people: the living may be armed, the dead drop guns
-            ("return", None),
-            ("label", "nocell"),
-            ("return", None),
-        ],
-    )
-    handle = Function(
-        "Handle",
-        params=[("r", "ObjectReference")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("::temp1", "Bool"), ("a", "Actor"), ("player", "Actor"),
-                ("d", "Float")],
-        code=[
-            ("cast", ("id", "a"), ("id", "r")),
-            ("cast", ("id", "::temp0"), ("id", "a")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("cmp_eq", ("id", "::temp0"), ("id", "a"), ("id", "player")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "other")),
-            ("return", None),
-            ("label", "other"),
-            ("callmethod", ("id", "GetDistance"), ("id", "r"), ("id", "d"), ("id", "player")),
-            ("cmp_lte", ("id", "::temp0"), ("id", "d"), ("id", "::ScanRadius_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("callmethod", ("id", "IsDead"), ("id", "a"), ("id", "::temp1")),
-            ("jmpf", ("id", "::temp1"), ("lbl", "alive")),
-            call("Mourn", ("id", "a")),
-            ("return", None),
-            ("label", "alive"),
-            call("Arm", ("id", "a")),
-            ("label", "end"),
-            ("return", None),
-        ],
-    )
-    seen = Function(
-        "Seen",
-        return_type="Bool",
-        params=[("ring", "ObjectReference[]"), ("r", "ObjectReference")],
-        locals=[("::temp0", "Bool"), ("i", "Int"), ("n", "Int"), ("e", "ObjectReference")],
-        code=[
-            ("array_length", ("id", "n"), ("id", "ring")),
-            ("assign", ("id", "i"), ("int", 0)),
-            ("label", "loop"),
-            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("id", "n")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
-            ("array_getelement", ("id", "e"), ("id", "ring"), ("id", "i")),
-            ("cmp_eq", ("id", "::temp0"), ("id", "e"), ("id", "r")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "cont")),
-            ("return", ("bool", True)),
-            ("label", "cont"),
-            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
-            ("jmp", ("lbl", "loop")),
-            ("label", "no"),
-            ("return", ("bool", False)),
-        ],
-    )
-    note = Function(
-        "Note",
-        params=[("ring", "ObjectReference[]"), ("at", "Int"), ("r", "ObjectReference")],
-        locals=[("::nonevar", "None")],
-        code=[("array_setelement", ("id", "ring"), ("id", "at"), ("id", "r")), ("return", None)],
-    )
-    eligible = Function(
-        "Eligible",
-        return_type="Bool",
-        params=[("a", "Actor")],
-        locals=[("::temp0", "Bool"), ("player", "Actor")],
-        code=[
-            ("callmethod", ("id", "HasKeyword"), ("id", "a"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "IsHostileToActor"), ("id", "a"), ("id", "::temp0"), ("id", "player")),
-            ("return", ("id", "::temp0")),
-            ("label", "no"),
-            ("return", ("bool", False)),
-        ],
-    )
-    worthy = Function(
-        "Worthy",
-        return_type="Bool",
-        params=[("a", "Actor")],
-        locals=[("::temp0", "Bool"), ("player", "Actor"), ("killer", "Actor")],
-        code=[
-            ("callmethod", ("id", "HasKeyword"), ("id", "a"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "GetKiller"), ("id", "a"), ("id", "killer")),
-            ("cmp_eq", ("id", "::temp0"), ("id", "killer"), ("id", "player")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "hostile")),
-            ("return", ("bool", True)),
-            ("label", "hostile"),
-            ("callmethod", ("id", "IsHostileToActor"), ("id", "a"), ("id", "::temp0"), ("id", "player")),
-            ("return", ("id", "::temp0")),
-            ("label", "no"),
-            ("return", ("bool", False)),
-        ],
-    )
-    roll = Function(
-        "Roll",
-        return_type="Bool",
-        params=[("pct", "Int")],
-        locals=[("::temp0", "Int"), ("::temp1", "Bool")],
-        code=[
-            ("callstatic", ("id", "Utility"), ("id", "RandomInt"), ("id", "::temp0"), ("int", 1), ("int", 100)),
-            ("cmp_lte", ("id", "::temp1"), ("id", "::temp0"), ("id", "pct")),
-            ("return", ("id", "::temp1")),
-        ],
-    )
-    list_for = Function(
-        "ListFor",
-        return_type="Form",
-        params=[("a", "Actor")],
-        locals=[("::temp0", "Bool"), ("level", "Int")],
-        code=[
-            ("callmethod", ("id", "GetLevel"), ("id", "a"), ("id", "level")),
-            ("cmp_gte", ("id", "::temp0"), ("id", "level"), ("id", "::GoodLevel_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "plain")),
-            ("return", ("id", "::GunDropGood_var")),
-            ("label", "plain"),
-            ("return", ("id", "::GunDrop_var")),
-        ],
-    )
-    own_drop = Function(
-        "OwnDrop",
-        return_type="ObjectReference",
-        params=[("a", "Actor")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon"), ("drop", "ObjectReference")],
-        code=[
-            ("callmethod", ("id", "GetEquippedWeapon"), ("id", "a"), ("id", "w"), ("bool", False)),
-            ("cast", ("id", "::temp0"), ("id", "w")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
-            ("callmethod", ("id", "HasKeyword"), ("id", "w"), ("id", "::temp0"), ("id", "::GunKeyword_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
-            ("callmethod", ("id", "UnequipItem"), ("id", "a"), NONE, ("id", "w"), ("bool", False), ("bool", True)),
-            ("callmethod", ("id", "DropObject"), ("id", "a"), ("id", "drop"), ("id", "w"), ("int", 1)),
-            ("return", ("id", "drop")),
-            ("label", "none"),
-            ("return", None),
-        ],
-    )
-    bonus_drop = Function(
-        "BonusDrop",
-        return_type="ObjectReference",
-        params=[("a", "Actor")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("list", "Form"), ("drop", "ObjectReference")],
-        code=[
-            ("callmethod", ("id", "Worthy"), SELF, ("id", "::temp0"), ("id", "a")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
-            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::DropChance_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
-            ("callmethod", ("id", "ListFor"), SELF, ("id", "list"), ("id", "a")),
-            ("callmethod", ("id", "PlaceAtMe"), ("id", "a"), ("id", "drop"), ("id", "list"), ("int", 1), ("bool", False),
-             ("bool", False)),
-            ("return", ("id", "drop")),
-            ("label", "none"),
-            ("return", None),
-        ],
-    )
-    announce = Function(
-        "Announce",
-        params=[("drop", "ObjectReference")],
-        locals=[("::nonevar", "None"), ("msg", "String"), ("name", "String")],
-        code=[
-            call("Consider", ("id", "drop")),
-            ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
-            ("callmethod", ("id", "GetDisplayName"), ("id", "drop"), ("id", "name")),
-            *notify(("str", "Skylands drop: "), ("id", "name")),
-            ("label", "end"),
-            ("return", None),
-        ],
-    )
-    mourn = Function(
-        "Mourn",
-        params=[("a", "Actor")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("drop", "ObjectReference")],
-        code=[
-            ("callmethod", ("id", "Seen"), SELF, ("id", "::temp0"), ("id", "DeadSeen"), ("id", "a")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "fresh")),
-            ("return", None),
-            ("label", "fresh"),
-            call("Note", ("id", "DeadSeen"), ("id", "DeadNext"), ("id", "a")),
-            ("iadd", ("id", "DeadNext"), ("id", "DeadNext"), ("int", 1)),
-            ("imod", ("id", "DeadNext"), ("id", "DeadNext"), ("int", 64)),
-            ("callmethod", ("id", "OwnDrop"), SELF, ("id", "drop"), ("id", "a")),
-            ("cast", ("id", "::temp0"), ("id", "drop")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "bonus")),
-            call("Announce", ("id", "drop")),
-            ("return", None),
-            ("label", "bonus"),
-            ("callmethod", ("id", "BonusDrop"), SELF, ("id", "drop"), ("id", "a")),
-            ("cast", ("id", "::temp0"), ("id", "drop")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            call("Announce", ("id", "drop")),
-            ("label", "end"),
-            ("return", None),
-        ],
-    )
-    equip = Function(
-        "Equip",
-        params=[("a", "Actor")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("g", "ObjectReference"), ("f", "Form"), ("msg", "String"),
-                ("name", "String"), ("what", "String"), ("list", "Form")],
-        code=[
-            ("callmethod", ("id", "ListFor"), SELF, ("id", "list"), ("id", "a")),
-            ("callmethod", ("id", "PlaceAtMe"), ("id", "a"), ("id", "g"), ("id", "list"), ("int", 1), ("bool", False),
-             ("bool", False)),
-            ("cast", ("id", "::temp0"), ("id", "g")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("callmethod", ("id", "GetBaseObject"), ("id", "g"), ("id", "f")),
-            ("callmethod", ("id", "AddItem"), ("id", "a"), NONE, ("id", "g"), ("int", 1), ("bool", True)),
-            ("callmethod", ("id", "AddItem"), ("id", "a"), NONE, ("id", "::StarterAmmo_var"), ("int", 30), ("bool", True)),
-            ("callmethod", ("id", "EquipItem"), ("id", "a"), NONE, ("id", "f"), ("bool", False), ("bool", True)),
-            ("callmethod", ("id", "EquipItem"), ("id", "a"), NONE, ("id", "::StarterAmmo_var"), ("bool", False),
-             ("bool", True)),
-            ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
-            ("callmethod", ("id", "GetDisplayName"), ("id", "a"), ("id", "name")),
-            ("callmethod", ("id", "GetName"), ("id", "f"), ("id", "what")),
-            *notify(("id", "name"), ("str", " carries "), ("id", "what")),
-            ("label", "end"),
-            ("return", None),
-        ],
-    )
-    arm = Function(
-        "Arm",
-        params=[("a", "Actor")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
-        code=[
-            ("cmp_lt", ("id", "::temp0"), ("id", "Budget"), ("int", 1)),
-            ("jmpf", ("id", "::temp0"), ("lbl", "go")),
-            ("return", None),
-            ("label", "go"),
-            ("callmethod", ("id", "Seen"), SELF, ("id", "::temp0"), ("id", "ArmSeen"), ("id", "a")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "fresh")),
-            ("return", None),
-            ("label", "fresh"),
-            call("Note", ("id", "ArmSeen"), ("id", "ArmNext"), ("id", "a")),
-            ("iadd", ("id", "ArmNext"), ("id", "ArmNext"), ("int", 1)),
-            ("imod", ("id", "ArmNext"), ("id", "ArmNext"), ("int", 64)),
-            ("callmethod", ("id", "Eligible"), SELF, ("id", "::temp0"), ("id", "a")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::ArmChance_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("isub", ("id", "Budget"), ("id", "Budget"), ("int", 1)),
-            call("Equip", ("id", "a")),
-            ("label", "end"),
-            ("return", None),
-        ],
-    )
     consider = Function(
         "Consider",
         params=[("r", "ObjectReference")],
-        locals=[("::nonevar", "None"), ("player", "Actor"), ("d", "Float"), ("::temp0", "Bool"), ("k", "Int"),
-                ("kw", "Keyword"), ("base", "Form"), ("has", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("k", "Int"), ("kw", "Keyword"), ("base", "Form"),
+                ("has", "Bool")],
         code=[
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "GetDistance"), ("id", "r"), ("id", "d"), ("id", "player")),
-            ("cmp_lte", ("id", "::temp0"), ("id", "d"), ("id", "::ScanRadius_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "far")),
             ("callmethod", ("id", "GetBaseObject"), ("id", "r"), ("id", "base")),
             ("assign", ("id", "k"), ("int", 5)),
             ("label", "loop"),
@@ -462,8 +118,6 @@ def class_choice_quest() -> Script:
             ("label", "again"),
             ("jmp", ("lbl", "loop")),
             ("label", "end"),
-            ("return", None),
-            ("label", "far"),
             ("return", None),
         ],
     )
@@ -536,19 +190,386 @@ def class_choice_quest() -> Script:
     return Script(
         name="SkylandsClassQuest",
         parent="Quest",
-        variables=[("Chosen", "Bool", ("bool", False)), ("Speed", "Float", ("float", 0.0)),
-                   ("ScanNow", "Bool", ("bool", False)), ("Budget", "Int", ("int", 0)),
-                   ("TrackedNext", "Int", ("int", 0)), ("DeadNext", "Int", ("int", 0)), ("ArmNext", "Int", ("int", 0)),
-                   ("Tracked", "ObjectReference[]", None), ("DeadSeen", "ObjectReference[]", None),
-                   ("ArmSeen", "ObjectReference[]", None)],
+        variables=[("Chosen", "Bool", ("bool", False)), ("TrackedNext", "Int", ("int", 0)),
+                   ("Tracked", "ObjectReference[]", None)],
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
-                         ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("GunKeyword", "Keyword"),
-                         ("RarityKeywords", "Keyword[]"), ("Beams", "Activator[]"), ("Lights", "Light[]"),
-                         ("GunDrop", "Form"), ("GunDropGood", "Form"), ("NpcKeyword", "Keyword"),
-                         ("ArmChance", "Int"), ("DropChance", "Int"), ("GoodLevel", "Int"), ("ArmPerScan", "Int"),
+                         ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("RarityKeywords", "Keyword[]"),
+                         ("Beams", "Activator[]"), ("Lights", "Light[]"), ("Verbose", "Bool")],
+        functions=[on_init, on_update, choose, consider, place, forget],
+    )
+
+
+def watcher() -> Script:
+    """SkylandsWatcher extends ActiveMagicEffect: the effect of an ability every humanoid race (and so
+    every person, and the player) carries. It runs once per person.
+
+    On the player: applies the equipped Skylands gun's speed as the player's WeaponSpeedMult (the speed is
+    a "SkylandsSpeed_n" keyword on the gun) and, every 2 seconds, looks for Skylands guns lying near the
+    player to give beams (Owner.Consider).
+    On anyone else: a few seconds after loading, hostile humanoids may get a gun and ammo and wield it;
+    when one dies its gun, or sometimes a new one, is dropped on the ground with a beam.
+
+      Event OnEffectStart(Actor akTarget, Actor akCaster)
+      Event OnUpdate()
+      Event OnDeath(Actor akKiller)
+      Event OnObjectEquipped(Form akBaseObject, ObjectReference akReference)
+      Event OnObjectUnequipped(Form akBaseObject, ObjectReference akReference)
+    """
+    on_start = Function(
+        "OnEffectStart",
+        params=[("akTarget", "Actor"), ("akCaster", "Actor")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("w", "Weapon"), ("delay", "Float")],
+        code=[
+            ("assign", ("id", "Me"), ("id", "akTarget")),
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "Me"), ("id", "player")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "other")),
+            ("assign", ("id", "IsPlayer"), ("bool", True)),
+            ("callmethod", ("id", "GetEquippedWeapon"), ("id", "Me"), ("id", "w"), ("bool", False)),
+            call("ApplySpeed", ("id", "w")),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)),
+            ("return", None),
+            ("label", "other"),
+            ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 1.5), ("float", 4.0)),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "delay")),
+            ("return", None),
+        ],
+    )
+    on_update = Function(
+        "OnUpdate",
+        locals=[("::nonevar", "None")],
+        code=[
+            ("jmpf", ("id", "IsPlayer"), ("lbl", "other")),
+            call("Scan"),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)),
+            ("return", None),
+            ("label", "other"),
+            call("TryArm"),
+            ("return", None),
+        ],
+    )
+    on_equipped = Function(
+        "OnObjectEquipped",
+        params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
+        code=[
+            ("jmpf", ("id", "IsPlayer"), ("lbl", "end")),
+            ("cast", ("id", "w"), ("id", "akBaseObject")),
+            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            call("ApplySpeed", ("id", "w")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    on_unequipped = Function(
+        "OnObjectUnequipped",
+        params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
+        code=[
+            ("jmpf", ("id", "IsPlayer"), ("lbl", "end")),
+            ("cast", ("id", "w"), ("id", "akBaseObject")),
+            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "GetEquippedWeapon"), ("id", "Me"), ("id", "w"), ("bool", False)),
+            call("ApplySpeed", ("id", "w")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    apply_speed = Function(
+        "ApplySpeed",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("::temp1", "Bool"), ("want", "Float"), ("got", "Float"),
+                ("msg", "String"), ("part", "String")],
+        code=[
+            ("callmethod", ("id", "SpeedOf"), SELF, ("id", "want"), ("id", "w")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "want"), ("id", "Speed")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "change")),
+            ("return", None),
+            ("label", "change"),
+            ("assign", ("id", "Speed"), ("id", "want")),
+            ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "WeaponSpeedMult"), ("id", "want")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "want"), ("float", 1.0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "say")),
+            ("return", None),
+            ("label", "say"),
+            ("cast", ("id", "msg"), ("id", "want")),
+            ("callmethod", ("id", "GetActorValue"), ("id", "Me"), ("id", "got"), ("str", "WeaponSpeedMult")),
+            ("cast", ("id", "part"), ("id", "got")),
+            ("strcat", ("id", "msg"), ("str", "Skylands gun speed x"), ("id", "msg")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " (game reports ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "part")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ")")),
+            ("callstatic", ("id", "Debug"), ("id", "Notification"), NONE, ("id", "msg")),
+            ("return", None),
+        ],
+    )
+    speed_of = Function(
+        "SpeedOf",
+        return_type="Float",
+        params=[("w", "Weapon")],
+        locals=[("::temp0", "Bool"), ("::temp1", "Bool"), ("i", "Int"), ("n", "Int"), ("k", "Keyword"), ("f", "Float")],
+        code=[
+            ("cast", ("id", "::temp1"), ("id", "w")),
+            ("jmpf", ("id", "::temp1"), ("lbl", "none")),
+            ("callmethod", ("id", "HasKeyword"), ("id", "w"), ("id", "::temp0"), ("id", "::GunKeyword_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
+            ("array_length", ("id", "n"), ("id", "::SpeedKeywords_var")),
+            ("assign", ("id", "i"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("id", "n")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("array_getelement", ("id", "k"), ("id", "::SpeedKeywords_var"), ("id", "i")),
+            ("callmethod", ("id", "HasKeyword"), ("id", "w"), ("id", "::temp0"), ("id", "k")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "next")),
+            ("cast", ("id", "f"), ("id", "i")),
+            ("fmul", ("id", "f"), ("id", "f"), ("float", 0.05)),
+            ("fadd", ("id", "f"), ("id", "f"), ("float", 0.5)),
+            ("return", ("id", "f")),
+            ("label", "next"),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "done"),
+            ("return", ("float", 1.0)),
+            ("label", "none"),
+            ("return", ("float", 1.0)),
+        ],
+    )
+    scan = Function(
+        "Scan",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("tries", "Int"), ("r", "ObjectReference"), ("x", "Float"),
+                ("y", "Float"), ("z", "Float")],
+        code=[
+            ("callmethod", ("id", "GetPositionX"), ("id", "Me"), ("id", "x")),
+            ("callmethod", ("id", "GetPositionY"), ("id", "Me"), ("id", "y")),
+            ("callmethod", ("id", "GetPositionZ"), ("id", "Me"), ("id", "z")),
+            ("assign", ("id", "tries"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", ("id", "::temp0"), ("id", "tries"), ("int", 6)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callstatic", ("id", "Game"), ("id", "FindRandomReferenceOfAnyTypeInList"), ("id", "r"),
+             ("id", "::GunList_var"), ("id", "x"), ("id", "y"), ("id", "z"), ("id", "::ScanRadius_var")),
+            ("cast", ("id", "::temp0"), ("id", "r")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "skip")),
+            ("callmethod", ("id", "Consider"), ("id", "::Owner_var"), NONE, ("id", "r")),
+            ("label", "skip"),
+            ("iadd", ("id", "tries"), ("id", "tries"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    eligible = Function(
+        "Eligible",
+        return_type="Bool",
+        locals=[("::temp0", "Bool"), ("player", "Actor")],
+        code=[
+            ("callmethod", ("id", "HasKeyword"), ("id", "Me"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "IsHostileToActor"), ("id", "Me"), ("id", "::temp0"), ("id", "player")),
+            ("return", ("id", "::temp0")),
+            ("label", "no"),
+            ("return", ("bool", False)),
+        ],
+    )
+    worthy = Function(
+        "Worthy",
+        return_type="Bool",
+        params=[("killer", "Actor")],
+        locals=[("::temp0", "Bool"), ("player", "Actor")],
+        code=[
+            ("callmethod", ("id", "HasKeyword"), ("id", "Me"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "killer"), ("id", "player")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "hostile")),
+            ("return", ("bool", True)),
+            ("label", "hostile"),
+            ("callmethod", ("id", "IsHostileToActor"), ("id", "Me"), ("id", "::temp0"), ("id", "player")),
+            ("return", ("id", "::temp0")),
+            ("label", "no"),
+            ("return", ("bool", False)),
+        ],
+    )
+    roll = Function(
+        "Roll",
+        return_type="Bool",
+        params=[("pct", "Int")],
+        locals=[("::temp0", "Int"), ("::temp1", "Bool")],
+        code=[
+            ("callstatic", ("id", "Utility"), ("id", "RandomInt"), ("id", "::temp0"), ("int", 1), ("int", 100)),
+            ("cmp_lte", ("id", "::temp1"), ("id", "::temp0"), ("id", "pct")),
+            ("return", ("id", "::temp1")),
+        ],
+    )
+    list_for = Function(
+        "ListFor",
+        return_type="Form",
+        locals=[("::temp0", "Bool"), ("level", "Int")],
+        code=[
+            ("callmethod", ("id", "GetLevel"), ("id", "Me"), ("id", "level")),
+            ("cmp_gte", ("id", "::temp0"), ("id", "level"), ("id", "::GoodLevel_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "plain")),
+            ("return", ("id", "::GunDropGood_var")),
+            ("label", "plain"),
+            ("return", ("id", "::GunDrop_var")),
+        ],
+    )
+    carrying = Function(
+        "Carrying",
+        return_type="Bool",
+        locals=[("::temp0", "Bool"), ("w", "Weapon")],
+        code=[
+            ("callmethod", ("id", "GetEquippedWeapon"), ("id", "Me"), ("id", "w"), ("bool", False)),
+            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            ("callmethod", ("id", "HasKeyword"), ("id", "w"), ("id", "::temp0"), ("id", "::GunKeyword_var")),
+            ("return", ("id", "::temp0")),
+            ("label", "no"),
+            ("return", ("bool", False)),
+        ],
+    )
+    try_arm = Function(
+        "TryArm",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            ("jmpf", ("id", "Armed"), ("lbl", "first")),
+            ("return", None),
+            ("label", "first"),
+            ("assign", ("id", "Armed"), ("bool", True)),
+            ("callmethod", ("id", "IsDead"), ("id", "Me"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "alive")),
+            ("return", None),
+            ("label", "alive"),
+            ("callmethod", ("id", "Carrying"), SELF, ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "bare")),
+            ("return", None),
+            ("label", "bare"),
+            ("callmethod", ("id", "Eligible"), SELF, ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::ArmChance_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            call("Equip"),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    equip = Function(
+        "Equip",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("g", "ObjectReference"), ("f", "Form"), ("msg", "String"),
+                ("name", "String"), ("what", "String"), ("list", "Form")],
+        code=[
+            ("callmethod", ("id", "ListFor"), SELF, ("id", "list")),
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "g"), ("id", "list"), ("int", 1), ("bool", False),
+             ("bool", False)),
+            ("cast", ("id", "::temp0"), ("id", "g")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "GetBaseObject"), ("id", "g"), ("id", "f")),
+            ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "g"), ("int", 1), ("bool", True)),
+            ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("int", 30), ("bool", True)),
+            ("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "f"), ("bool", False), ("bool", True)),
+            ("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("bool", False),
+             ("bool", True)),
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
+            ("callmethod", ("id", "GetDisplayName"), ("id", "Me"), ("id", "name")),
+            ("callmethod", ("id", "GetName"), ("id", "f"), ("id", "what")),
+            *notify(("id", "name"), ("str", " carries "), ("id", "what")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    own_drop = Function(
+        "OwnDrop",
+        return_type="ObjectReference",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon"), ("drop", "ObjectReference")],
+        code=[
+            ("callmethod", ("id", "GetEquippedWeapon"), ("id", "Me"), ("id", "w"), ("bool", False)),
+            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
+            ("callmethod", ("id", "HasKeyword"), ("id", "w"), ("id", "::temp0"), ("id", "::GunKeyword_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
+            ("callmethod", ("id", "UnequipItem"), ("id", "Me"), NONE, ("id", "w"), ("bool", False), ("bool", True)),
+            ("callmethod", ("id", "DropObject"), ("id", "Me"), ("id", "drop"), ("id", "w"), ("int", 1)),
+            ("return", ("id", "drop")),
+            ("label", "none"),
+            ("return", None),
+        ],
+    )
+    bonus_drop = Function(
+        "BonusDrop",
+        return_type="ObjectReference",
+        params=[("killer", "Actor")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("list", "Form"), ("drop", "ObjectReference")],
+        code=[
+            ("callmethod", ("id", "Worthy"), SELF, ("id", "::temp0"), ("id", "killer")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
+            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::DropChance_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "none")),
+            ("callmethod", ("id", "ListFor"), SELF, ("id", "list")),
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "drop"), ("id", "list"), ("int", 1), ("bool", False),
+             ("bool", False)),
+            ("return", ("id", "drop")),
+            ("label", "none"),
+            ("return", None),
+        ],
+    )
+    announce = Function(
+        "Announce",
+        params=[("drop", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("name", "String"), ("msg", "String")],
+        code=[
+            ("callmethod", ("id", "Consider"), ("id", "::Owner_var"), NONE, ("id", "drop")),
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
+            ("callmethod", ("id", "GetDisplayName"), ("id", "drop"), ("id", "name")),
+            *notify(("str", "Skylands drop: "), ("id", "name")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    cleanup = Function(
+        "Cleanup",
+        params=[("akKiller", "Actor")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("drop", "ObjectReference")],
+        code=[
+            ("callmethod", ("id", "OwnDrop"), SELF, ("id", "drop")),
+            ("cast", ("id", "::temp0"), ("id", "drop")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "bonus")),
+            call("Announce", ("id", "drop")),
+            ("return", None),
+            ("label", "bonus"),
+            ("callmethod", ("id", "BonusDrop"), SELF, ("id", "drop"), ("id", "akKiller")),
+            ("cast", ("id", "::temp0"), ("id", "drop")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            call("Announce", ("id", "drop")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    on_death = Function(
+        "OnDeath",
+        params=[("akKiller", "Actor")],
+        locals=[("::nonevar", "None")],
+        code=[
+            ("jmpf", ("id", "IsPlayer"), ("lbl", "npc")),
+            ("return", None),
+            ("label", "npc"),
+            call("Cleanup", ("id", "akKiller")),
+            ("return", None),
+        ],
+    )
+    return Script(
+        name="SkylandsWatcher",
+        parent="ActiveMagicEffect",
+        variables=[("Me", "Actor", None), ("IsPlayer", "Bool", ("bool", False)), ("Armed", "Bool", ("bool", False)),
+                   ("Speed", "Float", ("float", 0.0))],
+        auto_properties=[("Owner", "SkylandsClassQuest"), ("GunKeyword", "Keyword"), ("SpeedKeywords", "Keyword[]"),
+                         ("GunList", "FormList"), ("GunDrop", "Form"), ("GunDropGood", "Form"), ("NpcKeyword", "Keyword"),
+                         ("Bolts", "Form"), ("ArmChance", "Int"), ("DropChance", "Int"), ("GoodLevel", "Int"),
                          ("ScanRadius", "Float"), ("Verbose", "Bool")],
-        functions=[on_init, on_update, choose, speed_of, tick, scan, handle, seen, note, eligible, worthy, roll, list_for,
-                   own_drop, bonus_drop, announce, mourn, equip, arm, consider, place, forget],
+        functions=[on_start, on_update, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+                   worthy, roll, list_for, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 
 
@@ -577,12 +598,12 @@ def loot_beam() -> Script:
         EndIf
         If ok
           MoveTo(target, 0.0, 0.0, 0.0, False)
-          If light
-            light.MoveTo(target, 0.0, 0.0, 0.0, False)
+          If lamp
+            lamp.MoveTo(target, 0.0, 0.0, 0.0, False)
           EndIf
           RegisterForSingleUpdate(1.0)
         Else
-          ... Forget, delete light, Disable, Delete
+          ... Forget, delete lamp, Disable, Delete
         EndIf
       EndEvent
     """

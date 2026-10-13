@@ -3,11 +3,10 @@
   "description": "How guns reach the world: who carries them, how often a dead enemy drops one, and what the on-screen debug messages do.",
   "columns": {
     "id": "row id",
-    "arm_chance": "percent of hostile humanoids that get a gun and ammo and use it",
-    "drop_chance": "percent of other dead hostile humanoids that drop a gun",
+    "arm_chance": "percent of hostile humanoids that get a gun and ammo and use it (rolled once when they load)",
+    "drop_chance": "percent of other dead humanoids (killed by the player or hostile to them) that drop a new gun",
     "good_level": "actors at or above this level draw from the better gun list",
-    "arm_per_scan": "most enemies armed per scan (spreads the work out)",
-    "scan_radius": "how far from the player (game units) the script looks for enemies and guns",
+    "scan_radius": "how far from the player (game units) the player's script looks for guns lying on the ground",
     "verbose": "1 = show a message when a gun is handed out, dropped or a beam appears",
     "in_game": "yes once seen"
   },
@@ -17,7 +16,6 @@
       "arm_chance": 35,
       "drop_chance": 40,
       "good_level": 25,
-      "arm_per_scan": 2,
       "scan_radius": 5000,
       "verbose": 1,
       "in_game": "no"
