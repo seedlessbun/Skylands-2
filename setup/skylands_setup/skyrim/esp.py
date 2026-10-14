@@ -87,23 +87,33 @@ class Rec:
 class Plugin:
     """New FormIDs start at 0x800 in this plugin's own index. Flagged ESL (light) while they fit in 0x800-0xFFF."""
 
-    def __init__(self, name: str, masters: list[str], author: str = "Skylands") -> None:
+    def __init__(self, name: str, masters: list[str], author: str = "Skylands", ids: dict[str, int] | None = None) -> None:
+        """ids: "TYPE:editor id" -> form id of earlier builds. A record keeps its form id from build to build, so
+        a save that points at it (a spell the player knows, a gun in a pack) keeps pointing at the same thing."""
         self.name = name
         self.masters = masters
         self.author = author
         self.records: list[Rec] = []
-        self._next = 0x800
+        self.ids = ids if ids is not None else {}
         self.self_index = len(masters) << 24
+        self._used = set(self.ids.values())
+        top = max((i & 0xFFFFFF for i in self._used), default=0x7FF)
+        self._next = max(0x800, top + 1)
 
-    def new_id(self) -> int:  # also used for copies that become new records
+    def new_id(self, key: str | None = None) -> int:  # also used for copies that become new records
+        if key is not None and key in self.ids:
+            return self.ids[key]
         if self._next > 0xFFFFFF:
             raise ValueError("a plugin holds at most 16 million new records")
         fid = self.self_index | self._next
         self._next += 1
+        self._used.add(fid)
+        if key is not None:
+            self.ids[key] = fid
         return fid
 
     def new(self, rtype: str, edid: str) -> Rec:
-        r = Rec(rtype, self.new_id())
+        r = Rec(rtype, self.new_id(f"{rtype}:{edid}"))
         r.add("EDID", zstr(edid))
         self.records.append(r)
         return r

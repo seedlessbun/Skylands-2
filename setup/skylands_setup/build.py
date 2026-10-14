@@ -18,10 +18,34 @@ import traceback
 from pathlib import Path
 
 from . import generate
+from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.8.4"
+VERSION = "0.9.0"
+
+
+RECORD_TYPES = {"STAT", "KYWD", "LIGH", "FLST", "WEAP", "ENCH", "MGEF", "SPEL", "SHOU", "WOOP", "MESG", "QUST", "LVLI", "ACTI"}
+
+
+def harvest(plugin: Path, ids: dict[str, int]) -> int:
+    """Learn the form ids of the Skylands plugin already installed, so rebuilding keeps every record's id (saves
+    refer to spells, guns and the quest by id). Ids already known win."""
+    if not plugin.is_file():
+        return 0
+    try:
+        _, recs = read_plugin(plugin, RECORD_TYPES)
+    except Exception:  # noqa: BLE001 - an unreadable old plugin just means a fresh set of ids
+        return 0
+    own = len(generate.MASTERS) << 24
+    found = 0
+    for rtype, rs in recs.items():
+        for r in rs:
+            key = f"{rtype}:{r.edid}"
+            if r.edid and (r.form_id & 0xFF000000) == own and key not in ids:
+                ids[key] = r.form_id
+                found += 1
+    return found
 
 
 def enable_plugin(plugin: str) -> Path | None:
@@ -144,7 +168,17 @@ def main(argv: list[str]) -> int:
             say(f"  note: {e}")
         stage = work / "stage"
         shutil.rmtree(stage, ignore_errors=True)
-        report = generate.generate(data, sky, stage)
+        registry = work / "formids.json"
+        ids: dict[str, int] = {}
+        if registry.is_file():
+            try:
+                ids = {k: int(v) for k, v in json.loads(registry.read_text(encoding="utf-8")).items()}
+            except (OSError, ValueError):
+                ids = {}
+        learned = harvest(sky / "Data" / generate.PLUGIN, ids)
+        say(f"Form ids: {len(ids)} from before ({learned} read from the installed plugin).")
+        report = generate.generate(data, sky, stage, formids=ids)
+        registry.write_text(json.dumps(ids, indent=0), encoding="utf-8")
         (work / "generate-report.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
         say(f"Built Skylands.esp: {report['records']} records, {report['guns']} guns, "
             f"{report['renamed_enemies']} bandit records renamed, {report['loot_lists']} loot lists extended, "

@@ -64,3 +64,11 @@ changes the setting. Respawning looks at the roster entries in your cell (or wit
 person still alive is left alone; a dead or missing one is removed and a fresh copy of the same kind is placed where
 they stood (and rolls for a gun again). In an interior you are moved back to where you first came in (the quest keeps
 an invisible marker at each interior's entrance, set when you arrive).
+
+## Form ids stay put (0.9)
+
+A save refers to spells, guns and the quest by form id, so a rebuild must not renumber them. Setup keeps
+`work/formids.json` (record type and editor id -> form id) and, before building, also reads the Skylands plugin
+already installed to learn its ids; a record that existed before keeps its id, new records get new ones, and ids of
+records that no longer exist are never reused. (Before 0.9, inserting a record in the middle shifted every later id,
+which is how a power could vanish from a character between versions.)

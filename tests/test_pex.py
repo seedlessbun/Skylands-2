@@ -26,7 +26,7 @@ QUEST_EXPECTED = """Event OnUpdate()
   Return
 EndEvent"""
 
-UPGRADE = """  Int n = RosterId.Length
+UPGRADE = """  Int n = RosterRef.Length
   If n < 1
     Tracked = new ObjectReference[48]"""
 
@@ -53,7 +53,7 @@ LOG = """    Actor a = Game.FindRandomActor(x, y, z, LogRadius)
         count += 1
       EndIf
     EndIf
-    ObjectReference r = Game.FindRandomReferenceOfAnyTypeInList(FoeList, x, y, z, LogRadius)"""
+    i += 1"""
 
 RESPAWN = """  ObjectReference n = player.PlaceAtMe(base, 1, False, False)
   If n as Bool"""

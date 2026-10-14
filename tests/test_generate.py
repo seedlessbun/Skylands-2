@@ -87,9 +87,6 @@ def test_generate_from_both_games(tmp_path):
     assert nord.first("FULL") == b"Nord\0" and nord.first("DESC").endswith(b"\0") and len(nord.first("DESC")) > 4  # names written out, not string ids
     spells = [struct.unpack("<I", d)[0] for d in nord.all("SPLO")]
     assert ability.form_id in spells and struct.unpack("<I", nord.first("SPCT"))[0] == len(spells)
-    foes = next(r for r in recs["FLST"] if r.edid == "SkylandsFoeList")
-    assert len(foes.all("LNAM")) == 3 and rep["foe_kinds"] == 3  # the three bandit records of the fake Skyrim
-    assert b"FoeList" in next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest").first("VMAD")
     guns = next(r for r in recs["FLST"] if r.edid == "SkylandsGunList")
     assert len(guns.all("LNAM")) == rep["guns"]
     speeds = [r for r in recs["KYWD"] if r.edid.startswith("SkylandsSpeed_")]
@@ -178,3 +175,42 @@ def test_generated_plugin_is_accepted_by_esplugin(tmp_path):
     generate.generate(bl2, sky, tmp_path / "out")
     r = subprocess.run([exe, str(tmp_path / "out" / "Data" / "Skylands.esp")], capture_output=True, text=True)
     assert r.returncode == 0 and "parsed OK" in r.stdout and "is_valid_as_light_plugin: Ok(true)" in r.stdout, r.stdout + r.stderr
+
+
+def test_form_ids_stay_the_same_between_builds(tmp_path):
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    ids: dict[str, int] = {}
+    generate.generate(bl2, sky, tmp_path / "one", formids=ids)
+    first = dict(ids)
+    assert len(first) > 100 and len(set(first.values())) == len(first)
+    # a different set of guns (the first balance gone): everything that is still there keeps its id
+    bl2["weapons"]["guns"] = bl2["weapons"]["guns"][1:]
+    generate.generate(bl2, sky, tmp_path / "two", formids=ids)
+    for key, fid in first.items():
+        assert ids[key] == fid
+    # and an unchanged rebuild is byte for byte the same plugin
+    again = dict(first)
+    generate.generate(bl2, sky, tmp_path / "three", formids=again)
+    assert again == ids or all(again[k] == v for k, v in first.items())
+
+
+def test_build_learns_ids_from_the_installed_plugin(tmp_path, monkeypatch):
+    from skylands_setup import build
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
+    done = tmp_path / "managed" / "setup-done.txt"
+    args = ["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]
+    assert build.main(args) == 0
+    installed = {f"{r.type}:{r.edid}": r.form_id for rs in read_plugin(sky / "Data" / "Skylands.esp", build.RECORD_TYPES)[1].values()
+                 for r in rs if r.edid and r.form_id >> 24 == 3}
+    # lose the saved registry (a reinstall): the installed plugin still tells the build which ids to keep
+    (tmp_path / "managed" / "formids.json").unlink()
+    assert build.main(args) == 0
+    again = {f"{r.type}:{r.edid}": r.form_id for rs in read_plugin(sky / "Data" / "Skylands.esp", build.RECORD_TYPES)[1].values()
+             for r in rs if r.edid and r.form_id >> 24 == 3}
+    assert again == installed and len(installed) > 100

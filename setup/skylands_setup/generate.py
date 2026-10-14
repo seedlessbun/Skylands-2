@@ -27,7 +27,6 @@ from .skyrim.strings import parse_table
 MASTERS = ["Skyrim.esm", "Update.esm", "Dawnguard.esm"]
 PLUGIN = "Skylands.esp"
 BEAM_TEXTURE = "textures\\skylands\\beam.dds"
-FOES = r"(Bandit|Draugr|Forsworn|Falmer|Vampire|Necromancer|Warlock|Briarheart|SilverHand|Thalmor|Witchhunter|Vigilant|Dawnguard|Hunter|Mage|Conjurer|Warrior|Archer)"
 XMARKER = 0x0000003B  # Skyrim.esm: the invisible marker object
 ACTOR_TYPE_NPC = 0x00013794  # Skyrim.esm keyword: humanoids
 SPEED_BUCKETS, SPEED_BASE, SPEED_STEP = 48, 0.5, 0.05  # SkylandsSpeed_n keywords: speed = base + step * n
@@ -189,7 +188,7 @@ def stats_template(m: Masters, base_ench: Record) -> Record:
 
 def stats_effect(p: esp.Plugin, edid: str, text: str, template: Record) -> int:
     """A new magic effect that does nothing but show the gun's stats on its enchantment."""
-    r = esp.Rec("MGEF", p.new_id(), [])
+    r = esp.Rec("MGEF", p.new_id(f"MGEF:Skylands_Stats_{edid}"), [])
     r.add("EDID", esp.zstr(f"Skylands_Stats_{edid}")).add("FULL", esp.zstr("Gun stats")).add("DNAM", esp.zstr(text))
     data = bytearray(template.first("DATA") or b"\0" * 152)
     if len(data) >= MGEF_AV_AT + 4:
@@ -214,7 +213,7 @@ def gun_enchant(p: esp.Plugin, edid: str, av_speed: float, text: str, element_mu
             effects[-1].append((sig, d))
         else:
             head.append((sig, d))
-    e = esp.Rec("ENCH", p.new_id(), [(sig, d) for sig, d in head if sig not in ("EDID", "FULL")])
+    e = esp.Rec("ENCH", p.new_id(f"ENCH:Skylands_Ench_{edid}"), [(sig, d) for sig, d in head if sig not in ("EDID", "FULL")])
     e.subs.insert(0, ("EDID", esp.zstr(f"Skylands_Ench_{edid}")))
     insert_ordered(e, "FULL", esp.zstr("Gun stats"), ["EDID", "VMAD", "OBND", "FULL", "ENIT"])
     if with_element:
@@ -247,10 +246,10 @@ def make_lights(p: esp.Plugin, m: Masters, colors: dict[int, tuple[int, int, int
     for level, (red, green, blue) in colors.items():
         row = rarity_row(level)
         if template is not None:
-            lt = esp.Rec("LIGH", p.new_id(), [(sig, d) for sig, d in template.subrecords if sig in LIGHT_KEEP])
+            lt = esp.Rec("LIGH", p.new_id(f"LIGH:SkylandsLight_{row.id}"), [(sig, d) for sig, d in template.subrecords if sig in LIGHT_KEEP])
             data = bytearray(lt.get("DATA"))
         else:
-            lt = esp.Rec("LIGH", p.new_id(), [("OBND", obnd()), ("FNAM", struct.pack("<f", 1.0))])
+            lt = esp.Rec("LIGH", p.new_id(f"LIGH:SkylandsLight_{row.id}"), [("OBND", obnd()), ("FNAM", struct.pack("<f", 1.0))])
             data = bytearray(struct.pack("<iI4sIffffffIf", -1, LIGHT_RADIUS, bytes(4), 1, 1.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0))
             lt.subs.insert(0, ("EDID", b""))
         lt.set("EDID", esp.zstr(f"SkylandsLight_{row.id}"))
@@ -285,7 +284,7 @@ class Texts:
 
 def script_effect(p: esp.Plugin, template: Record, edid: str, name: str, script: str, props: list, fire_and_forget: bool = False) -> int:
     """A magic effect (copied from a plain vanilla one) whose only job is to run a script."""
-    mg = esp.Rec("MGEF", p.new_id(), [])
+    mg = esp.Rec("MGEF", p.new_id(f"MGEF:{edid}"), [])
     mg.add("EDID", esp.zstr(edid)).add("VMAD", esp.vmad([(script, props)])).add("FULL", esp.zstr(name))
     data = bytearray(template.first("DATA") or b"\0" * 152)
     if len(data) >= 92:
@@ -365,10 +364,11 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
     return ability.form_id
 
 
-def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
+def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None) -> dict:
+    """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin."""
     data_dir = Path(skyrim_dir) / "Data"
     m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE"})
-    p = esp.Plugin(PLUGIN, MASTERS)
+    p = esp.Plugin(PLUGIN, MASTERS, ids=formids)
     report: dict = {"guns": 0, "renamed_enemies": 0, "loot_lists": 0, "classes": []}
     rnd = random.Random(seed)
     G = S.GENERATION["main"]
@@ -422,7 +422,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
             half = round(math.sqrt(st["speed"]), 3)  # half the speed goes into the weapon, half into the player's weapon speed
             name = assemble.name_of(g, built["parts"], parts, element, manufacturers, rr.word)
             w = copy(crossbow)
-            w.form_id = p.new_id()
+            w.form_id = p.new_id(f"WEAP:{edid}")
             w.drop("DESC", "EITM", "EAMT", "VMAD")
             w.set("EDID", esp.zstr(edid))
             insert_ordered(w, "FULL", esp.zstr(name), WEAP_ORDER)
@@ -487,11 +487,6 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     for ids in by_rarity.values():
         for fid in ids:
             gun_list.add("LNAM", esp.u32(fid))
-    foes = [r.form_id for r in sorted(m.by_type["NPC_"].values(), key=lambda r: r.edid) if re.search(FOES, r.edid, re.I)]
-    foe_list = p.new("FLST", "SkylandsFoeList")  # the kinds of people that can be hostile: a second way to find them
-    for fid in foes:
-        foe_list.add("LNAM", esp.u32(fid))
-    report["foe_kinds"] = len(foes)
     watcher_props = [
         ("Owner", esp.P_OBJECT, quest.form_id), ("GunKeyword", esp.P_OBJECT, gun_keyword),
         ("SpeedKeywords", esp.P_OBJECT_ARRAY, speed_keywords), ("GunList", esp.P_OBJECT, gun_list.form_id),
@@ -564,7 +559,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         ("SettingsMsg", esp.P_OBJECT, settings_msg.form_id), ("MarkerForm", esp.P_OBJECT, XMARKER),
         ("RespawnPower", esp.P_OBJECT, respawn_power), ("LogPower", esp.P_OBJECT, log_power),
         ("Ability", esp.P_OBJECT, watcher_ability), ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC),
-        ("LogRadius", esp.P_FLOAT, float(G.scan_radius)), ("FoeList", esp.P_OBJECT, foe_list.form_id)])], quest=True))
+        ("LogRadius", esp.P_FLOAT, float(G.scan_radius))])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 
