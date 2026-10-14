@@ -230,31 +230,39 @@ LIGHT_KEEP = ("EDID", "OBND", "DATA", "FNAM")
 
 
 def make_lights(p: esp.Plugin, m: Masters, colors: dict[int, tuple[int, int, int]], report: dict) -> dict[int, int]:
-    """One coloured point light per rarity, copied from a plain vanilla light (radius and colour changed)."""
-    template = None
+    """One coloured point light per rarity. Copied from a plain vanilla light when there is one (radius, colour and
+    flags changed, so nothing flickers, pulses or casts shadows), else written from scratch."""
+    best = None
     for r in sorted(m.by_type["LIGH"].values(), key=lambda r: r.edid):
         d = r.first("DATA")
-        if d and len(d) >= 12 and not r.first("MODL"):
-            _, radius, _color, flags = struct.unpack_from("<iI4sI", d)
-            if flags & 1 and not flags & LIGHT_BAD_FLAGS and 128 <= radius <= 1024:
-                template = r
-                break
-    if template is None:
-        report["lights"] = "no plain vanilla light found: beams only"
-        return {}
+        if not d or len(d) < 48 or r.first("MODL"):
+            continue
+        _, radius, _color, flags = struct.unpack_from("<iI4sI", d)
+        score = (0 if flags & 1 else 1, 0 if not flags & LIGHT_BAD_FLAGS else 1, abs(radius - LIGHT_RADIUS))
+        if best is None or score < best[0]:
+            best = (score, r)
+    template = best[1] if best else None
     out = {}
     for level, (red, green, blue) in colors.items():
         row = rarity_row(level)
-        lt = esp.Rec("LIGH", p.new_id(), [(sig, d) for sig, d in template.subrecords if sig in LIGHT_KEEP])
+        if template is not None:
+            lt = esp.Rec("LIGH", p.new_id(), [(sig, d) for sig, d in template.subrecords if sig in LIGHT_KEEP])
+            data = bytearray(lt.get("DATA"))
+        else:
+            lt = esp.Rec("LIGH", p.new_id(), [("OBND", obnd()), ("FNAM", struct.pack("<f", 1.0))])
+            data = bytearray(struct.pack("<iI4sIffffffIf", -1, LIGHT_RADIUS, bytes(4), 1, 1.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0))
+            lt.subs.insert(0, ("EDID", b""))
         lt.set("EDID", esp.zstr(f"SkylandsLight_{row.id}"))
-        d = bytearray(lt.get("DATA"))
-        struct.pack_into("<I", d, 4, LIGHT_RADIUS)
-        d[8:12] = bytes([red, green, blue, 0])
-        lt.set("DATA", bytes(d))
+        struct.pack_into("<I", data, 4, LIGHT_RADIUS)
+        data[8:12] = bytes([red, green, blue, 0])
+        struct.pack_into("<I", data, 12, 0x1)  # dynamic only: no flicker, pulse, spot or shadows
+        lt.set("DATA", bytes(data))
+        order = ["EDID", "OBND", "DATA", "FNAM"]
+        lt.subs.sort(key=lambda sd: order.index(sd[0]) if sd[0] in order else 99)
         p.override(lt)
         out[level] = lt.form_id
+    report["lights"] = "from a vanilla light" if template is not None else "written from scratch"
     return out
-
 
 
 class Texts:

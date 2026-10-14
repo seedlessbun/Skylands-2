@@ -26,12 +26,18 @@ QUEST_EXPECTED = """Event OnUpdate()
   Return
 EndEvent"""
 
+UPGRADE = """  Int n = Roster.Length
+  If n < 1
+    Tracked = new ObjectReference[48]"""
+
 CHOOSE = """  player.EquipShout(chosenShout)
   player.AddSpell(RespawnPower, False)
   player.AddItem(StarterGun, 1, False)
   player.AddItem(StarterAmmo, 60, False)
   player.EquipItem(StarterGun, False, False)
   Chosen = True"""
+
+
 
 PROMPT = """  PendingPrompt = False
   If Mode == 2
@@ -43,11 +49,17 @@ PROMPT = """  PendingPrompt = False
   EndIf
   Int pick = PromptMsg.Show("""
 
-BEAMS = """    Bool has = base.HasKeyword(kw)
-    If has
-      hit = True
-      Self.Place(r, k)
-      k = -1"""
+BEAMS = """  If Self.Alive(r)
+    Bool hit
+    Form base = r.GetBaseObject()
+    Int k = 5
+    While k >= 0
+      Keyword kw = RarityKeywords[k]
+      Bool has = base.HasKeyword(kw)
+      If has
+        hit = True
+        Self.Place(r, k)
+        k = -1"""
 
 PLACE = """  Form bs = Beams[k]
   ObjectReference b = r.PlaceAtMe(bs, 1, False, False)"""
@@ -62,6 +74,7 @@ WATCHER = {
   Actor player = Game.GetPlayer()
   If Me == player
     IsPlayer = True
+    Owner.Upgrade()
     Weapon w = Me.GetEquippedWeapon(False)
     Self.ApplySpeed(w)
     Self.RegisterForSingleUpdate(0.5)
@@ -140,7 +153,7 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
                  "Form Property StarterAmmo Auto", "Keyword[] Property RarityKeywords Auto", "Form[] Property Beams Auto", "Message Property PromptMsg Auto", "Form Property MarkerForm Auto", "Spell Property RespawnPower Auto",
                  "Light[] Property Lights Auto", "Bool Property Verbose Auto"):
         assert prop in psc
-    for text in (QUEST_EXPECTED, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
+    for text in (QUEST_EXPECTED, UPGRADE, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
         assert text in psc
 
 
