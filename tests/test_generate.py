@@ -87,6 +87,9 @@ def test_generate_from_both_games(tmp_path):
     assert nord.first("FULL") == b"Nord\0" and nord.first("DESC").endswith(b"\0") and len(nord.first("DESC")) > 4  # names written out, not string ids
     spells = [struct.unpack("<I", d)[0] for d in nord.all("SPLO")]
     assert ability.form_id in spells and struct.unpack("<I", nord.first("SPCT"))[0] == len(spells)
+    foes = next(r for r in recs["FLST"] if r.edid == "SkylandsFoeList")
+    assert len(foes.all("LNAM")) == 3 and rep["foe_kinds"] == 3  # the three bandit records of the fake Skyrim
+    assert b"FoeList" in next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest").first("VMAD")
     guns = next(r for r in recs["FLST"] if r.edid == "SkylandsGunList")
     assert len(guns.all("LNAM")) == rep["guns"]
     speeds = [r for r in recs["KYWD"] if r.edid.startswith("SkylandsSpeed_")]

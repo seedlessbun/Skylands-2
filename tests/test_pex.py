@@ -30,17 +30,30 @@ UPGRADE = """  Int n = RosterId.Length
   If n < 1
     Tracked = new ObjectReference[48]"""
 
-ADOPT = """  If Self.Qualifies(a)
-    Bool fresh = Self.Enlist(a)
-    Float v = a.GetActorValue("Variable09")
-    If v < 1.0
-      a.AddSpell(Ability, False)
-    EndIf
-    Return fresh"""
+ADOPT = """  Int st = Self.Stage(a)
+  If st < 3
+    Return False
+  EndIf
+  LogHuman += 1
+  If st < 4
+    Return False
+  EndIf
+  LogFoes += 1
+  Bool fresh = Self.Enlist(a)
+  Float v = a.GetActorValue("Variable09")
+  If v < 1.0
+    a.AddSpell(Ability, False)
+  EndIf
+  Return fresh"""
 
 LOG = """    Actor a = Game.FindRandomActor(x, y, z, LogRadius)
-    If Self.Adopt(a)
-      count += 1"""
+    If a as Bool
+      seen_a += 1
+      If Self.Adopt(a)
+        count += 1
+      EndIf
+    EndIf
+    ObjectReference r = Game.FindRandomReferenceOfAnyTypeInList(FoeList, x, y, z, LogRadius)"""
 
 RESPAWN = """  ObjectReference n = player.PlaceAtMe(base, 1, False, False)
   If n as Bool"""

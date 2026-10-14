@@ -21,7 +21,7 @@ from . import generate
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.8.3"
+VERSION = "0.8.4"
 
 
 def enable_plugin(plugin: str) -> Path | None:

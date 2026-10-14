@@ -27,6 +27,7 @@ from .skyrim.strings import parse_table
 MASTERS = ["Skyrim.esm", "Update.esm", "Dawnguard.esm"]
 PLUGIN = "Skylands.esp"
 BEAM_TEXTURE = "textures\\skylands\\beam.dds"
+FOES = r"(Bandit|Draugr|Forsworn|Falmer|Vampire|Necromancer|Warlock|Briarheart|SilverHand|Thalmor|Witchhunter|Vigilant|Dawnguard|Hunter|Mage|Conjurer|Warrior|Archer)"
 XMARKER = 0x0000003B  # Skyrim.esm: the invisible marker object
 ACTOR_TYPE_NPC = 0x00013794  # Skyrim.esm keyword: humanoids
 SPEED_BUCKETS, SPEED_BASE, SPEED_STEP = 48, 0.5, 0.05  # SkylandsSpeed_n keywords: speed = base + step * n
@@ -486,6 +487,11 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
     for ids in by_rarity.values():
         for fid in ids:
             gun_list.add("LNAM", esp.u32(fid))
+    foes = [r.form_id for r in sorted(m.by_type["NPC_"].values(), key=lambda r: r.edid) if re.search(FOES, r.edid, re.I)]
+    foe_list = p.new("FLST", "SkylandsFoeList")  # the kinds of people that can be hostile: a second way to find them
+    for fid in foes:
+        foe_list.add("LNAM", esp.u32(fid))
+    report["foe_kinds"] = len(foes)
     watcher_props = [
         ("Owner", esp.P_OBJECT, quest.form_id), ("GunKeyword", esp.P_OBJECT, gun_keyword),
         ("SpeedKeywords", esp.P_OBJECT_ARRAY, speed_keywords), ("GunList", esp.P_OBJECT, gun_list.form_id),
@@ -558,7 +564,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         ("SettingsMsg", esp.P_OBJECT, settings_msg.form_id), ("MarkerForm", esp.P_OBJECT, XMARKER),
         ("RespawnPower", esp.P_OBJECT, respawn_power), ("LogPower", esp.P_OBJECT, log_power),
         ("Ability", esp.P_OBJECT, watcher_ability), ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC),
-        ("LogRadius", esp.P_FLOAT, float(G.scan_radius))])], quest=True))
+        ("LogRadius", esp.P_FLOAT, float(G.scan_radius)), ("FoeList", esp.P_OBJECT, foe_list.form_id)])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 
