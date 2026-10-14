@@ -312,15 +312,19 @@ def make_message(p: esp.Plugin, edid: str, title: str, body: str, buttons: list[
     return msg
 
 
-def make_respawn_power(p: esp.Plugin, m: "Masters", quest_id: int) -> int:
-    """The lesser power "Pandora Respawn": opens the respawn settings."""
+def make_powers(p: esp.Plugin, m: "Masters", quest_id: int) -> tuple[int, int]:
+    """The lesser powers "Pandora Respawn" (respawn now / settings) and "Pandora Log Enemies" (note the hostile people
+    around you for respawning, for testing). Returns their form ids."""
     template = m.need("MGEF", "AbWeaknessFireConstant")
-    fx = script_effect(p, template, "SkylandsRespawnEffect", "Pandora Respawn", "SkylandsRespawn",
-                       [("Owner", esp.P_OBJECT, quest_id)], fire_and_forget=True)
-    return spell(p, "SkylandsRespawnPower", "Pandora Respawn",
-                 "Respawn the enemies around you, or choose when enemies respawn.",
-                 struct.pack("<IIIfIIffI", 0, 0, SPELL_LESSER_POWER, 0, CAST_FIRE_FORGET, DELIVERY_SELF, 0, 0, 0),
-                 [(fx, 0.0, 0, 0)]).form_id
+    spit = struct.pack("<IIIfIIffI", 0, 0, SPELL_LESSER_POWER, 0, CAST_FIRE_FORGET, DELIVERY_SELF, 0, 0, 0)
+    out = []
+    for edid, name, text, action in (
+            ("SkylandsRespawn", "Pandora Respawn", "Respawn the enemies around you, or choose when enemies respawn.", 0),
+            ("SkylandsLogEnemies", "Pandora Log Enemies", "Note the hostile people around you, so they can respawn.", 1)):
+        fx = script_effect(p, template, f"{edid}Effect", name, "SkylandsRespawn",
+                           [("Owner", esp.P_OBJECT, quest_id), ("Action", esp.P_INT, action)], fire_and_forget=True)
+        out.append(spell(p, f"{edid}Power", name, text, spit, [(fx, 0.0, 0, 0)]).form_id)
+    return out[0], out[1]
 
 
 def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: dict) -> int:
@@ -490,7 +494,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         ("ArmChance", esp.P_INT, int(G.arm_chance)), ("DropChance", esp.P_INT, int(G.drop_chance)),
         ("GoodLevel", esp.P_INT, int(G.good_level)), ("ScanRadius", esp.P_FLOAT, float(G.scan_radius)),
         ("Verbose", esp.P_BOOL, bool(G.verbose))]
-    make_watcher(p, m, Texts(data_dir), watcher_props, report)
+    watcher_ability = make_watcher(p, m, Texts(data_dir), watcher_props, report)
 
     # ---- vault hunters ---------------------------------------------------------------------------
     fus = next((w for w in m.by_type["WOOP"].values() if w.edid == "WordFus"), None)
@@ -543,7 +547,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
                                 "Respawn the enemies around you now, or choose what happens when you load a save.",
                                 ["Respawn enemies now", "Ask me every time I load", "Always respawn when I load",
                                  "Never respawn when I load", "Cancel"])
-    respawn_power = make_respawn_power(p, m, quest.form_id)
+    respawn_power, log_power = make_powers(p, m, quest.form_id)
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
         ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
@@ -552,7 +556,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4) -> dict:
         ("Lights", esp.P_OBJECT_ARRAY, [lights[k] for k in sorted(lights)] if len(lights) == len(beams) else []),
         ("Verbose", esp.P_BOOL, bool(G.verbose)), ("PromptMsg", esp.P_OBJECT, prompt_msg.form_id),
         ("SettingsMsg", esp.P_OBJECT, settings_msg.form_id), ("MarkerForm", esp.P_OBJECT, XMARKER),
-        ("RespawnPower", esp.P_OBJECT, respawn_power)])], quest=True))
+        ("RespawnPower", esp.P_OBJECT, respawn_power), ("LogPower", esp.P_OBJECT, log_power),
+        ("Ability", esp.P_OBJECT, watcher_ability), ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC),
+        ("LogRadius", esp.P_FLOAT, float(G.scan_radius))])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 

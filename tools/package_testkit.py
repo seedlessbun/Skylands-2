@@ -51,7 +51,9 @@ README = f"""Skylands {VERSION} test build: Skyrim played as a Borderlands vault
    before you chose: a save that already chose a vault hunter will not get the starter pistol again.
 5. New in 0.8: when you load a save, a box asks whether to respawn enemies (you can say "always" or "never"); the
    lesser power "Pandora Respawn" does it any time and changes the setting. In a dungeon you are taken back to where
-   you came in. Beams are plain statics now; a message on screen says whether the beam and the light were made.
+   you came in. The lesser power "Pandora Log Enemies" notes the hostile people around you for respawning right
+   away (the same thing happens by itself every couple of seconds). It all works on an existing character: loading
+   the save gives you both powers. Beams are plain statics now; a message on screen says whether the beam and the light were made.
 6. What to look for (no Skyrim script extender is needed): your starter pistol, a "Skylands gun speed" message when you equip a gun, bandits that carry
    guns (a message names them), guns dropping on the ground when they die with a coloured beam and light over
    them, and a stats line on every gun. If something is missing, send work\\skylands-setup.log, work\\parts-summary.json
@@ -67,7 +69,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-10.zip"
+    out = dist / "Skylands-TestBuild-11.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

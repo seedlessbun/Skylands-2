@@ -54,7 +54,10 @@ every person and the player) carries one ability whose effect runs the `Skylands
 
 ## Respawning enemies (0.8)
 
-Hostile people note themselves on the quest's roster when they load: their form id (not a reference, which the game
+Hostile people are noted on the quest's roster - by their own script when they load, and by the player's script,
+which every couple of seconds samples the people nearby (Game.FindRandomActor), notes the hostile humanoids and,
+for ones that never loaded with the Skylands ability (an old save), gives it to them; the lesser power "Pandora Log
+Enemies" does the same sampling in one go for testing. A roster entry holds: their form id (not a reference, which the game
 loses when a cell reloads), what they are, and where they stood. When you load a save, a box asks whether to respawn
 them (respawn here / not this time / always / never ask); the lesser power "Pandora Respawn" does it at any time and
 changes the setting. Respawning looks at the roster entries in your cell (or within a short distance outdoors): a

@@ -61,12 +61,16 @@ def test_generate_from_both_games(tmp_path):
     assert struct.unpack_from("<I", lights["SkylandsLight_rare"].first("DATA"), 4)[0] == generate.LIGHT_RADIUS and "MODL" not in [s for s, _ in lights["SkylandsLight_rare"].subrecords]
     quest = next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest")
     for prop in (b"ClassChoice", b"RarityKeywords", b"Beams", b"Lights", b"Verbose", b"StarterGun", b"StarterAmmo", b"PromptMsg",
-                 b"SettingsMsg", b"MarkerForm", b"RespawnPower"):
+                 b"SettingsMsg", b"MarkerForm", b"RespawnPower", b"LogPower", b"Ability", b"NpcKeyword", b"LogRadius"):
         assert prop in quest.first("VMAD")
     power = next(r for r in recs["SPEL"] if r.edid == "SkylandsRespawnPower")
     assert struct.unpack_from("<I", power.first("SPIT"), 8)[0] == 3  # a lesser power
     power_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsRespawnEffect")
     assert b"SkylandsRespawn" in power_fx.first("VMAD") and struct.unpack_from("<I", power_fx.first("DATA"), 80)[0] == 1
+    logger = next(r for r in recs["SPEL"] if r.edid == "SkylandsLogEnemiesPower")
+    assert struct.unpack_from("<I", logger.first("SPIT"), 8)[0] == 3
+    log_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsLogEnemiesEffect")
+    assert b"SkylandsRespawn" in log_fx.first("VMAD") and b"Action" in log_fx.first("VMAD")
     boxes = {r.edid: [d.rstrip(b"\0").decode() for d in r.all("ITXT")] for r in recs["MESG"]}
     assert boxes["SkylandsRespawnPrompt"][0] == "Respawn enemies here" and len(boxes["SkylandsRespawnSettings"]) == 5
     # the watcher: an ability whose effect runs the script, carried by every humanoid race

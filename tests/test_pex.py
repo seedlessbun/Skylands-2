@@ -30,11 +30,24 @@ UPGRADE = """  Int n = RosterId.Length
   If n < 1
     Tracked = new ObjectReference[48]"""
 
+ADOPT = """  If Self.Qualifies(a)
+    Bool fresh = Self.Enlist(a)
+    Float v = a.GetActorValue("Variable09")
+    If v < 1.0
+      a.AddSpell(Ability, False)
+    EndIf
+    Return fresh"""
+
+LOG = """    Actor a = Game.FindRandomActor(x, y, z, LogRadius)
+    If Self.Adopt(a)
+      count += 1"""
+
 RESPAWN = """  ObjectReference n = player.PlaceAtMe(base, 1, False, False)
   If n as Bool"""
 
 CHOOSE = """  player.EquipShout(chosenShout)
   player.AddSpell(RespawnPower, False)
+  player.AddSpell(LogPower, False)
   player.AddItem(StarterGun, 1, False)
   player.AddItem(StarterAmmo, 60, False)
   player.EquipItem(StarterGun, False, False)
@@ -89,7 +102,9 @@ WATCHER = {
   If Ticks % 4 == 0
     Self.Scan()
     Owner.Sweep()
+    Owner.LogAround(4, False)
   EndIf""",
+    "flag": """  Float delay = Utility.RandomFloat(1.5, 4.0)""",
     "maintain": """  If !Checked
     Checked = True
     Foe = Self.Eligible()
@@ -157,7 +172,7 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
                  "Form Property StarterAmmo Auto", "Keyword[] Property RarityKeywords Auto", "Form[] Property Beams Auto", "Message Property PromptMsg Auto", "Form Property MarkerForm Auto", "Spell Property RespawnPower Auto",
                  "Light[] Property Lights Auto", "Bool Property Verbose Auto"):
         assert prop in psc
-    for text in (QUEST_EXPECTED, UPGRADE, RESPAWN, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
+    for text in (QUEST_EXPECTED, UPGRADE, ADOPT, LOG, RESPAWN, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
         assert text in psc
 
 
@@ -176,3 +191,4 @@ def test_watcher_decompiles_to_intended_papyrus(tmp_path):
 def test_respawn_power_decompiles_to_intended_papyrus(tmp_path):
     psc = decompile(tmp_path, scripts.respawn_power(), "SkylandsRespawn")
     assert "ScriptName SkylandsRespawn Extends ActiveMagicEffect" in psc and "Owner.Settings()" in psc
+    assert "Owner.LogNow()" in psc and "Int Property Action Auto" in psc

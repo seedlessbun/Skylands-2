@@ -96,6 +96,7 @@ def class_choice_quest() -> Script:
             ("callstatic", ("id", "Game"), ("id", "UnlockWord"), NONE, ("id", "chosenWord")),
             ("callmethod", ("id", "EquipShout"), ("id", "player"), NONE, ("id", "chosenShout")),
             ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::RespawnPower_var"), ("bool", False)),
+            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::LogPower_var"), ("bool", False)),
             ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterGun_var"),
              ("int", 1), ("bool", False)),
             ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterAmmo_var"),
@@ -118,6 +119,14 @@ def class_choice_quest() -> Script:
             ("label", "arrays_ok"),
             ("jmpf", ("id", "Chosen"), ("lbl", "end")),
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::LogPower_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "give_log")),
+            ("jmp", ("lbl", "check_respawn")),
+            ("label", "give_log"),
+            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::LogPower_var"), ("bool", False)),
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "check_respawn")),
+            *notify(("str", "Skylands: you learned the Pandora Log Enemies power")),
+            ("label", "check_respawn"),
             ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::RespawnPower_var")),
             ("jmpf", ("id", "::temp0"), ("lbl", "give")),
             ("return", None),
@@ -345,6 +354,7 @@ def class_choice_quest() -> Script:
     )
     enlist = Function(
         "Enlist",
+        return_type="Bool",
         params=[("r", "ObjectReference")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "Int"), ("id", "Int"), ("x", "Float"),
                 ("y", "Float"), ("z", "Float"), ("base", "Form"), ("cell", "Cell"), ("name", "String"), ("msg", "String")],
@@ -357,7 +367,7 @@ def class_choice_quest() -> Script:
             ("array_getelement", ("id", "e"), ("id", "RosterId"), ("id", "i")),
             ("cmp_eq", ("id", "::temp0"), ("id", "e"), ("id", "id")),
             ("jmpf", ("id", "::temp0"), ("lbl", "cont")),
-            ("return", None),
+            ("return", ("bool", False)),
             ("label", "cont"),
             ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
             ("jmp", ("lbl", "loop")),
@@ -382,8 +392,116 @@ def class_choice_quest() -> Script:
             ("callmethod", ("id", "GetDisplayName"), ("id", "r"), ("id", "name")),
             *notify(("str", "Skylands: will respawn "), ("id", "name")),
             ("label", "end"),
-            ("return", None),
+            ("return", ("bool", True)),
         ],
+    )
+    known_count = Function(
+        "KnownCount",
+        return_type="Int",
+        locals=[("::temp0", "Bool"), ("i", "Int"), ("n", "Int"), ("id", "Int")],
+        code=[
+            ("assign", ("id", "i"), ("int", 0)),
+            ("assign", ("id", "n"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("int", 128)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("array_getelement", ("id", "id"), ("id", "RosterId"), ("id", "i")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "id"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "counted")),
+            ("jmp", ("lbl", "next")),
+            ("label", "counted"),
+            ("iadd", ("id", "n"), ("id", "n"), ("int", 1)),
+            ("label", "next"),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "done"),
+            ("return", ("id", "n")),
+        ],
+    )
+    qualifies = Function(
+        "Qualifies",
+        return_type="Bool",
+        params=[("a", "Actor")],
+        locals=[("::temp0", "Bool"), ("player", "Actor")],
+        code=[
+            ("cast", ("id", "::temp0"), ("id", "a")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "a"), ("id", "player")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "other")),
+            ("return", ("bool", False)),
+            ("label", "other"),
+            ("callmethod", ("id", "IsDead"), ("id", "a"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "living")),
+            ("return", ("bool", False)),
+            ("label", "living"),
+            ("callmethod", ("id", "HasKeyword"), ("id", "a"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            ("callmethod", ("id", "IsHostileToActor"), ("id", "a"), ("id", "::temp0"), ("id", "player")),
+            ("return", ("id", "::temp0")),
+            ("label", "no"),
+            ("return", ("bool", False)),
+        ],
+    )
+    adopt = Function(
+        "Adopt",
+        return_type="Bool",
+        params=[("a", "Actor")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("fresh", "Bool"), ("v", "Float")],
+        code=[
+            ("callmethod", ("id", "Qualifies"), SELF, ("id", "::temp0"), ("id", "a")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            ("callmethod", ("id", "Enlist"), SELF, ("id", "fresh"), ("id", "a")),
+            # people who never loaded with the ability (an old save) get it now; the script itself sets this flag when it starts
+            ("callmethod", ("id", "GetActorValue"), ("id", "a"), ("id", "v"), ("str", "Variable09")),
+            ("cmp_lt", ("id", "::temp0"), ("id", "v"), ("float", 1.0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("callmethod", ("id", "AddSpell"), ("id", "a"), NONE, ("id", "::Ability_var"), ("bool", False)),
+            ("label", "done"),
+            ("return", ("id", "fresh")),
+            ("label", "no"),
+            ("return", ("bool", False)),
+        ],
+    )
+    log_around = Function(
+        "LogAround",
+        return_type="Int",
+        params=[("tries", "Int"), ("say", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("a", "Actor"), ("i", "Int"),
+                ("count", "Int"), ("known", "Int"), ("x", "Float"), ("y", "Float"), ("z", "Float"), ("msg", "String"),
+                ("c", "String"), ("k", "String")],
+        code=[
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "GetPositionX"), ("id", "player"), ("id", "x")),
+            ("callmethod", ("id", "GetPositionY"), ("id", "player"), ("id", "y")),
+            ("callmethod", ("id", "GetPositionZ"), ("id", "player"), ("id", "z")),
+            ("assign", ("id", "i"), ("int", 0)),
+            ("assign", ("id", "count"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("id", "tries")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("callstatic", ("id", "Game"), ("id", "FindRandomActor"), ("id", "a"), ("id", "x"), ("id", "y"), ("id", "z"),
+             ("id", "::LogRadius_var")),
+            ("callmethod", ("id", "Adopt"), SELF, ("id", "::temp0"), ("id", "a")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "next")),
+            ("iadd", ("id", "count"), ("id", "count"), ("int", 1)),
+            ("label", "next"),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "done"),
+            ("jmpf", ("id", "say"), ("lbl", "end")),
+            ("callmethod", ("id", "KnownCount"), SELF, ("id", "known")),
+            ("cast", ("id", "c"), ("id", "count")),
+            ("cast", ("id", "k"), ("id", "known")),
+            *notify(("str", "Pandora logged "), ("id", "c"), ("str", " new enemies ("), ("id", "k"), ("str", " known)")),
+            ("label", "end"),
+            ("return", ("id", "count")),
+        ],
+    )
+    log_now = Function(
+        "LogNow",
+        locals=[("::nonevar", "None"), ("n", "Int")],
+        code=[("callmethod", ("id", "LogAround"), SELF, ("id", "n"), ("int", 80), ("bool", True)), ("return", None)],
     )
     entry_index = Function(
         "EntryIndex",
@@ -677,8 +795,9 @@ def class_choice_quest() -> Script:
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
                          ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("RarityKeywords", "Keyword[]"),
                          ("Beams", "Form[]"), ("Lights", "Light[]"), ("Verbose", "Bool"), ("PromptMsg", "Message"),
-                         ("SettingsMsg", "Message"), ("MarkerForm", "Form"), ("RespawnPower", "Spell")],
-        functions=[on_init, on_update, choose, upgrade, loaded, prompt, settings, generation, in_range, respawn_one, respawn, enlist,
+                         ("SettingsMsg", "Message"), ("MarkerForm", "Form"), ("RespawnPower", "Spell"),
+                         ("LogPower", "Spell"), ("Ability", "Spell"), ("NpcKeyword", "Keyword"), ("LogRadius", "Float")],
+        functions=[on_init, on_update, choose, upgrade, loaded, prompt, settings, generation, in_range, respawn_one, respawn, enlist, known_count, qualifies, adopt, log_around, log_now,
                    entry_index, entrance_for, note_entrance, arrive, consider, place, report, clear, alive, follow, sweep],
     )
 
@@ -715,6 +834,7 @@ def watcher() -> Script:
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 0.5)),
             ("return", None),
             ("label", "other"),
+            ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "Variable09"), ("float", 1.0)),  # "I have a watcher"
             ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 1.5), ("float", 4.0)),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "delay")),
             ("return", None),
@@ -746,6 +866,7 @@ def watcher() -> Script:
             ("jmpf", ("id", "::temp1"), ("lbl", "end")),
             call("Scan"),
             ("callmethod", ("id", "Sweep"), ("id", "::Owner_var"), NONE),
+            ("callmethod", ("id", "LogAround"), ("id", "::Owner_var"), ("id", "::temp0"), ("int", 4), ("bool", False)),
             ("label", "end"),
             ("return", None),
         ],
@@ -1112,22 +1233,34 @@ def watcher() -> Script:
 
 
 def respawn_power() -> Script:
-    """SkylandsRespawn extends ActiveMagicEffect: the effect of the lesser power "Pandora Respawn" - it opens
-    the respawn settings (Owner.Settings()).
+    """SkylandsRespawn extends ActiveMagicEffect: the effect of the lesser powers "Pandora Respawn" (Action 0:
+    open the respawn settings) and "Pandora Log Enemies" (Action 1: note the hostile people around right now).
 
       Event OnEffectStart(Actor akTarget, Actor akCaster)
-        Owner.Settings()
+        If Action == 1
+          Owner.LogNow()
+        Else
+          Owner.Settings()
+        EndIf
       EndEvent
     """
     on_start = Function(
         "OnEffectStart",
         params=[("akTarget", "Actor"), ("akCaster", "Actor")],
-        locals=[("::nonevar", "None")],
-        code=[("callmethod", ("id", "Settings"), ("id", "::Owner_var"), NONE), ("return", None)],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            ("cmp_eq", ("id", "::temp0"), ("id", "::Action_var"), ("int", 1)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "settings")),
+            ("callmethod", ("id", "LogNow"), ("id", "::Owner_var"), NONE),
+            ("return", None),
+            ("label", "settings"),
+            ("callmethod", ("id", "Settings"), ("id", "::Owner_var"), NONE),
+            ("return", None),
+        ],
     )
     return Script(
         name="SkylandsRespawn",
         parent="ActiveMagicEffect",
-        auto_properties=[("Owner", "SkylandsClassQuest")],
+        auto_properties=[("Owner", "SkylandsClassQuest"), ("Action", "Int")],
         functions=[on_start],
     )
