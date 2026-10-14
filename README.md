@@ -54,8 +54,10 @@ every person and the player) carries one ability whose effect runs the `Skylands
 
 ## Respawning enemies (0.8)
 
-Hostile people note themselves on the quest's roster when they load. When you load a save, a box asks whether to
-respawn them (respawn here / not this time / always / never ask); the lesser power "Pandora Respawn" does it at
-any time and changes the setting. Respawning resets the rostered people in your cell (or within a short distance
-outdoors), brings back the dead ones, and gives guns another roll. In an interior you are moved back to where you
-first came in (the quest keeps an invisible marker at each interior's entrance, set when you arrive).
+Hostile people note themselves on the quest's roster when they load: their form id (not a reference, which the game
+loses when a cell reloads), what they are, and where they stood. When you load a save, a box asks whether to respawn
+them (respawn here / not this time / always / never ask); the lesser power "Pandora Respawn" does it at any time and
+changes the setting. Respawning looks at the roster entries in your cell (or within a short distance outdoors): a
+person still alive is left alone; a dead or missing one is removed and a fresh copy of the same kind is placed where
+they stood (and rolls for a gun again). In an interior you are moved back to where you first came in (the quest keeps
+an invisible marker at each interior's entrance, set when you arrive).

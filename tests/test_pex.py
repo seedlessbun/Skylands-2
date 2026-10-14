@@ -26,9 +26,12 @@ QUEST_EXPECTED = """Event OnUpdate()
   Return
 EndEvent"""
 
-UPGRADE = """  Int n = Roster.Length
+UPGRADE = """  Int n = RosterId.Length
   If n < 1
     Tracked = new ObjectReference[48]"""
+
+RESPAWN = """  ObjectReference n = player.PlaceAtMe(base, 1, False, False)
+  If n as Bool"""
 
 CHOOSE = """  player.EquipShout(chosenShout)
   player.AddSpell(RespawnPower, False)
@@ -112,9 +115,10 @@ WATCHER = {
   If Self.Carrying()
     Return
   EndIf""",
-    "equip": """    Me.AddItem(g, 1, True)
-    Me.AddItem(Bolts, 30, True)
-    Me.EquipItem(f, False, True)""",
+    "equip": """    Me.AddItem(f, 1, True)
+    g.Disable(False)
+    g.Delete()
+    Me.AddItem(Bolts, 30, True)""",
     "drop": """  Me.UnequipItem(w, False, True)
   ObjectReference drop = Me.DropObject(w, 1)""",
     "death": """Event OnDeath(Actor akKiller)
@@ -153,7 +157,7 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
                  "Form Property StarterAmmo Auto", "Keyword[] Property RarityKeywords Auto", "Form[] Property Beams Auto", "Message Property PromptMsg Auto", "Form Property MarkerForm Auto", "Spell Property RespawnPower Auto",
                  "Light[] Property Lights Auto", "Bool Property Verbose Auto"):
         assert prop in psc
-    for text in (QUEST_EXPECTED, UPGRADE, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
+    for text in (QUEST_EXPECTED, UPGRADE, RESPAWN, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
         assert text in psc
 
 
