@@ -155,6 +155,7 @@ SLSF1_LIT = 0x82400301  # what nifly writes for a plain lit shape (specular, sha
 SLSF2_LIT = 0x00008001
 VF_TANGENT_SET = VF_VERTEX | VF_UV | VF_NORMAL | VF_TANGENT | VF_FULLPREC
 HAVOK_LAYER_CLUTTER = 4
+HAVOK_MATERIAL_SOLID_METAL = 1288358971  # SKY_HAV_MAT_SOLID_METAL: sounds and impacts of a metal object
 
 
 def _byte(v: float) -> int:
@@ -223,7 +224,7 @@ def lit_shape(b: NifBuilder, name: str, mesh, texture: str | None, normal_map: s
 
 def collision_blocks(b: NifBuilder, half: tuple[float, float, float], mass: float, root: int, layer: int = HAVOK_LAYER_CLUTTER) -> int:
     """A box collision body (havok units, half extents) for the root; returns the collision object's block index."""
-    box = b.add("bhkBoxShape", struct.pack("<II", 0, 0) + b"\0" * 8 + struct.pack("<3ff", half[0], half[1], half[2], 0.0))
+    box = b.add("bhkBoxShape", struct.pack("<If", HAVOK_MATERIAL_SOLID_METAL, 0.0) + b"\0" * 8 + struct.pack("<3ff", half[0], half[1], half[2], 0.0))
     # inertia of a solid box, as three rows of four floats
     hx, hy, hz = (2 * h for h in half)
     ix, iy, iz = mass * (hy * hy + hz * hz) / 12, mass * (hx * hx + hz * hz) / 12, mass * (hx * hx + hy * hy) / 12

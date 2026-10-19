@@ -309,3 +309,25 @@ def test_gun_models_spin_and_scale(tmp_path):
     e90, p90 = bounds(90, 1.0)
     assert len(p90) == len(p0) and p90 != p0  # turned, not changed in size
     assert abs(sum(e90) - sum(e0)) < 1.0
+
+
+def test_gun_models_follow_the_vanilla_crossbow_axes(tmp_path):
+    from skylands_setup import meshes as M
+    from skylands_setup.skyrim import nif, nifread
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    # a vanilla crossbow lying along +x (60 long), thin in z, wider in y, grip at the origin
+    vanilla = nif.gun([(M.box(30, 0, 0, 60, 12, 4), None, None)])
+    loose = sky / "Data" / "Meshes" / "dlc01" / "weapons" / "crossbow"
+    loose.mkdir(parents=True)
+    (loose / "crossbow.nif").write_bytes(vanilla)
+    rep = generate.generate(bl2, sky, tmp_path / "out", gun_models="proxy")
+    assert any("vanilla length 60.0 along axis x+" in line for line in rep["model_log"]), rep["model_log"]
+    f = next((tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Guns").glob("proxy_*.nif"))
+    pts = nifread.world_points(f.read_bytes())
+    ext = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
+    assert ext[0] == max(ext) and ext[0] > 20  # the barrel axis is x, as in the vanilla mesh
+    assert sum(p[0] for p in pts) > 0  # and points the same way (forward = +x)

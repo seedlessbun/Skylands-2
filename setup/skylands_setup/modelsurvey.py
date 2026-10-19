@@ -8,6 +8,7 @@ textures it found, and a hex head of whatever it could not read, so the next bui
 from __future__ import annotations
 
 import json
+import re
 import struct
 import sys
 import time
@@ -84,6 +85,31 @@ def inspect_part(ix: Index, src: gunparts.Bl2Source, part: str) -> dict:
     return rep
 
 
+CHARACTER_PACKAGES = re.compile(r"(char|pawn|psycho|marauder|nomad|siren|assassin|soldier|mercenary|mechromancer|player|bandit|midget)", re.I)
+
+
+def character_survey(ix: Index, limit: int = 40) -> list[dict]:
+    """Which packages hold character meshes (for the later enemy and player model work): classes and a few names each."""
+    out = []
+    for f in ix.files:
+        if not CHARACTER_PACKAGES.search(f.stem) or len(out) >= limit:
+            continue
+        try:
+            pkg = ix.package(f)
+        except Exception as e:  # noqa: BLE001
+            out.append({"package": f.name, "error": str(e)[:100]})
+            continue
+        classes: dict[str, list[str]] = {}
+        for i, e in enumerate(pkg.exports, 1):
+            cls = pkg.obj_class(i)
+            if cls in ("SkeletalMesh", "AnimSet", "PhysicsAsset", "Texture2D", "MaterialInstanceConstant"):
+                classes.setdefault(cls, []).append(pkg.path_of(i))
+        if classes.get("SkeletalMesh"):
+            out.append({"package": f.name, "mb": round(f.stat().st_size / 1e6, 1),
+                        **{k: {"count": len(v), "sample": v[:6]} for k, v in classes.items()}})
+    return out
+
+
 def main(argv: list[str]) -> int:
     import argparse
 
@@ -128,6 +154,11 @@ def main(argv: list[str]) -> int:
                 except Exception:  # noqa: BLE001
                     report["parts"].append({"slot": slot, "part": part, "error": traceback.format_exc()[-800:]})
                 save()
+        say("Looking for character meshes ...")
+        try:
+            report["characters"] = character_survey(ix)
+        except Exception:  # noqa: BLE001
+            report["characters"] = traceback.format_exc()[-600:]
         report["summary"] = src.summary()
         report["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
         save()

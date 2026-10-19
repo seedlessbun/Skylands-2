@@ -22,3 +22,17 @@ def test_inspect_part_reports_geometry_and_texture(tmp_path):
     json.dumps(rep, default=str)
     missing = modelsurvey.inspect_part(ix, src, "GD_Weap_Pistol.Nothing.Missing")
     assert missing["mesh_path"] is None
+
+
+def test_character_survey_lists_skeletal_mesh_packages(tmp_path):
+    import fake_bl2
+
+    cooked = tmp_path / "bl2" / "WillowGame" / "CookedPCConsole"
+    cooked.mkdir(parents=True)
+    b = fake_bl2.ObjBuilder()
+    b.obj("Char_Psycho.Mesh.Psycho_Body", "SkeletalMesh", b"")
+    b.obj("Char_Psycho.Anim.Psycho_Anims", "AnimSet", b"")
+    (cooked / "Char_Psycho.upk").write_bytes(b.build())
+    ix = Index(tmp_path / "bl2")
+    rows = modelsurvey.character_survey(ix)
+    assert rows and rows[0]["SkeletalMesh"]["sample"] == ["Char_Psycho.Mesh.Psycho_Body"] and rows[0]["AnimSet"]["count"] == 1
