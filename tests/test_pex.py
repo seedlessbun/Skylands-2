@@ -115,6 +115,7 @@ WATCHER = {
   Owner.NoteEntrance()
   Ticks += 1
   If Ticks % 4 == 0
+    Self.Hand()
     Self.Scan()
     Owner.Sweep()
     Owner.LogAround(4, False)
@@ -129,6 +130,7 @@ WATCHER = {
   EndIf""",
     "load": """Event OnPlayerLoadGame()
   If IsPlayer
+    Self.Hand()
     Owner.LoadedSave()
   EndIf""",
     "speed": """      Int n = SpeedKeywords.Length

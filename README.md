@@ -68,7 +68,7 @@ an invisible marker at each interior's entrance, set when you arrive).
 ## Powers on an existing character (0.9.1)
 
 The quest no longer trusts values saved in an old game: the player's watcher hands it the current forms (powers,
-messages, beams, ability) every time the game loads, and the quest rebuilds its roster arrays if they are empty.
+messages, beams, ability) every time the game loads and every two seconds (an ability already running on a saved character never restarts, so handing over only at start missed it), and the quest rebuilds its roster arrays if they are empty.
 The Pandora Log message ends with `dup / merged / added` counts so a "0 known" can be traced.
 
 ## Form ids stay put (0.9)

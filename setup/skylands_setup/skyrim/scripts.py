@@ -992,6 +992,18 @@ def watcher() -> Script:
             ("return", None),
         ],
     )
+    hand = Function(
+        "Hand",
+        locals=[("::nonevar", "None")],
+        code=[
+            ("callmethod", ("id", "Refresh"), ("id", "::Owner_var"), NONE, ("id", "::RarityKeywords_var"), ("id", "::Beams_var"),
+             ("id", "::Lights_var"), ("id", "::PromptMsg_var"), ("id", "::SettingsMsg_var"), ("id", "::MarkerForm_var"),
+             ("id", "::RespawnPower_var"), ("id", "::LogPower_var"), ("id", "::Ability_var"), ("id", "::NpcKeyword_var"),
+             ("id", "::ScanRadius_var"), ("id", "::Verbose_var")),
+            ("callmethod", ("id", "Upgrade"), ("id", "::Owner_var"), NONE),
+            ("return", None),
+        ],
+    )
     player_tick = Function(
         "PlayerTick",
         locals=[("::nonevar", "None"), ("::temp0", "Int"), ("::temp1", "Bool")],
@@ -1001,6 +1013,7 @@ def watcher() -> Script:
             ("imod", ("id", "::temp0"), ("id", "Ticks"), ("int", 4)),
             ("cmp_eq", ("id", "::temp1"), ("id", "::temp0"), ("int", 0)),
             ("jmpf", ("id", "::temp1"), ("lbl", "end")),
+            call("Hand"),
             call("Scan"),
             ("callmethod", ("id", "Sweep"), ("id", "::Owner_var"), NONE),
             ("callmethod", ("id", "LogAround"), ("id", "::Owner_var"), ("id", "::temp0"), ("int", 4), ("bool", False)),
@@ -1013,6 +1026,7 @@ def watcher() -> Script:
         locals=[("::nonevar", "None")],
         code=[
             ("jmpf", ("id", "IsPlayer"), ("lbl", "end")),
+            call("Hand"),
             ("callmethod", ("id", "LoadedSave"), ("id", "::Owner_var"), NONE),
             ("label", "end"),
             ("return", None),
@@ -1366,7 +1380,7 @@ def watcher() -> Script:
                          ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
-        functions=[on_start, on_update, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+        functions=[on_start, on_update, hand, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 
