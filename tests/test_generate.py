@@ -336,7 +336,7 @@ def test_gun_models_follow_the_vanilla_crossbow_axes(tmp_path):
     f = next((tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Guns").glob("proxy_*.nif"))
     pts = nifread.world_points(f.read_bytes())
     ext = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
-    assert ext[0] == max(ext) and ext[0] > 20  # the barrel axis is x, as in the vanilla mesh
+    assert ext[0] == max(ext) and ext[0] > 10  # the barrel axis is x, as in the vanilla mesh
     assert sum(p[0] for p in pts) > 0  # and points the same way (forward = +x)
 
 

@@ -27,8 +27,9 @@ MESH_DIR = "Skylands\\Guns"  # under Meshes\
 TEX_DIR = "textures\\skylands\\guns"
 HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
-# length of each gun type, as a fraction of the vanilla crossbow's length
-LENGTH = {"pistol": 0.45, "smg": 0.7, "assault_rifle": 0.95, "shotgun": 1.0, "sniper": 1.2, "launcher": 1.05}
+# length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
+# as a fraction of the crossbow came out far too big next to the player
+LENGTH = {"pistol": 16.0, "smg": 24.0, "assault_rifle": 34.0, "shotgun": 34.0, "sniper": 42.0, "launcher": 36.0}
 
 PALETTE = {  # body colour, trim colour per manufacturer
     "Bandit": ((120, 78, 52), (70, 56, 48)),
@@ -298,7 +299,7 @@ class GunModels:
         if key in self.written:
             self.stats["shared"] += 1
             return self.written[key]
-        length = self.fit.length * LENGTH.get(gun_type, 1.0) * self.scale
+        length = LENGTH.get(gun_type, 24.0) * self.scale
         lo, hi = _bounds_of(parts)
         if method != "proxy":
             _sanity(parts, lo, hi)

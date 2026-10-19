@@ -102,9 +102,36 @@ def read_shape(block: bytes) -> Shape:
     return Shape(name, trans, rot, scale, pos)
 
 
+def read_partition(block: bytes) -> Shape:
+    """The vertices a skinned shape keeps in its NiSkinPartition (Skyrim SE stores them there, not in the shape)."""
+    nparts, dsize, vsize = struct.unpack_from("<III", block, 0)
+    (desc,) = struct.unpack_from("<Q", block, 12)
+    if vsize < 8 or not dsize:
+        raise NifError("partition has no vertex data")
+    attrs = desc >> 44
+    if not attrs & 0x1:
+        raise NifError("partition has no positions")
+    full = bool(attrs & 0x400)
+    off = (desc >> 4) & 0xF
+    pos = []
+    for i in range(dsize // vsize):
+        o = 20 + i * vsize + off * 4
+        if full:
+            pos.append(struct.unpack_from("<3f", block, o))
+        else:
+            pos.append((_half(block[o:o + 2]), _half(block[o + 2:o + 4]), _half(block[o + 4:o + 6])))
+    return Shape(-1, (0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0), 1.0, pos)
+
+
 def shapes(data: bytes) -> list[Shape]:
     out = []
     for kind, blk in blocks(data):
+        if kind == "NiSkinPartition":
+            try:
+                out.append(read_partition(blk))
+            except (NifError, struct.error):
+                pass
+            continue
         if kind in ("BSTriShape", "BSSubIndexTriShape", "BSMeshLODTriShape", "BSDynamicTriShape"):
             try:
                 out.append(read_shape(blk))

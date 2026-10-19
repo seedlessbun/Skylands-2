@@ -63,3 +63,15 @@ def test_gun_nif_loads_in_nifly(tmp_path):
     src.write_bytes(nif.gun(_gun_parts()))
     r = subprocess.run([NIFCHECK, str(src), str(out)], capture_output=True, text=True, check=True)
     assert "shape SkylandsGun0 verts=24 tris=12" in r.stdout and "shape SkylandsGun1" in r.stdout and "resaved" in r.stdout
+
+
+def test_skin_partition_vertices_are_read():
+    import struct
+
+    from skylands_setup.skyrim import nifread
+
+    desc = (0x1 | 0x400) << 44 | (4 << 0)  # positions, full precision, 16-byte vertices, position at offset 0
+    verts = b"".join(struct.pack("<3ff", x, 2.0 * x, 3.0, 0.0) for x in (1.0, 2.0, 3.0))
+    block = struct.pack("<IIIQ", 0, len(verts), 16, desc) + verts
+    s = nifread.read_partition(block)
+    assert s.positions == [(1.0, 2.0, 3.0), (2.0, 4.0, 3.0), (3.0, 6.0, 3.0)]
