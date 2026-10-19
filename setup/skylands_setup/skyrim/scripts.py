@@ -67,10 +67,15 @@ def class_choice_quest() -> Script:
     )
     bootstrap = Function(
         "Bootstrap",
-        locals=[("::nonevar", "None"), ("player", "Actor")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor")],
         code=[
-            # this quest's own properties are fresh, so it can give the player the ability that carries the watcher
+            # this quest's own properties are fresh, so it can give the player the ability that carries the watcher;
+            # only when missing: adding it again restarts the effect
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "AbilityInit")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "add")),
+            ("return", None),
+            ("label", "add"),
             ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "AbilityInit"), ("bool", False)),
             ("return", None),
         ],
@@ -601,7 +606,8 @@ def class_choice_quest() -> Script:
             ("assign", ("id", "i"), ("int", 0)),
             ("assign", ("id", "count"), ("int", 0)),
             ("assign", ("id", "seen_a"), ("int", 0)),
-                        ("assign", ("id", "LogHuman"), ("int", 0)),
+            ("jmpf", ("id", "say"), ("lbl", "loop")),  # only a counted search resets the counts (the quiet one runs every 2 s)
+            ("assign", ("id", "LogHuman"), ("int", 0)),
             ("assign", ("id", "LogFoes"), ("int", 0)),
             ("assign", ("id", "LogDup"), ("int", 0)),
             ("assign", ("id", "LogMerged"), ("int", 0)),
