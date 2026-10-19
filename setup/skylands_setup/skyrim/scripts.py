@@ -169,29 +169,10 @@ def class_choice_quest() -> Script:
     )
     upgrade = Function(
         "Upgrade",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("n", "Int"), ("player", "Actor"), ("msg", "String")],
+        locals=[("::nonevar", "None")],
         code=[
-            # a save made with an older version: make the arrays this version needs, and give the player the respawn power
+            # a save made with an older version: make the arrays this version needs (the player's ability script gives the powers)
             call("MakeArrays"),
-            ("jmpf", ("id", "Chosen"), ("lbl", "end")),
-            ("jmpf", ("id", "Refreshed"), ("lbl", "end")),
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::LogPower_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "give_log")),
-            ("jmp", ("lbl", "check_respawn")),
-            ("label", "give_log"),
-            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::LogPower_var"), ("bool", False)),
-            ("jmpf", ("id", "::Verbose_var"), ("lbl", "check_respawn")),
-            *notify(("str", "Skylands: you learned the Pandora Log Enemies power")),
-            ("label", "check_respawn"),
-            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::RespawnPower_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "give")),
-            ("return", None),
-            ("label", "give"),
-            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::RespawnPower_var"), ("bool", False)),
-            ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
-            *notify(("str", "Skylands: you learned the Pandora Respawn power")),
-            ("label", "end"),
             ("return", None),
         ],
     )
@@ -426,7 +407,7 @@ def class_choice_quest() -> Script:
     find_lost = Function(
         "FindLost",
         return_type="Bool",
-        params=[("r", "ObjectReference"), ("base", "Form")],
+        params=[("r", "Actor"), ("base", "Form")],
         locals=[("::temp0", "Bool"), ("i", "Int"), ("b", "Form"), ("ref", "ObjectReference"), ("x", "Float"), ("y", "Float"),
                 ("dx", "Float"), ("dy", "Float")],
         code=[
@@ -467,7 +448,7 @@ def class_choice_quest() -> Script:
     enlist = Function(
         "Remember",
         return_type="Bool",
-        params=[("r", "ObjectReference")],
+        params=[("r", "Actor")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference"), ("x", "Float"),
                 ("y", "Float"), ("z", "Float"), ("base", "Form"), ("cell", "Cell"), ("name", "String"), ("msg", "String")],
         code=[

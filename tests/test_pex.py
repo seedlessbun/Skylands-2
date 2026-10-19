@@ -27,9 +27,9 @@ QUEST_EXPECTED = """Event OnUpdate()
   Return
 EndEvent"""
 
-UPGRADE = """  Self.MakeArrays()
-  If Chosen
-    If Refreshed"""
+UPGRADE = """Function Upgrade()
+  Self.MakeArrays()
+  Return"""
 
 ADOPT = """  Int st = Self.Stage(a)
   If st < 3
