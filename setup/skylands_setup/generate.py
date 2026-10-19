@@ -400,8 +400,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
 
     # ---- guns ---------------------------------------------------------------------------------
     crossbow = m.need("WEAP", S.SKYRIM_BASE["crossbow"].edid)
-    models = models_mod.GunModels(gun_models, out_data, models_mod.find_vanilla_mesh(data_dir, crossbow.first("MODL")),
-                                  report.setdefault("model_log", []).append, model_sources, model_spin, model_scale) if gun_models != "off" else None
+    first_person: dict[str, int] = {}
+    model_log = report.setdefault("model_log", [])
+    models = models_mod.GunModels(gun_models, out_data, models_mod.find_vanilla_mesh(data_dir, crossbow.first("MODL"), model_log.append),
+                                  model_log.append, model_sources, model_spin, model_scale) if gun_models != "off" else None
     bolts = m.need("AMMO", S.SKYRIM_BASE["bolts"].edid)
     base_enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment) for e in S.ELEMENTS.values()}
     any_enchant = next(iter(base_enchant.values()))
@@ -456,6 +458,12 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                 if mesh:
                     w.set("MODL", esp.zstr(mesh))
                     w.drop("MODT", "MODS", "MO2T", "MO2S")
+                    if mesh not in first_person:  # the model Skyrim shows in first person (and, it seems, in the inventory)
+                        fp = p.new("STAT", "SkylandsGunView_" + mesh.rsplit("\\", 1)[-1].removesuffix(".nif"))
+                        fp.add("OBND", struct.pack("<6h", -40, -40, -40, 40, 40, 40)).add("MODL", esp.zstr(mesh))
+                        fp.add("DNAM", struct.pack("<fI", 30.0, 0))
+                        first_person[mesh] = fp.form_id
+                    insert_ordered(w, "WNAM", esp.u32(first_person[mesh]), WEAP_ORDER)
             p.override(w)
             by_rarity.setdefault(rr.level, []).append(w.form_id)
             if g["type"] == "pistol" and rr.level == 1 and element is None:

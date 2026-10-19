@@ -161,6 +161,8 @@ def main(argv: list[str]) -> int:
         names = src._meshes_by_name or {}  # noqa: SLF001
         report["weapon_mesh_names"] = {"count": sum(len(v) for v in names.values()),
                                        "sample": [p for v in list(names.values())[:60] for p in v[:1]]}
+        report["weapon_groups"] = sorted(k for k in ix.groups if re.search(r"(pistol|smg|shotgun|sniper|launcher|assault|rifle|weap|wpn|gun)", k))[:300]
+        report["packages_with_weapon_names"] = [f.name for f in ix.files if re.search(r"(pistol|smg|shotgun|sniper|launcher|assault|rifle|weap|wpn|gun)", f.stem, re.I)][:100]
         say("Looking for character meshes ...")
         try:
             report["characters"] = character_survey(ix)

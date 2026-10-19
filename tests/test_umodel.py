@@ -41,3 +41,21 @@ def test_find_exe_prefers_an_env_path(tmp_path, monkeypatch):
     assert umodel.find_exe(tmp_path / "work", print) == [str(exe)]
     monkeypatch.delenv("SKYLANDS_UMODEL")
     assert umodel.find_exe(tmp_path / "work", print) is None
+
+
+def test_candidate_urls_come_from_the_project_page(monkeypatch):
+    import io
+
+    html = b'<a href="/down/52/umodel/umodel_win32.zip">win</a><a href="/en/projects/other">x</a><a href="/down/52/umodel/umodel_linux.tgz">l</a>'
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(umodel.urllib.request, "urlopen", lambda req, timeout=0: Resp(html))
+    urls = umodel._candidate_urls(print)
+    assert urls[0] == "https://www.gildor.org/down/52/umodel/umodel_win32.zip"
+    assert set(umodel.DOWNLOADS) <= set(urls)

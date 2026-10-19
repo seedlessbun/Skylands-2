@@ -76,24 +76,49 @@ def fit_from_points(points: list[M.Vec]) -> Fit:
     return Fit(rows, ext[fwd], f"vanilla length {ext[fwd]:.1f} along axis {'xyz'[fwd]}{'+' if sign > 0 else '-'}, up axis {'xyz'[up]}")  # type: ignore[arg-type]
 
 
-def find_vanilla_mesh(data_dir: Path, modl: bytes | None) -> bytes | None:
-    """The vanilla crossbow's NIF: a loose file in Data\\Meshes, or inside one of Skyrim's archives."""
+def find_vanilla_mesh(data_dir: Path, modl: bytes | None, say=None) -> bytes | None:
+    """The vanilla crossbow's NIF: a loose file in Data\\Meshes, or inside one of Skyrim's archives (an exact path first, then
+    the nearest thing named like a crossbow). Says what it did, because a miss means the fit falls back to guessed axes."""
+    log = say or (lambda _m: None)
     if not modl:
+        log("vanilla crossbow mesh: the crossbow record has no model path")
         return None
     rel = modl.split(b"\0")[0].decode("cp1252", "replace").replace("/", "\\").lstrip("\\")
     loose = Path(data_dir) / "Meshes" / Path(*rel.split("\\"))
     if loose.is_file():
+        log(f"vanilla crossbow mesh: {rel} (loose file)")
         return loose.read_bytes()
     from .skyrim import bsa
 
     inner = "meshes\\" + rel.lower()
+    opened, failed, near = 0, [], []
     for archive in sorted(Path(data_dir).glob("*.bsa")):
         try:
             a = bsa.BSA(archive)
-            if inner in a.entries:
-                return a.read(inner)
-        except (bsa.BSAError, OSError, ValueError):
+        except Exception as e:  # noqa: BLE001
+            failed.append(f"{archive.name}: {type(e).__name__}")
             continue
+        opened += 1
+        if inner in a.entries:
+            try:
+                data = a.read(inner)
+                log(f"vanilla crossbow mesh: {rel} (in {archive.name})")
+                return data
+            except Exception as e:  # noqa: BLE001
+                failed.append(f"{archive.name} read: {type(e).__name__}: {e}")
+        for name in a.entries:
+            if "crossbow" in name and name.endswith(".nif") and not any(k in name for k in ("1stperson", "firstperson", "bolt", "skin", "dlc02", "_fp")):
+                near.append((archive, name))
+    if near:
+        near.sort(key=lambda t: (0 if "weapons" in t[1] else 1, len(t[1])))
+        archive, name = near[0]
+        try:
+            data = bsa.BSA(archive).read(name)
+            log(f"vanilla crossbow mesh: {rel} not found; using {name} from {archive.name}")
+            return data
+        except Exception as e:  # noqa: BLE001
+            failed.append(f"{archive.name} read {name}: {type(e).__name__}: {e}")
+    log(f"vanilla crossbow mesh: {rel} not found ({opened} archives searched, unreadable: {failed[:4] or 'none'})")
     return None
 
 

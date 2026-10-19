@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.3"
+VERSION = "0.10.4"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -228,7 +228,8 @@ def main(argv: list[str]) -> int:
                     say(f"UModel: {command[0]}")
                     sources["umodel"] = umodel.UModelSource(ix, say, command, work, attach=a.gun_attach)
                 else:
-                    say("UModel was not found and could not be downloaded; put umodel.exe in the work folder to use that method.")
+                    say("UModel was not found and could not be downloaded. Download it from https://www.gildor.org/en/projects/umodel (the Windows zip), "
+                        "unzip it and put umodel.exe (or umodel_64.exe) in the work folder next to this log, then run this installer again.")
         report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources,
                                    model_spin=a.gun_spin, model_scale=a.gun_scale)
         for src in sources.values():

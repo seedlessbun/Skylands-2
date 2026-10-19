@@ -101,6 +101,26 @@ class Bl2Source:
                     return paths[0]
         return None
 
+    def describe(self, part: str) -> str:
+        """What a part's properties hold, for the log when no mesh could be found from them."""
+        props = self.ix.props(part)
+        if props is None:
+            return "properties could not be read"
+        vals: list[str] = []
+        for key, v in props.items():
+            found: list[str] = []
+            _strings(v, found)
+            vals += [f"{key}={f[:70]}" for f in found[:2]]
+        return f"keys {sorted(props)[:30]}; values {vals[:10]}"
+
+    def group_hint(self) -> None:
+        """Once: which package groups look like weapon assets (their names tell where the meshes live)."""
+        if getattr(self, "_hinted", False):
+            return
+        self._hinted = True
+        keys = [k for k in self.ix.groups if re.search(r"(pistol|smg|shotgun|sniper|launcher|assault|rifle|weap|wpn|gun)", k) and not k.startswith(("gd_", "d_"))]
+        self.log(f"{len(keys)} package groups look like weapon assets, e.g. {sorted(keys)[:14]}", force=True)
+
     def part_data(self, part: str) -> dict | None:
         if part in self.cache:
             return self.cache[part]
@@ -108,6 +128,7 @@ class Bl2Source:
             self.log("time budget for reading meshes used up", force=self.logged < 41)
             return None
         self.stats["parts"] += 1
+        self.group_hint()
         result = None
         try:
             result = self._read_part(part)
@@ -120,7 +141,7 @@ class Bl2Source:
         path = self.mesh_path(part)
         if not path:
             self.stats["no_mesh"] += 1
-            self.log(f"{part}: no mesh object found in its properties")
+            self.log(f"{part}: no mesh object found; " + self.describe(part), force=self.stats["no_mesh"] <= 8)
             return None
         pkg, idx = self.ix.get(path)
         data = pkg.export_data(idx)

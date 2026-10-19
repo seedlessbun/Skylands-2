@@ -331,3 +331,17 @@ def test_gun_models_follow_the_vanilla_crossbow_axes(tmp_path):
     ext = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
     assert ext[0] == max(ext) and ext[0] > 20  # the barrel axis is x, as in the vanilla mesh
     assert sum(p[0] for p in pts) > 0  # and points the same way (forward = +x)
+
+
+def test_gun_models_set_the_first_person_model_object(tmp_path):
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    generate.generate(bl2, sky, tmp_path / "out", gun_models="proxy")
+    tes, recs = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP", "STAT"})
+    views = {r.form_id: r for r in recs["STAT"] if r.edid.startswith("SkylandsGunView_")}
+    assert views
+    for w in recs["WEAP"]:
+        fp = views[struct.unpack("<I", w.first("WNAM"))[0]]
+        assert fp.first("MODL") == w.first("MODL")  # first person and world model are the same mesh

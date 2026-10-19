@@ -40,12 +40,38 @@ def find_exe(work: Path, say) -> list[str] | None:
     return None
 
 
+PAGES = ("https://www.gildor.org/en/projects/umodel", "https://www.gildor.org/en/projects/umodel#files")
+
+
+def _candidate_urls(say) -> list[str]:
+    """The download links on UModel's own page (the numbered path in them changes between releases), then the old guesses."""
+    urls: list[str] = []
+    for page in PAGES[:1]:
+        try:
+            req = urllib.request.Request(page, headers={"User-Agent": "Mozilla/5.0 (Skylands-setup)"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                html = r.read().decode("utf-8", "replace")
+            for href in re.findall(r'href="([^"]+)"', html):
+                low = href.lower()
+                if "umodel" in low and (low.endswith(".zip") or "/down/" in low):
+                    urls.append(urllib.request.urljoin(page, href.replace("&amp;", "&")))
+        except Exception as e:  # noqa: BLE001
+            say(f"  umodel: could not read {page} ({type(e).__name__}: {str(e)[:80]})")
+    # a Windows build first (32-bit zips hold both the 32 and 64-bit exes)
+    urls.sort(key=lambda u: (0 if "win" in u.lower() else 1, 0 if u.lower().endswith(".zip") else 1))
+    return [*dict.fromkeys(urls), *DOWNLOADS]
+
+
 def download(work: Path, say) -> list[str] | None:
     dest = work / "tools"
-    for url in DOWNLOADS:
+    tried = 0
+    for url in _candidate_urls(say):
+        if tried >= 6:
+            break
+        tried += 1
         try:
             say(f"  umodel: downloading {url}")
-            req = urllib.request.Request(url, headers={"User-Agent": "Skylands-setup"})
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Skylands-setup)"})
             with urllib.request.urlopen(req, timeout=90) as r:
                 blob = r.read()
             with zipfile.ZipFile(io.BytesIO(blob)) as z:
@@ -108,7 +134,7 @@ class UModelSource(gunparts.Bl2Source):
         path = self.mesh_path(part)
         if not path:
             self.stats["no_mesh"] += 1
-            self.log(f"{part}: no mesh object found in its properties")
+            self.log(f"{part}: no mesh object found; " + self.describe(part), force=self.stats["no_mesh"] <= 8)
             return None
         pkg, idx = self.ix.get(path)
         out = self.export(pkg, idx, path)
