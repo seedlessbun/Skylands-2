@@ -40,7 +40,8 @@ ADOPT = """  Int st = Self.Stage(a)
     Return False
   EndIf
   LogFoes += 1
-  Bool fresh = Self.Enlist(a)
+  LogStep = 10
+  Bool fresh = Self.Remember(a)
   Float v = a.GetActorValue("Variable09")
   If v < 1.0
     a.AddSpell(Ability, False)
@@ -127,7 +128,7 @@ WATCHER = {
     Checked = True
     Foe = Self.Eligible()
     If Foe
-      Owner.Enlist(Me)
+      Owner.Remember(Me)
     EndIf
   EndIf""",
     "load": """Event OnPlayerLoadGame()

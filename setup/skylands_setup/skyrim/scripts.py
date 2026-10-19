@@ -59,7 +59,7 @@ def class_choice_quest() -> Script:
     * Loot beams: Consider(ref) puts a rarity-coloured beam (a static) and light on a Skylands gun lying
       on the ground; Sweep() (every couple of seconds, from the player's watcher) moves them with the gun
       and removes them when the gun is picked up or unloaded.
-    * Respawning: hostile people enlist themselves (Enlist); on a save load the player is asked whether to
+    * Respawning: hostile people enlist themselves (Remember); on a save load the player is asked whether to
       respawn them (Prompt), or the respawn power does it (Settings); Respawn() resets the enlisted ones
       in the player's area and, in an interior, moves the player to where they first came in (NoteEntrance).
     """
@@ -465,7 +465,7 @@ def class_choice_quest() -> Script:
         ],
     )
     enlist = Function(
-        "Enlist",
+        "Remember",
         return_type="Bool",
         params=[("r", "ObjectReference")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference"), ("x", "Float"),
@@ -587,7 +587,8 @@ def class_choice_quest() -> Script:
             ("return", ("bool", False)),
             ("label", "foe"),
             ("iadd", ("id", "LogFoes"), ("id", "LogFoes"), ("int", 1)),
-            ("callmethod", ("id", "Enlist"), SELF, ("id", "fresh"), ("id", "a")),
+            ("assign", ("id", "LogStep"), ("int", 10)),  # reached the call
+            ("callmethod", ("id", "Remember"), SELF, ("id", "fresh"), ("id", "a")),
             # people who never loaded with the ability (an old save) get it now; the script itself sets this flag when it starts
             ("callmethod", ("id", "GetActorValue"), ("id", "a"), ("id", "v"), ("str", "Variable09")),
             ("cmp_lt", ("id", "::temp0"), ("id", "v"), ("float", 1.0)),
@@ -1127,7 +1128,7 @@ def watcher() -> Script:
             ("assign", ("id", "Checked"), ("bool", True)),
             ("callmethod", ("id", "Eligible"), SELF, ("id", "Foe")),
             ("jmpf", ("id", "Foe"), ("lbl", "checked")),
-            ("callmethod", ("id", "Enlist"), ("id", "::Owner_var"), NONE, ("id", "Me")),
+            ("callmethod", ("id", "Remember"), ("id", "::Owner_var"), NONE, ("id", "Me")),
             ("label", "checked"),
             ("jmpf", ("id", "Foe"), ("lbl", "end")),
             ("callmethod", ("id", "GenerationNow"), ("id", "::Owner_var"), ("id", "g")),
