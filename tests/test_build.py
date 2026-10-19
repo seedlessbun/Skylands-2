@@ -21,9 +21,34 @@ def test_previous_install_files_are_removed_and_empty_folders_pruned(tmp_path):
     work = tmp_path / "work"
     work.mkdir()
     (work / "installed-files.json").write_text(json.dumps({"skyrim": str(sky), "files": ["Data/Meshes/Skylands/Guns/proxy_a.nif"]}))
-    assert build.remove_previous(work, sky) == 1
+    assert build.remove_stale(work, sky, []) == 1
     assert not old.exists() and keep.exists() and not (sky / "Data" / "Meshes" / "Skylands").exists()
-    assert build.remove_previous(work, tmp_path / "elsewhere") == 0  # a record for another Skyrim folder is left alone
+    assert build.remove_stale(work, tmp_path / "elsewhere", []) == 0  # a record for another Skyrim folder is left alone
+
+
+def test_stale_cleanup_never_removes_a_file_the_new_install_wrote(tmp_path):
+    sky = tmp_path / "sky"
+    (sky / "Data").mkdir(parents=True)
+    esp = sky / "Data" / "Skylands.esp"
+    esp.write_bytes(b"x")
+    old = sky / "Data" / "Meshes" / "Skylands" / "Guns" / "a.nif"
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"y")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "installed-files.json").write_text(json.dumps({"skyrim": str(sky), "files": ["Data/Skylands.esp", "Data/Meshes/Skylands/Guns/a.nif"]}))
+    assert build.remove_stale(work, sky, ["Data/Skylands.esp"]) == 1
+    assert esp.exists() and not old.exists()
+
+
+def test_verify_reports_missing_pieces(tmp_path):
+    sky = tmp_path / "sky"
+    (sky / "Data" / "Scripts").mkdir(parents=True)
+    (sky / "Data" / "Skylands.esp").write_bytes(b"x" * 2048)
+    plugins = tmp_path / "plugins.txt"
+    plugins.write_text("# comment\nSkyrim.esm\n*Skylands.esp\n")
+    lines = build.verify(sky, plugins)
+    assert "present, 2 KB" in lines[0] and "MISSING" in lines[1] and "*Skylands.esp" in lines[-1]
 
 
 def test_full_build_with_proxy_models_and_uninstall(tmp_path, monkeypatch):

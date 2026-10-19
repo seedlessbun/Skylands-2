@@ -26,6 +26,9 @@ from . import upk
 
 MESH_CLASSES = ("StaticMesh", "SkeletalMesh")
 MATERIAL_CLASSES = ("MaterialInstanceConstant", "Material", "MaterialInstanceTimeVarying")
+# the usual vertex element sizes first (a wrong, smaller size can pass the bounds test on padded data), odd sizes last
+PLAIN_SIZES = (40, 32, 36, 44, 48, 33, 37, 52, 56, 60, 64, 28, 24, 41, 45, 49, 68, 72, 76, 80, 84, 88, 92, 96, 20, 16, 12,
+               *[s for s in range(13, 97) if s % 4])
 ELEMENT_SIZES = tuple(range(12, 97))  # vertex element sizes (a rigid vertex is not always a multiple of 4)
 MAX_VERTS = 65535
 
@@ -99,6 +102,8 @@ def _positions_ok(data, off, size, count, o, bounds, sample) -> bool:
         x, y, z = struct.unpack_from("<3f", data, off + i * size + o)
         if not (_finite(x) and _finite(y) and _finite(z)):
             return False
+        if any(0 < abs(v) < 1e-20 for v in (x, y, z)):
+            return False  # packed bytes read as floats come out as tiny denormals: this is not a position
         if not (lo[0] - pad <= x <= hi[0] + pad and lo[1] - pad <= y <= hi[1] + pad and lo[2] - pad <= z <= hi[2] + pad):
             return False
     return True
@@ -113,7 +118,7 @@ def _spread_ok(pts, bounds) -> bool:
     if bounds is None:
         return max(ext) > 1e-3
     want = [bounds[1][i] - bounds[0][i] for i in range(3)]
-    return max(ext) >= 0.4 * max(want)
+    return max(ext) >= 0.04 * max(want) and len(set(pts)) >= 0.2 * len(pts)  # a chunk may cover only part of the mesh
 
 
 def find_indices(data: bytes, start: int, vertex_count: int) -> list[tuple[int, int, int]] | None:
@@ -170,8 +175,109 @@ def _uv_try(data, off, size, count, o, fmt):
     return out
 
 
+def index_candidates(data: bytes, start: int) -> list[tuple[int, int, list[tuple[int, int, int]]]]:
+    """Every plausible index buffer: (offset, element size, triangles). A bulk array of 2 or 4 byte values, a multiple of 3 long."""
+    out = []
+    for off, size, count in _bulk_arrays(data, start, (2, 4), min_count=3):
+        if count % 3 or count > 3 * 400000:
+            continue
+        vals = struct.unpack_from(("<%dH" if size == 2 else "<%dI") % count, data, off)
+        tris = [(vals[i], vals[i + 1], vals[i + 2]) for i in range(0, count, 3)]
+        step = max(1, len(tris) // 4096)
+        degenerate = sum(1 for a, b, c in tris[::step] if a == b or b == c or a == c)
+        if degenerate > 0.2 * len(tris[::step]) or max(vals) >= 65536 * 8:
+            continue
+        out.append((off, size, tris))
+    return out
+
+
+def find_plain_arrays(data: bytes, start: int, bounds: tuple[M.Vec, M.Vec] | None, vmax: int) -> list[tuple[int, int, list[M.Vec]]]:
+    """Vertex arrays stored as [int32 count][count elements] with no element size in front (what this engine build writes for
+    the chunk vertex arrays). The element size is unknown, so the usual sizes are tried in turn, with the position (three
+    floats inside the mesh bounds, no denormal garbage) at the start of the element. Returns (data offset, element size,
+    positions), in file order, without overlaps."""
+    n = len(data)
+    found: list[tuple[int, int, list[M.Vec]]] = []
+    taken_until = 0
+    p = start - start % 4
+    while p < n - 16:
+        if p < taken_until:
+            p = taken_until
+            continue
+        # right after an array the next count need not be 4-byte aligned (an element size of 33 or 37)
+        step = 1 if found and p < taken_until + 16 else 4
+        (count,) = struct.unpack_from("<i", data, p)
+        here = p
+        p += step
+        if count < 3 or count > vmax:
+            continue
+        for size in PLAIN_SIZES:
+            if here + 4 + count * size > n:
+                continue
+            if not _positions_ok(data, here + 4, size, count, 0, bounds, range(0, count, max(1, count // 48))):
+                continue
+            pts = [struct.unpack_from("<3f", data, here + 4 + i * size) for i in range(count)]
+            if _positions_ok(data, here + 4, size, count, 0, bounds, range(count)) and _spread_ok(pts, bounds):
+                found.append((here + 4, size, pts))
+                taken_until = here + 4 + count * size
+                break
+    return found
+
+
+def read_plain_mesh(data: bytes, props_end: int, label: str) -> RawMesh | None:
+    """Geometry when the vertices are plain count-prefixed arrays: find the index buffer first (it says how many vertices are
+    needed), then the vertex arrays, then the UVs inside the vertex elements."""
+    bounds = read_bounds(data, props_end)
+    start = props_end + (28 if bounds else 0)
+    best = None
+    for off, size, tris in index_candidates(data, start):
+        need = max(max(t) for t in tris) + 1
+        if need < 4:
+            continue
+        arrays = find_plain_arrays(data, start, bounds, max(need, 8))
+        total = sum(len(a[2]) for a in arrays)
+        if total < need:
+            continue
+        if best is None or len(tris) > len(best[2]):
+            best = (arrays, off, tris, need)
+    if best is None:
+        return None
+    arrays, _off, tris, need = best
+    pts: list[M.Vec] = []
+    uvs: list[tuple[float, float]] = []
+    have_uv = True
+    for off, size, pos in arrays:
+        pts += pos
+        uv = _element_uvs(data, off, size, len(pos))
+        if uv is None:
+            have_uv = False
+        else:
+            uvs += uv
+    pts = pts[:need]
+    uvs = uvs[:need] if have_uv and len(uvs) >= need else []
+    m = M.Mesh(positions=[(p[0], p[1], p[2]) for p in pts], uvs=uvs, tris=tris)
+    sizes = [a[1] for a in arrays]
+    return RawMesh(m, f"{label}: {len(pts)} vertices, {len(tris)} triangles, uvs {'yes' if uvs else 'no'}, "
+                      f"plain arrays {len(arrays)} (element sizes {sizes}), bounds {'yes' if bounds else 'no'}", [])
+
+
+def _element_uvs(data: bytes, off: int, size: int, count: int):
+    """A float pair inside the element (after the position) that behaves like UVs."""
+    for o in range(12, size - 7, 4):
+        uv = _uv_try(data, off, size, count, o, "<2f")
+        if uv:
+            return uv
+    return None
+
+
 def read_mesh_blob(data: bytes, props_end: int, label: str) -> RawMesh | None:
-    """Positions, triangles and UVs of the first LOD found in an export's data (after its tagged properties)."""
+    """Positions, triangles and UVs of the first LOD found in an export's data (after its tagged properties).
+    Bulk-array layout first (element size written in front), then plain count-prefixed arrays."""
+    raw = _read_bulk_mesh(data, props_end, label)
+    return raw or read_plain_mesh(data, props_end, label)
+
+
+def _read_bulk_mesh(data: bytes, props_end: int, label: str) -> RawMesh | None:
     bounds = read_bounds(data, props_end)
     start = props_end + (28 if bounds else 0)
     pos = find_positions(data, start, bounds)

@@ -127,3 +127,23 @@ def test_gestalt_name_found_through_the_name_table(tmp_path):
     src.prepare(["GD_Weap_Pistol.Barrel.Pistol_Barrel_Z"])
     assert src.name_files == {"pistol_barrel_z_mesh": [cooked / "Gestalt_Pistols.upk"]}
     assert src.mesh_path("GD_Weap_Pistol.Barrel.Pistol_Barrel_Z") == "Gestalt_Pistols.Meshes.Pistol_Barrel_Z_Mesh", log
+
+
+def test_mesh_path_derived_from_the_part_path_and_material_texture(tmp_path):
+    build_install(tmp_path / "bl2")
+    cooked = tmp_path / "bl2" / "WillowGame" / "CookedPCConsole"
+    # the real layout: GD_Weap_Pistol.Barrel.X (a part) -> Weap_Pistol.Barrel.X (the mesh); a Material part pointing at a MIC
+    b = fake_bl2.ObjBuilder()
+    b.obj("Weap_Pistol.Barrel.Pistol_Barrel_A", "SkeletalMesh", b"")
+    idx = b.paths["Weap_Pistol.Barrel.Pistol_Barrel_A"]
+    data, end = blob(M.box(0, 0, 0, 4, 40, 4))
+    b.exports[idx - 1]["body"] = struct.pack("<i", -1) + b.none() + data[end:]
+    b.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_A", "WeaponPartDefinition", b.s("GestaltModeSkeletalMeshName", "Pistol_Barrel_A"))
+    b.obj("GD_Weap_Pistol.ManufacturerMaterials.Mat_A", "WeaponPartDefinition", b.s("Material", "Wpn_Pistol.Mat.Pistol_MIC"))
+    (cooked / "Weap_Fake.upk").write_bytes(b.build())
+    ix = Index(tmp_path / "bl2")
+    src = gunparts.Bl2Source(ix, lambda m: None)
+    assert src.derived_paths("GD_Weap_Pistol.Barrel.Pistol_Barrel_A")[0] == "Weap_Pistol.Barrel.pistol_barrel_a"
+    built = {"parts": {"Barrel": "GD_Weap_Pistol.Barrel.Pistol_Barrel_A", "Material": "GD_Weap_Pistol.ManufacturerMaterials.Mat_A"}}
+    parts = src.gun_parts({"type": "pistol"}, built)
+    assert parts and len(parts) == 1 and parts[0].texture and parts[0].texture.startswith("t_"), src.stats

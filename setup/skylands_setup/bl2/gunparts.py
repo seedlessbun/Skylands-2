@@ -70,7 +70,24 @@ class Bl2Source:
             found = self.ix.get(c)
             if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
                 return c
+        for c in self.derived_paths(part):
+            found = self.ix.get(c)
+            if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
+                return c
         return self._by_gestalt(part) or self._mesh_by_name(part)
+
+    def derived_paths(self, part: str) -> list[str]:
+        """GD_Weap_Pistol.Barrel.Pistol_Barrel_Bandit -> Weap_Pistol.Barrel.<gestalt name or the part's own name>: this is where
+        the game keeps the meshes of its weapon parts (seen in the real files: Weap_SMG.Stock.SMG_Stock_Maliwan)."""
+        segs = part.split(".")
+        if len(segs) < 3 or not segs[0].lower().startswith("gd_weap"):
+            return []
+        pkg, group = segs[0][3:], segs[1]
+        names = [*self.gestalt_names(part), re.split(r"[.:]", segs[-1])[-1].lower()]
+        out = []
+        for n in dict.fromkeys(names):
+            out.append(f"{pkg}.{group}.{n}")
+        return out
 
     # --- Borderlands 2 "gestalt" parts: the mesh is named by a plain name, not referenced as an object
     def gestalt_names(self, part: str) -> list[str]:
@@ -122,7 +139,7 @@ class Bl2Source:
         return result
 
     def _find_export(self, name: str) -> str | None:
-        files = sorted(self.name_files.get(name, []), key=lambda f: f.stat().st_size)
+        files = sorted(self.name_files.get(name, []), key=lambda f: (0 if "startup" in f.stem.lower() else 1, f.stat().st_size))
         for f in files[:8]:
             try:
                 pkg = self.ix.package(f)
@@ -280,7 +297,29 @@ class Bl2Source:
             placed[slot] = M.transformed(d["mesh"], None, 1.0, offset)
         matrix = orientation(placed)
         parts = [M.transformed(m, matrix, 1.0) for m in placed.values()]
+        gun_texture = self._gun_material_texture(picked.get("Material"))
+        if gun_texture:  # one material (a texture shared by every part, each part's UVs lie on it) covers the whole gun
+            for m in parts:
+                m.texture = gun_texture
         return parts
+
+    def _gun_material_texture(self, material_part: str | None) -> str | None:
+        """The diffuse texture of the gun's Material part (a manufacturer/rarity paint job: Common_GunMaterials...Mati_*)."""
+        if not material_part:
+            return None
+        props = self.ix.props(material_part) or {}
+        mic = props.get("Material")
+        if not isinstance(mic, str):
+            return None
+        params = gunmesh.texture_parameters(self.ix, mic)
+        diffuse, _normal = gunmesh.pick_textures(params)
+        if not diffuse:
+            self.log(f"material {mic}: no texture parameter ({sorted(params)[:6]})", force=self.stats["textured"] == 0 and self.logged < 80)
+            return None
+        key = self._texture(diffuse)
+        if key is None:
+            self.log(f"material {mic}: texture {diffuse} could not be decoded", force=self.logged < 80)
+        return key
 
     def _use_sockets(self, part: dict, body: dict) -> bool:
         """Parts modelled around their own attach point need the socket offset; parts already placed in the weapon's space do not.

@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.5"
+VERSION = "0.10.6"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -91,8 +91,9 @@ def prune_empty(sky: Path) -> None:
                 pass
 
 
-def remove_previous(work: Path, sky: Path) -> int:
-    """Delete the files an earlier setup installed (another gun model method leaves different meshes behind)."""
+def remove_stale(work: Path, sky: Path, keep: list[str]) -> int:
+    """After a new install: delete the files an earlier install put there that this one did not (another gun model method
+    leaves different meshes behind). Never touches a file the new install wrote, so the plugin and scripts are never missing."""
     record = work / "installed-files.json"
     if not record.is_file():
         return 0
@@ -101,15 +102,34 @@ def remove_previous(work: Path, sky: Path) -> int:
         if Path(info["skyrim"]) != sky:
             return 0
         n = 0
+        kept = {k.lower() for k in keep}
         for rel in info["files"]:
             f = sky / rel
-            if rel.lower().startswith("data/") and f.is_file():
+            if rel.lower().startswith("data/") and rel.lower() not in kept and f.is_file():
                 f.unlink()
                 n += 1
         prune_empty(sky)
         return n
     except (OSError, ValueError, KeyError):
         return 0
+
+
+def verify(sky: Path, plugins: Path | None) -> list[str]:
+    """What a player (or support) needs to see after an install: is everything in place and switched on."""
+    data = sky / "Data"
+    out = []
+    esp = data / generate.PLUGIN
+    out.append(f"{generate.PLUGIN}: {'present, ' + str(esp.stat().st_size // 1024) + ' KB' if esp.is_file() else 'MISSING'}")
+    for name in ("SkylandsHunter", "SkylandsHunterQuest", "SkylandsHunterPower"):
+        pex = data / "Scripts" / f"{name}.pex"
+        out.append(f"Scripts\\{name}.pex: {'present' if pex.is_file() else 'MISSING'}")
+    if plugins and plugins.is_file():
+        lines = [x.strip() for x in plugins.read_text(encoding="utf-8", errors="replace").splitlines()]
+        entry = [x for x in lines if x.lstrip("*").lower() == generate.PLUGIN.lower()]
+        out.append(f"plugins.txt: {entry[0] if entry else 'no Skylands line'} (line {lines.index(entry[0]) + 1 if entry else '-'} of {len(lines)})")
+    else:
+        out.append("plugins.txt: not found")
+    return out
 
 
 def uninstall_main(argv: list[str]) -> int:
@@ -250,15 +270,18 @@ def main(argv: list[str]) -> int:
         if a.stage_only:
             say(f"Staged only, in {stage}")
             return 0
-        gone = remove_previous(work, sky)
-        if gone:
-            say(f"Removed {gone} files of the previous install.")
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values
             (sky / "Data" / "Scripts" / old).unlink(missing_ok=True)
         written = install(stage, sky)
+        say(f"Installed {len(written)} files into {sky / 'Data'}")
+        gone = remove_stale(work, sky, written)
         (work / "installed-files.json").write_text(json.dumps({"skyrim": str(sky), "files": written}, indent=1), encoding="utf-8")
+        if gone:
+            say(f"Removed {gone} files of the previous install that this one does not use.")
         plugins = enable_plugin(generate.PLUGIN)
-        say(f"Installed {len(written)} files into {sky / 'Data'}; enabled in {plugins}")
+        say(f"Plugin enabled in {plugins}")
+        for line in verify(sky, plugins):
+            say(f"  check: {line}")
         done.write_text(f"ok {VERSION} {time.strftime('%Y-%m-%d %H:%M:%S')}\n", encoding="utf-8")
         say(f"Done in {time.time() - t0:.0f} s")
         return 0

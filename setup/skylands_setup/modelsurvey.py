@@ -44,6 +44,27 @@ def inspect_part(ix: Index, src: gunparts.Bl2Source, part: str) -> dict:
     for v in props.values():
         gunparts._strings(v, cands)  # noqa: SLF001
     rep["string_values"] = [c[:120] for c in cands if "." in c][:20]
+    rep["derived_paths"] = src.derived_paths(part)
+    mic = props.get("Material")
+    if isinstance(mic, str):  # a Material part: the paint job of a whole gun
+        info = {"material": mic}
+        params = gunmesh.texture_parameters(ix, mic)
+        info["parameters"] = dict(list(params.items())[:12])
+        diffuse, normal = gunmesh.pick_textures(params)
+        info["diffuse"], info["normal"] = diffuse, normal
+        if diffuse:
+            tp = ix.props(diffuse) or {}
+            info["diffuse_props"] = {k: str(v)[:60] for k, v in list(tp.items())[:16]}
+            notes: list[str] = []
+            dds = gunmesh.read_texture(ix, diffuse, ix.root, notes.append)
+            info["diffuse_decoded"] = bool(dds)
+            info["notes"] = notes[:4]
+            found = ix.get(diffuse)
+            if found:
+                data = found[0].export_data(found[1])
+                info["texture_export_bytes"] = len(data)
+                info["texture_head_hex"] = data[:96].hex()
+        rep["gun_material"] = info
     path = src.mesh_path(part)
     rep["mesh_path"] = path
     if not path:

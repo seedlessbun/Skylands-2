@@ -77,3 +77,58 @@ def test_pick_textures():
     assert d == "A.Tex_D" and n == "A.Tex_N"
     d, n = gunmesh.pick_textures({"misc": "B.Tex"})
     assert d == "B.Tex" and n is None
+
+
+def plain_blob(mesh, size=40, uv_offset=24, junk=40):
+    """Vertices as [count][elements] with no element size in front, like the real Borderlands 2 skeletal meshes."""
+    lo, hi = mesh.bounds()
+    centre = [(a + b) / 2 for a, b in zip(lo, hi)]
+    ext = [(b - a) / 2 for a, b in zip(lo, hi)]
+    out = bytearray(b"\x07" * junk)
+    end = len(out)
+    out += struct.pack("<7f", *centre, *ext, 1.0) + struct.pack("<ii", 1, 0)
+    out += struct.pack("<i", len(mesh.positions))
+    for i, p in enumerate(mesh.positions):
+        v = bytearray(size)
+        struct.pack_into("<3f", v, 0, *p)
+        struct.pack_into("<I", v, 12, 0x80808080)
+        struct.pack_into("<2f", v, uv_offset, *mesh.uvs[i])
+        out += v
+    flat = [i for t in mesh.tris for i in t]
+    out += struct.pack("<ii", 2, len(flat)) + struct.pack(f"<{len(flat)}H", *flat)
+    return bytes(out), end
+
+
+def test_plain_array_vertices():
+    box = M.box(0, 28, 3, 8, 75, 33)
+    for size, uv in ((40, 24), (36, 24), (33, 24), (32, 20)):
+        data, end = plain_blob(box, size, uv)
+        raw = gunmesh.read_mesh_blob(data, end, "stock")
+        assert raw is not None, size
+        assert len(raw.mesh.positions) == 24 and raw.mesh.tris == box.tris and raw.mesh.positions[5] == box.positions[5], (size, raw.note)
+        assert f"element sizes [{size}]" in raw.note and len(raw.mesh.uvs) == 24
+
+
+def test_two_plain_chunks_are_joined_in_order():
+    a = M.box(0, 0, 0, 8, 20, 8)
+    b = M.box(0, 40, 0, 8, 20, 8)
+    both = M.merged([a, b])
+    lo, hi = both.bounds()
+    centre = [(x + y) / 2 for x, y in zip(lo, hi)]
+    ext = [(y - x) / 2 for x, y in zip(lo, hi)]
+    out = bytearray(b"\x07" * 40)
+    end = len(out)
+    out += struct.pack("<7f", *centre, *ext, 1.0) + struct.pack("<ii", 1, 0)
+    for chunk, size in ((a, 33), (b, 40)):  # a rigid chunk, then a soft chunk
+        out += struct.pack("<i", len(chunk.positions))
+        for i, p in enumerate(chunk.positions):
+            v = bytearray(size)
+            struct.pack_into("<3f", v, 0, *p)
+            struct.pack_into("<I", v, 12, 0x80808080)
+            struct.pack_into("<2f", v, 24 if size > 33 else 16, *chunk.uvs[i])
+            out += v
+        out += b"\x00" * 4
+    flat = [i for t in both.tris for i in t]
+    out += struct.pack("<ii", 2, len(flat)) + struct.pack(f"<{len(flat)}H", *flat)
+    raw = gunmesh.read_mesh_blob(bytes(out), end, "two")
+    assert raw is not None and len(raw.mesh.positions) == 48 and raw.mesh.positions[30] == both.positions[30], raw and raw.note
