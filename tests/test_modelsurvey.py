@@ -36,3 +36,15 @@ def test_character_survey_lists_skeletal_mesh_packages(tmp_path):
     ix = Index(tmp_path / "bl2")
     rows = modelsurvey.character_survey(ix)
     assert rows and rows[0]["SkeletalMesh"]["sample"] == ["Char_Psycho.Mesh.Psycho_Body"] and rows[0]["AnimSet"]["count"] == 1
+
+
+def test_part_name_dump_lists_where_each_mesh_name_lives(tmp_path):
+    test_gunparts.build_install(tmp_path / "bl2")
+    ix = Index(tmp_path / "bl2")
+    src = gunparts.Bl2Source(ix, lambda m: None)
+    by_slot = {"Body": ["GD_Weap_Pistol.Body.Pistol_Body_A"], "Barrel": ["GD_Weap_Pistol.Barrel.Pistol_Barrel_A"]}
+    src.prepare([p for ps in by_slot.values() for p in ps])
+    dump = modelsurvey.part_name_dump(ix, src, by_slot)
+    json.dumps(dump, default=str)
+    assert {r["part"] for r in dump["parts"]} == {p for ps in by_slot.values() for p in ps}
+    assert any(h.get("class") in ("StaticMesh", "SkeletalMesh") for hs in dump["where_found"].values() for h in hs)

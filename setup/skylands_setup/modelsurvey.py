@@ -147,6 +147,40 @@ def character_survey(ix: Index, limit: int = 40) -> list[dict]:
     return out
 
 
+def part_name_dump(ix: Index, src: gunparts.Bl2Source, by_slot: dict[str, list[str]], budget: float = 300.0) -> dict:
+    """Every part, the mesh name it asks for, the paths that name could live at and where the name turns up. Answers why most
+    manufacturers' meshes are not found: which package, if any, holds an object of that name and what class it is."""
+    t0 = time.time()
+    parts = sorted({p for ps in by_slot.values() for p in ps})
+    rows = []
+    for part in parts:
+        names = src.gestalt_names(part)
+        rows.append({"part": part, "mesh_names": names, "derived": src.derived_paths(part)[:4],
+                     "files_naming_it": [[f.stem for f in (src.name_files or {}).get(n, [])][:8] for n in names]})
+    wanted = sorted({n for r in rows for n in r["mesh_names"]})
+    found: dict[str, list] = {}
+    opened = 0
+    for name in wanted:
+        if time.time() - t0 > budget:
+            found["_stopped"] = [f"time budget used up after {opened} packages"]
+            break
+        hits = []
+        for f in sorted((src.name_files or {}).get(name, []), key=lambda f: f.stat().st_size)[:6]:
+            try:
+                pkg = ix.package(f)
+                pkg._indexes()  # noqa: SLF001
+                opened += 1
+                hits += [{"file": f.stem, "kind": "export", "path": pkg.path_of(i), "class": pkg.obj_class(i)} for i in pkg._by_name.get(name, ())][:3]  # noqa: SLF001
+                hits += [{"file": f.stem, "kind": "import", "path": pkg.path_of(-(k + 1)), "class": imp.class_name}
+                         for k, imp in enumerate(pkg.imports) if imp.name.lower() == name][:2]
+            except Exception as e:  # noqa: BLE001
+                hits.append({"file": f.stem, "error": f"{type(e).__name__}: {str(e)[:80]}"})
+        found[name] = hits
+    groups = {k: [ix.files[i].stem for i, _n in v][:6] for k, v in ix.groups.items() if k.startswith(("weap_", "wpn_", "weapon"))}
+    return {"parts": rows, "where_found": found, "weapon_groups": groups,
+            "mesh_class_counts": {n: sum(1 for h in hs if h.get("class") in ("SkeletalMesh", "StaticMesh")) for n, hs in found.items() if n != "_stopped"}}
+
+
 def main(argv: list[str]) -> int:
     import argparse
 
@@ -156,7 +190,7 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out = Path(a.out)
-    report: dict = {"tool": "skylands modelsurvey 1", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    report: dict = {"tool": "skylands modelsurvey 2", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
 
     def say(msg: str) -> None:
         print(msg, flush=True)
@@ -203,6 +237,14 @@ def main(argv: list[str]) -> int:
                                        "sample": [p for v in list(names.values())[:60] for p in v[:1]]}
         report["weapon_groups"] = sorted(k for k in ix.groups if re.search(r"(pistol|smg|shotgun|sniper|launcher|assault|rifle|weap|wpn|gun)", k))[:300]
         report["packages_with_weapon_names"] = [f.name for f in ix.files if re.search(r"(pistol|smg|shotgun|sniper|launcher|assault|rifle|weap|wpn|gun)", f.stem, re.I)][:100]
+        say("Writing the part-name dump (which package holds each mesh a part asks for) ...")
+        try:
+            full = [p for ps in by_slot.values() for p in ps]
+            src.prepare(full)
+            report["part_name_dump"] = part_name_dump(ix, src, by_slot)
+        except Exception:  # noqa: BLE001
+            report["part_name_dump"] = traceback.format_exc()[-800:]
+        save()
         say("Looking for character meshes ...")
         try:
             report["characters"] = character_survey(ix)
