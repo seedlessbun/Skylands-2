@@ -22,7 +22,8 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.9.12"
+VERSION = "0.9.13"
+OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
 RECORD_TYPES = {"STAT", "KYWD", "LIGH", "FLST", "WEAP", "ENCH", "MGEF", "SPEL", "SHOU", "WOOP", "MESG", "QUST", "LVLI", "ACTI"}
@@ -187,6 +188,8 @@ def main(argv: list[str]) -> int:
         if a.stage_only:
             say(f"Staged only, in {stage}")
             return 0
+        for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values
+            (sky / "Data" / "Scripts" / old).unlink(missing_ok=True)
         written = install(stage, sky)
         (work / "installed-files.json").write_text(json.dumps({"skyrim": str(sky), "files": written}, indent=1), encoding="utf-8")
         plugins = enable_plugin(generate.PLUGIN)
