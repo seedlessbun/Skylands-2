@@ -20,6 +20,7 @@ from .bl2 import extract, gunmesh, gunparts, upk
 from .bl2.index import Index
 
 PER_SLOT = 5
+DUMPS: dict[str, int] = {}
 
 
 def _bulk_summary(data: bytes, start: int, limit: int = 12) -> list[dict]:
@@ -58,6 +59,13 @@ def inspect_part(ix: Index, src: gunparts.Bl2Source, part: str) -> dict:
             notes: list[str] = []
             dds = gunmesh.read_texture(ix, diffuse, ix.root, notes.append)
             info["diffuse_decoded"] = bool(dds)
+            if not dds and DUMPS.get("textures", 0) < 2:
+                DUMPS["textures"] = DUMPS.get("textures", 0) + 1
+                tf = ix.get(diffuse)
+                if tf:
+                    tdata = tf[0].export_data(tf[1])
+                    info["texture_export_hex"] = tdata[:6000].hex()
+                    info["texture_export_total"] = len(tdata)
             info["notes"] = notes[:4]
             found = ix.get(diffuse)
             if found:
@@ -88,6 +96,9 @@ def inspect_part(ix: Index, src: gunparts.Bl2Source, part: str) -> dict:
     rep["bulk_arrays"] = _bulk_summary(data, end + 28)
     raw = gunmesh.read_mesh_blob(data, end, path)
     rep["geometry"] = raw.note if raw else "NOT FOUND"
+    if not raw and len(data) <= 40000 and DUMPS.get("meshes", 0) < 3:
+        DUMPS["meshes"] = DUMPS.get("meshes", 0) + 1
+        rep["export_hex"] = data.hex()  # the whole mesh export: enough to work out its layout offline
     if raw:
         lo, hi = raw.mesh.bounds()
         rep["geometry_bounds"] = {"min": [round(v, 2) for v in lo], "max": [round(v, 2) for v in hi]}  # around the part's own origin, or placed in weapon space?
@@ -197,6 +208,7 @@ def main(argv: list[str]) -> int:
             report["characters"] = character_survey(ix)
         except Exception:  # noqa: BLE001
             report["characters"] = traceback.format_exc()[-600:]
+        report["open_errors"] = dict(list(ix.open_errors.items())[:40])
         report["summary"] = src.summary()
         report["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
         save()

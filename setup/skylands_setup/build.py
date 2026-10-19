@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.6"
+VERSION = "0.10.7"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -272,7 +272,12 @@ def main(argv: list[str]) -> int:
             return 0
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values
             (sky / "Data" / "Scripts" / old).unlink(missing_ok=True)
-        written = install(stage, sky)
+        try:
+            written = install(stage, sky)
+        except PermissionError as e:
+            say(f"Could not write {e.filename}: Skyrim (or a mod manager or antivirus) has it open. Close Skyrim and any mod manager, then run this installer again. "
+                "Nothing that was installed before has been removed.")
+            return 1
         say(f"Installed {len(written)} files into {sky / 'Data'}")
         gone = remove_stale(work, sky, written)
         (work / "installed-files.json").write_text(json.dumps({"skyrim": str(sky), "files": written}, indent=1), encoding="utf-8")

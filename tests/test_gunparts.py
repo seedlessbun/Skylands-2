@@ -145,5 +145,17 @@ def test_mesh_path_derived_from_the_part_path_and_material_texture(tmp_path):
     src = gunparts.Bl2Source(ix, lambda m: None)
     assert src.derived_paths("GD_Weap_Pistol.Barrel.Pistol_Barrel_A")[0] == "Weap_Pistol.Barrel.pistol_barrel_a"
     built = {"parts": {"Barrel": "GD_Weap_Pistol.Barrel.Pistol_Barrel_A", "Material": "GD_Weap_Pistol.ManufacturerMaterials.Mat_A"}}
+    assert src.gun_parts({"type": "pistol"}, built) is None  # a barrel alone is not a gun: no body mesh, left to the next method
+    assert src.stats["no_body"] == 1
+    # with a body (the same mesh stands in for it) the gun is built and carries the Material part's texture
+    b = fake_bl2.ObjBuilder()
+    b.obj("Weap_Pistol.Body.Pistol_Body_A", "SkeletalMesh", b"")
+    data2, end2 = blob(M.box(0, 0, 0, 8, 20, 12))
+    b.exports[b.paths["Weap_Pistol.Body.Pistol_Body_A"] - 1]["body"] = struct.pack("<i", -1) + b.none() + data2[end2:]
+    b.obj("GD_Weap_Pistol.Body.Pistol_Body_A", "WeaponPartDefinition", b.s("GestaltModeSkeletalMeshName", "Pistol_Body_A"))
+    (cooked / "Weap_Fake2.upk").write_bytes(b.build())
+    ix = Index(tmp_path / "bl2")
+    src = gunparts.Bl2Source(ix, lambda m: None)
+    built["parts"]["Body"] = "GD_Weap_Pistol.Body.Pistol_Body_A"
     parts = src.gun_parts({"type": "pistol"}, built)
-    assert parts and len(parts) == 1 and parts[0].texture and parts[0].texture.startswith("t_"), src.stats
+    assert parts and len(parts) == 2 and all(p.texture and p.texture.startswith("t_") for p in parts), src.stats

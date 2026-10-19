@@ -288,6 +288,10 @@ class Bl2Source:
         slots = {k: v for k, v in slots.items() if v}
         if not slots:
             return None
+        if "Body" not in slots:  # a gun made of only a scope or a stock is not a gun: leave it to the next method
+            self.stats["no_body"] = self.stats.get("no_body", 0) + 1
+            self.log(f"{g.get('balance', '?')}: no body mesh could be read (parts read: {sorted(slots)}); not building this gun")
+            return None
         body = slots.get("Body") or next(iter(slots.values()))
         placed: dict[str, M.Mesh] = {}
         for slot, d in slots.items():
@@ -349,8 +353,11 @@ class Bl2Source:
 
     def summary(self) -> str:
         s = self.stats
+        errs = getattr(self.ix, "open_errors", {})
+        extra = f"; {len(errs)} packages could not be opened, e.g. {dict(list(errs.items())[:3])}" if errs else ""
         return (f"native: {s['parts']} parts looked at, {s['meshes']} meshes read, {s['no_mesh']} without a mesh object, "
-                f"{s['no_geometry']} whose geometry could not be found, {s['textured']} textures decoded")
+                f"{s['no_geometry']} whose geometry could not be found, {s['textured']} textures decoded, "
+                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh{extra}")
 
 
 def orientation(placed: dict[str, M.Mesh]) -> tuple[M.Vec, M.Vec, M.Vec]:

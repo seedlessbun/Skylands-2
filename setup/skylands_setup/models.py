@@ -122,6 +122,25 @@ def find_vanilla_mesh(data_dir: Path, modl: bytes | None, say=None) -> bytes | N
     return None
 
 
+def describe_nif(data: bytes) -> str:
+    """For the log: what is in the vanilla crossbow's NIF and why its shapes could not be measured."""
+    try:
+        blocks = nifread.blocks(data)
+    except Exception as e:  # noqa: BLE001
+        return f"unreadable ({type(e).__name__}: {e})"
+    kinds: dict[str, int] = {}
+    for k, _b in blocks:
+        kinds[k] = kinds.get(k, 0) + 1
+    errors = []
+    for k, b in blocks:
+        if k in ("BSTriShape", "BSSubIndexTriShape", "BSMeshLODTriShape", "BSDynamicTriShape"):
+            try:
+                nifread.read_shape(b)
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{k}: {type(e).__name__}: {e}")
+    return f"{len(blocks)} blocks {dict(sorted(kinds.items()))}; shape errors {errors[:3] or 'none'}"
+
+
 def fit_mesh(m: M.Mesh, fit: Fit, scale: float) -> M.Mesh:
     return M.transformed(m, fit.matrix, scale)
 
@@ -211,6 +230,8 @@ class GunModels:
                 pts = nifread.world_points(vanilla_nif)
             except (nifread.NifError, ValueError) as e:
                 say(f"Gun models: could not measure the vanilla crossbow mesh ({e}); using default axes.")
+            if len(pts) < 4:
+                say(f"Gun models: the vanilla crossbow mesh gave {len(pts)} points: {describe_nif(vanilla_nif)}")
         self.fit = fit_from_points(pts)
         say(f"Gun models ({method}): {self.fit.note}")
         self.written: dict[str, str] = {}  # look key -> mesh path under Meshes\

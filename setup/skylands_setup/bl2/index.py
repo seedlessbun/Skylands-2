@@ -32,6 +32,7 @@ class Index:
         self.top: dict[str, list[int]] = {}  # lowercased top-level export -> file indices
         self.groups: dict[str, list[tuple[int, int]]] = {}  # "top.group" -> (file index, objects in it), biggest first
         self.slow: list[dict] = []
+        self.open_errors: dict[str, str] = {}  # packages that could not be opened in full -> why (they are skipped, which can hide objects)
         self._open: dict[Path, upk.Package] = {}
         self._props: dict[str, dict | None] = {}
         total = len(self.files)
@@ -95,7 +96,11 @@ class Index:
             return self._open[f]
         if len(self._open) >= OPEN_PACKAGES:
             self._open.pop(next(iter(self._open)))
-        pkg = self._open[f] = upk.open_package(f)
+        try:
+            pkg = self._open[f] = upk.open_package(f)
+        except Exception as e:  # noqa: BLE001
+            self.open_errors.setdefault(f.name, f"{type(e).__name__}: {str(e)[:160]}")
+            raise
         return pkg
 
     def get(self, path: str) -> tuple[upk.Package, int] | None:
