@@ -60,9 +60,10 @@ def test_generate_from_both_games(tmp_path):
     assert len(lights) == 6 and lights["SkylandsLight_common"].first("DATA")[8:12] == bytes([40, 100, 50, 0])
     assert struct.unpack_from("<I", lights["SkylandsLight_rare"].first("DATA"), 4)[0] == generate.LIGHT_RADIUS and "MODL" not in [s for s, _ in lights["SkylandsLight_rare"].subrecords]
     quest = next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest")
-    for prop in (b"ClassChoice", b"RarityKeywords", b"Beams", b"Lights", b"Verbose", b"StarterGun", b"StarterAmmo", b"PromptMsg",
-                 b"SettingsMsg", b"MarkerForm", b"RespawnPower", b"LogPower", b"Ability", b"NpcKeyword", b"LogRadius"):
+    for prop in (b"ClassChoice", b"Shouts", b"Words", b"StarterGun", b"StarterAmmo"):
         assert prop in quest.first("VMAD")
+    for prop in (b"RarityKeywords", b"Beams", b"Lights", b"PromptMsg", b"RespawnPower", b"LogPower", b"NpcKeyword"):
+        assert prop not in quest.first("VMAD")  # a saved game would keep stale values; the player's watcher hands these over
     power = next(r for r in recs["SPEL"] if r.edid == "SkylandsRespawnPower")
     assert struct.unpack_from("<I", power.first("SPIT"), 8)[0] == 3  # a lesser power
     power_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsRespawnEffect")
@@ -76,7 +77,8 @@ def test_generate_from_both_games(tmp_path):
     # the watcher: an ability whose effect runs the script, carried by every humanoid race
     watch_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsWatcher")
     for prop in (b"SkylandsWatcher", b"Owner", b"GunKeyword", b"SpeedKeywords", b"GunList", b"GunDrop", b"NpcKeyword", b"Bolts",
-                 b"ArmChance", b"DropChance", b"GoodLevel", b"ScanRadius"):
+                 b"ArmChance", b"DropChance", b"GoodLevel", b"ScanRadius", b"RarityKeywords", b"Beams", b"Lights", b"PromptMsg",
+                 b"SettingsMsg", b"MarkerForm", b"RespawnPower", b"LogPower", b"Ability"):
         assert prop in watch_fx.first("VMAD")
     assert struct.unpack_from("<I", watch_fx.first("DATA"), 64)[0] == generate.MGEF_ARCHETYPE_SCRIPT
     ability = next(r for r in recs["SPEL"] if r.edid == "SkylandsWatcherAbility")

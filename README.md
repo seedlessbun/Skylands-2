@@ -65,6 +65,12 @@ person still alive is left alone; a dead or missing one is removed and a fresh c
 they stood (and rolls for a gun again). In an interior you are moved back to where you first came in (the quest keeps
 an invisible marker at each interior's entrance, set when you arrive).
 
+## Powers on an existing character (0.9.1)
+
+The quest no longer trusts values saved in an old game: the player's watcher hands it the current forms (powers,
+messages, beams, ability) every time the game loads, and the quest rebuilds its roster arrays if they are empty.
+The Pandora Log message ends with `dup / merged / added` counts so a "0 known" can be traced.
+
 ## Form ids stay put (0.9)
 
 A save refers to spells, guns and the quest by form id, so a rebuild must not renumber them. Setup keeps

@@ -26,9 +26,9 @@ QUEST_EXPECTED = """Event OnUpdate()
   Return
 EndEvent"""
 
-UPGRADE = """  Int n = RosterRef.Length
-  If n < 1
-    Tracked = new ObjectReference[48]"""
+UPGRADE = """  Self.MakeArrays()
+  If Chosen
+    If Refreshed"""
 
 ADOPT = """  Int st = Self.Stage(a)
   If st < 3
@@ -58,13 +58,13 @@ LOG = """    Actor a = Game.FindRandomActor(x, y, z, LogRadius)
 RESPAWN = """  ObjectReference n = player.PlaceAtMe(base, 1, False, False)
   If n as Bool"""
 
-CHOOSE = """  player.EquipShout(chosenShout)
-  player.AddSpell(RespawnPower, False)
-  player.AddSpell(LogPower, False)
-  player.AddItem(StarterGun, 1, False)
-  player.AddItem(StarterAmmo, 60, False)
-  player.EquipItem(StarterGun, False, False)
-  Chosen = True"""
+CHOOSE = """    player.EquipShout(chosenShout)
+    player.AddSpell(RespawnPower, False)
+    player.AddSpell(LogPower, False)
+    player.AddItem(StarterGun, 1, False)
+    player.AddItem(StarterAmmo, 60, False)
+    player.EquipItem(StarterGun, False, False)
+    Chosen = True"""
 
 
 
@@ -103,12 +103,14 @@ WATCHER = {
   Actor player = Game.GetPlayer()
   If Me == player
     IsPlayer = True
+    Owner.Refresh(RarityKeywords, Beams, Lights, PromptMsg, SettingsMsg, MarkerForm, RespawnPower, LogPower, Ability, NpcKeyword, ScanRadius, Verbose)
     Owner.Upgrade()
     Weapon w = Me.GetEquippedWeapon(False)
     Self.ApplySpeed(w)
     Self.RegisterForSingleUpdate(0.5)
     Return
   EndIf""",
+    "refresh": "Owner.Refresh(RarityKeywords, Beams, Lights, PromptMsg, SettingsMsg, MarkerForm, RespawnPower, LogPower, Ability, NpcKeyword, ScanRadius, Verbose)",
     "tick": """Function PlayerTick()
   Owner.NoteEntrance()
   Ticks += 1
@@ -182,9 +184,9 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
     psc = decompile(tmp_path, scripts.class_choice_quest(), "SkylandsClassQuest")
     assert "ScriptName SkylandsClassQuest Extends Quest" in psc
     for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto", "Form Property StarterGun Auto",
-                 "Form Property StarterAmmo Auto", "Keyword[] Property RarityKeywords Auto", "Form[] Property Beams Auto", "Message Property PromptMsg Auto", "Form Property MarkerForm Auto", "Spell Property RespawnPower Auto",
-                 "Light[] Property Lights Auto", "Bool Property Verbose Auto"):
+                 "Form Property StarterAmmo Auto"):
         assert prop in psc
+    assert "Property RespawnPower" not in psc and "Function Refresh(" in psc  # those are handed over, not saved properties
     for text in (QUEST_EXPECTED, UPGRADE, ADOPT, LOG, RESPAWN, CHOOSE, PROMPT, BEAMS, PLACE, CLEAR):
         assert text in psc
 
@@ -194,6 +196,7 @@ def test_watcher_decompiles_to_intended_papyrus(tmp_path):
     psc = decompile(tmp_path, scripts.watcher(), "SkylandsWatcher")
     assert "ScriptName SkylandsWatcher Extends ActiveMagicEffect" in psc
     for prop in ("SkylandsClassQuest Property Owner Auto", "Keyword[] Property SpeedKeywords Auto", "FormList Property GunList Auto",
+                 "Spell Property RespawnPower Auto", "Message Property PromptMsg Auto",
                  "Form Property GunDrop Auto", "Int Property ArmChance Auto", "Float Property ScanRadius Auto"):
         assert prop in psc
     for text in WATCHER.values():

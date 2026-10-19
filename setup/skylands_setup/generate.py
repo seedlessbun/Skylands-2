@@ -494,7 +494,16 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC), ("Bolts", esp.P_OBJECT, bolts.form_id),
         ("ArmChance", esp.P_INT, int(G.arm_chance)), ("DropChance", esp.P_INT, int(G.drop_chance)),
         ("GoodLevel", esp.P_INT, int(G.good_level)), ("ScanRadius", esp.P_FLOAT, float(G.scan_radius)),
-        ("Verbose", esp.P_BOOL, bool(G.verbose))]
+        ("Verbose", esp.P_BOOL, bool(G.verbose)),
+        # what the quest needs, handed over by the player's copy of this script (a saved game would keep stale values)
+        ("RarityKeywords", esp.P_OBJECT_ARRAY, [rarity_keywords[k] for k in sorted(rarity_keywords)]),
+        ("Beams", esp.P_OBJECT_ARRAY, [beams[k] for k in sorted(beams)]),
+        ("Lights", esp.P_OBJECT_ARRAY, [lights[k] for k in sorted(lights)] if len(lights) == len(beams) else []),
+        ("PromptMsg", esp.P_OBJECT, p.new_id("MESG:SkylandsRespawnPrompt")),
+        ("SettingsMsg", esp.P_OBJECT, p.new_id("MESG:SkylandsRespawnSettings")), ("MarkerForm", esp.P_OBJECT, XMARKER),
+        ("RespawnPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsRespawnPower")),
+        ("LogPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsLogEnemiesPower")),
+        ("Ability", esp.P_OBJECT, p.new_id("SPEL:SkylandsWatcherAbility"))]
     watcher_ability = make_watcher(p, m, Texts(data_dir), watcher_props, report)
 
     # ---- vault hunters ---------------------------------------------------------------------------
@@ -551,15 +560,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     respawn_power, log_power = make_powers(p, m, quest.form_id)
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
-        ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun), ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
-        ("RarityKeywords", esp.P_OBJECT_ARRAY, [rarity_keywords[k] for k in sorted(rarity_keywords)]),
-        ("Beams", esp.P_OBJECT_ARRAY, [beams[k] for k in sorted(beams)]),
-        ("Lights", esp.P_OBJECT_ARRAY, [lights[k] for k in sorted(lights)] if len(lights) == len(beams) else []),
-        ("Verbose", esp.P_BOOL, bool(G.verbose)), ("PromptMsg", esp.P_OBJECT, prompt_msg.form_id),
-        ("SettingsMsg", esp.P_OBJECT, settings_msg.form_id), ("MarkerForm", esp.P_OBJECT, XMARKER),
-        ("RespawnPower", esp.P_OBJECT, respawn_power), ("LogPower", esp.P_OBJECT, log_power),
-        ("Ability", esp.P_OBJECT, watcher_ability), ("NpcKeyword", esp.P_OBJECT, ACTOR_TYPE_NPC),
-        ("LogRadius", esp.P_FLOAT, float(G.scan_radius))])], quest=True))
+        ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun),
+        ("StarterAmmo", esp.P_OBJECT, bolts.form_id)])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 

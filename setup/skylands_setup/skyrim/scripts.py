@@ -35,9 +35,17 @@ def notify(*parts, msg=("id", "msg")):
     return code
 
 
-ARRAYS = [("array_create", ("id", name), ("int", size)) for name, size in (
-    ("Tracked", 48), ("TrackedBeams", 48), ("TrackedLights", 48), ("RosterRef", 128), ("RosterBase", 128), ("RosterX", 128),
-    ("RosterY", 128), ("RosterZ", 128), ("RosterCell", 128), ("EntryCells", 16), ("EntryMarks", 16))]
+ARRAY_SIZES = (("Tracked", 48), ("TrackedBeams", 48), ("TrackedLights", 48), ("RosterRef", 128), ("RosterBase", 128),
+               ("RosterX", 128), ("RosterY", 128), ("RosterZ", 128), ("RosterCell", 128), ("EntryCells", 16),
+               ("EntryMarks", 16))
+ARRAYS = [("array_create", ("id", name), ("int", size)) for name, size in ARRAY_SIZES]
+# only the ones that are missing (an array is empty until it is created), one by one
+ARRAYS_IF_MISSING = [ins for name, size in ARRAY_SIZES for ins in (
+    ("array_length", ("id", "n"), ("id", name)),
+    ("cmp_lt", ("id", "::temp0"), ("id", "n"), ("int", 1)),
+    ("jmpf", ("id", "::temp0"), ("lbl", f"have_{name}")),
+    ("array_create", ("id", name), ("int", size)),
+    ("label", f"have_{name}"))]
 
 
 def class_choice_quest() -> Script:
@@ -78,6 +86,7 @@ def class_choice_quest() -> Script:
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("choice", "Int"), ("player", "Actor"),
                 ("chosenShout", "Shout"), ("chosenWord", "WordOfPower"), ("::temp5", "Bool")],
         code=[
+            ("jmpf", ("id", "Refreshed"), ("lbl", "waiting")),
             ("callstatic", ("id", "Utility"), ("id", "IsInMenuMode"), ("id", "::temp0")),
             ("jmpf", ("id", "::temp0"), ("lbl", "not_menu")),
             ("return", None),
@@ -105,6 +114,38 @@ def class_choice_quest() -> Script:
              ("bool", False), ("bool", False)),
             ("assign", ("id", "Chosen"), ("bool", True)),
             ("return", None),
+            ("label", "waiting"),
+            ("return", None),
+        ],
+    )
+    make_arrays = Function(
+        "MakeArrays",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("n", "Int")],
+        code=[*ARRAYS_IF_MISSING, ("return", None)],
+    )
+    refresh = Function(
+        "Refresh",
+        params=[("pRarity", "Keyword[]"), ("pBeams", "Form[]"), ("pLights", "Light[]"), ("pPrompt", "Message"),
+                ("pSettings", "Message"), ("pMarker", "Form"), ("pRespawn", "Spell"), ("pLog", "Spell"),
+                ("pAbility", "Spell"), ("pNpc", "Keyword"), ("pRadius", "Float"), ("pVerbose", "Bool")],
+        locals=[("::nonevar", "None")],
+        code=[
+            # The values a saved game keeps for this script's properties are from the version it was made with and can
+            # point at records that have since moved; the player's ability script has the right ones and hands them over.
+            ("assign", ("id", "::RarityKeywords_var"), ("id", "pRarity")),
+            ("assign", ("id", "::Beams_var"), ("id", "pBeams")),
+            ("assign", ("id", "::Lights_var"), ("id", "pLights")),
+            ("assign", ("id", "::PromptMsg_var"), ("id", "pPrompt")),
+            ("assign", ("id", "::SettingsMsg_var"), ("id", "pSettings")),
+            ("assign", ("id", "::MarkerForm_var"), ("id", "pMarker")),
+            ("assign", ("id", "::RespawnPower_var"), ("id", "pRespawn")),
+            ("assign", ("id", "::LogPower_var"), ("id", "pLog")),
+            ("assign", ("id", "::Ability_var"), ("id", "pAbility")),
+            ("assign", ("id", "::NpcKeyword_var"), ("id", "pNpc")),
+            ("assign", ("id", "::LogRadius_var"), ("id", "pRadius")),
+            ("assign", ("id", "::Verbose_var"), ("id", "pVerbose")),
+            ("assign", ("id", "Refreshed"), ("bool", True)),
+            ("return", None),
         ],
     )
     upgrade = Function(
@@ -112,12 +153,9 @@ def class_choice_quest() -> Script:
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("n", "Int"), ("player", "Actor"), ("msg", "String")],
         code=[
             # a save made with an older version: make the arrays this version needs, and give the player the respawn power
-            ("array_length", ("id", "n"), ("id", "RosterRef")),
-            ("cmp_lt", ("id", "::temp0"), ("id", "n"), ("int", 1)),
-            ("jmpf", ("id", "::temp0"), ("lbl", "arrays_ok")),
-            *ARRAYS,
-            ("label", "arrays_ok"),
+            call("MakeArrays"),
             ("jmpf", ("id", "Chosen"), ("lbl", "end")),
+            ("jmpf", ("id", "Refreshed"), ("lbl", "end")),
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::LogPower_var")),
             ("jmpf", ("id", "::temp0"), ("lbl", "give_log")),
@@ -413,6 +451,7 @@ def class_choice_quest() -> Script:
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference"), ("x", "Float"),
                 ("y", "Float"), ("z", "Float"), ("base", "Form"), ("cell", "Cell"), ("name", "String"), ("msg", "String")],
         code=[
+            call("MakeArrays"),
             ("assign", ("id", "i"), ("int", 0)),
             ("label", "loop"),
             ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("int", 128)),
@@ -420,6 +459,7 @@ def class_choice_quest() -> Script:
             ("array_getelement", ("id", "e"), ("id", "RosterRef"), ("id", "i")),
             ("cmp_eq", ("id", "::temp0"), ("id", "e"), ("id", "r")),
             ("jmpf", ("id", "::temp0"), ("lbl", "cont")),
+            ("iadd", ("id", "LogDup"), ("id", "LogDup"), ("int", 1)),
             ("return", ("bool", False)),
             ("label", "cont"),
             ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
@@ -428,8 +468,10 @@ def class_choice_quest() -> Script:
             ("callmethod", ("id", "GetBaseObject"), ("id", "r"), ("id", "base")),
             ("callmethod", ("id", "FindLost"), SELF, ("id", "::temp0"), ("id", "r"), ("id", "base")),
             ("jmpf", ("id", "::temp0"), ("lbl", "add")),
+            ("iadd", ("id", "LogMerged"), ("id", "LogMerged"), ("int", 1)),
             ("return", ("bool", False)),
             ("label", "add"),
+            ("iadd", ("id", "LogAdded"), ("id", "LogAdded"), ("int", 1)),
             ("callmethod", ("id", "GetPositionX"), ("id", "r"), ("id", "x")),
             ("callmethod", ("id", "GetPositionY"), ("id", "r"), ("id", "y")),
             ("callmethod", ("id", "GetPositionZ"), ("id", "r"), ("id", "z")),
@@ -538,7 +580,7 @@ def class_choice_quest() -> Script:
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("a", "Actor"), ("r", "ObjectReference"),
                 ("i", "Int"), ("count", "Int"), ("known", "Int"), ("seen_a", "Int"), ("seen_b", "Int"), ("x", "Float"),
                 ("y", "Float"), ("z", "Float"), ("msg", "String"), ("sa", "String"), ("sb", "String"), ("sh", "String"),
-                ("sf", "String"), ("sn", "String"), ("sk", "String")],
+                ("sf", "String"), ("sn", "String"), ("sk", "String"), ("sd", "String"), ("sm", "String"), ("su", "String")],
         code=[
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             ("callmethod", ("id", "GetPositionX"), ("id", "player"), ("id", "x")),
@@ -549,6 +591,9 @@ def class_choice_quest() -> Script:
             ("assign", ("id", "seen_a"), ("int", 0)),
                         ("assign", ("id", "LogHuman"), ("int", 0)),
             ("assign", ("id", "LogFoes"), ("int", 0)),
+            ("assign", ("id", "LogDup"), ("int", 0)),
+            ("assign", ("id", "LogMerged"), ("int", 0)),
+            ("assign", ("id", "LogAdded"), ("int", 0)),
             ("label", "loop"),
             ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("id", "tries")),
             ("jmpf", ("id", "::temp0"), ("lbl", "done")),
@@ -571,8 +616,12 @@ def class_choice_quest() -> Script:
             ("cast", ("id", "sf"), ("id", "LogFoes")),
             ("cast", ("id", "sn"), ("id", "count")),
             ("cast", ("id", "sk"), ("id", "known")),
+            ("cast", ("id", "sd"), ("id", "LogDup")),
+            ("cast", ("id", "sm"), ("id", "LogMerged")),
+            ("cast", ("id", "su"), ("id", "LogAdded")),
             *notify(("str", "Pandora log: saw "), ("id", "sa"), ("str", " people; humanoid "), ("id", "sh"), ("str", ", hostile "), ("id", "sf"), ("str", ", new "),
-                    ("id", "sn"), ("str", " ("), ("id", "sk"), ("str", " known)")),
+                    ("id", "sn"), ("str", " ("), ("id", "sk"), ("str", " known; dup "), ("id", "sd"), ("str", ", merged "),
+                    ("id", "sm"), ("str", ", added "), ("id", "su"), ("str", ")")),
             ("label", "end"),
             ("return", ("id", "count")),
         ],
@@ -862,21 +911,26 @@ def class_choice_quest() -> Script:
         name="SkylandsClassQuest",
         parent="Quest",
         variables=[("Chosen", "Bool", ("bool", False)), ("PendingPrompt", "Bool", ("bool", False)),
-                   ("JustLoaded", "Bool", ("bool", False)), ("Mode", "Int", ("int", 0)),
+                   ("JustLoaded", "Bool", ("bool", False)), ("Refreshed", "Bool", ("bool", False)), ("Mode", "Int", ("int", 0)),
                    ("Generation", "Int", ("int", 0)), ("TrackedNext", "Int", ("int", 0)), ("RosterNext", "Int", ("int", 0)),
                    ("Noted", "Int", ("int", 0)), ("LogHuman", "Int", ("int", 0)), ("LogFoes", "Int", ("int", 0)),
+                   ("LogDup", "Int", ("int", 0)), ("LogMerged", "Int", ("int", 0)), ("LogAdded", "Int", ("int", 0)),
                    ("EntryNext", "Int", ("int", 0)), ("LastCell", "Cell", None),
                    ("Tracked", "ObjectReference[]", None), ("TrackedBeams", "ObjectReference[]", None),
-                   ("TrackedLights", "ObjectReference[]", None), ("RosterRef", "ObjectReference[]", None), ("RosterBase", "Form[]", None),
-                   ("RosterX", "Float[]", None), ("RosterY", "Float[]", None), ("RosterZ", "Float[]", None),
-                   ("RosterCell", "Cell[]", None),
-                   ("EntryCells", "Cell[]", None), ("EntryMarks", "ObjectReference[]", None)],
+                   ("TrackedLights", "ObjectReference[]", None), ("RosterRef", "ObjectReference[]", None),
+                   ("RosterBase", "Form[]", None), ("RosterX", "Float[]", None), ("RosterY", "Float[]", None),
+                   ("RosterZ", "Float[]", None), ("RosterCell", "Cell[]", None), ("EntryCells", "Cell[]", None),
+                   ("EntryMarks", "ObjectReference[]", None),
+                   # handed over by the player's ability script at every start (see Refresh)
+                   ("::RarityKeywords_var", "Keyword[]", None), ("::Beams_var", "Form[]", None),
+                   ("::Lights_var", "Light[]", None), ("::PromptMsg_var", "Message", None),
+                   ("::SettingsMsg_var", "Message", None), ("::MarkerForm_var", "Form", None),
+                   ("::RespawnPower_var", "Spell", None), ("::LogPower_var", "Spell", None),
+                   ("::Ability_var", "Spell", None), ("::NpcKeyword_var", "Keyword", None),
+                   ("::LogRadius_var", "Float", ("float", 5000.0)), ("::Verbose_var", "Bool", ("bool", True))],
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
-                         ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("RarityKeywords", "Keyword[]"),
-                         ("Beams", "Form[]"), ("Lights", "Light[]"), ("Verbose", "Bool"), ("PromptMsg", "Message"),
-                         ("SettingsMsg", "Message"), ("MarkerForm", "Form"), ("RespawnPower", "Spell"),
-                         ("LogPower", "Spell"), ("Ability", "Spell"), ("NpcKeyword", "Keyword"), ("LogRadius", "Float")],
-        functions=[on_init, on_update, choose, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
+                         ("StarterGun", "Form"), ("StarterAmmo", "Form")],
+        functions=[on_init, on_update, choose, make_arrays, refresh, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
                    entry_index, entrance_for, note_entrance, arrive, consider, place, report, clear, alive, follow, sweep],
     )
 
@@ -907,6 +961,10 @@ def watcher() -> Script:
             ("cmp_eq", ("id", "::temp0"), ("id", "Me"), ("id", "player")),
             ("jmpf", ("id", "::temp0"), ("lbl", "other")),
             ("assign", ("id", "IsPlayer"), ("bool", True)),
+            ("callmethod", ("id", "Refresh"), ("id", "::Owner_var"), NONE, ("id", "::RarityKeywords_var"), ("id", "::Beams_var"),
+             ("id", "::Lights_var"), ("id", "::PromptMsg_var"), ("id", "::SettingsMsg_var"), ("id", "::MarkerForm_var"),
+             ("id", "::RespawnPower_var"), ("id", "::LogPower_var"), ("id", "::Ability_var"), ("id", "::NpcKeyword_var"),
+             ("id", "::ScanRadius_var"), ("id", "::Verbose_var")),
             ("callmethod", ("id", "Upgrade"), ("id", "::Owner_var"), NONE),
             ("callmethod", ("id", "GetEquippedWeapon"), ("id", "Me"), ("id", "w"), ("bool", False)),
             call("ApplySpeed", ("id", "w")),
@@ -1305,7 +1363,9 @@ def watcher() -> Script:
         auto_properties=[("Owner", "SkylandsClassQuest"), ("GunKeyword", "Keyword"), ("SpeedKeywords", "Keyword[]"),
                          ("GunList", "FormList"), ("GunDrop", "Form"), ("GunDropGood", "Form"), ("NpcKeyword", "Keyword"),
                          ("Bolts", "Form"), ("ArmChance", "Int"), ("DropChance", "Int"), ("GoodLevel", "Int"),
-                         ("ScanRadius", "Float"), ("Verbose", "Bool")],
+                         ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
+                         ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
+                         ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
         functions=[on_start, on_update, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
