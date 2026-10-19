@@ -39,11 +39,14 @@ ARRAY_SIZES = (("Tracked", 48), ("TrackedBeams", 48), ("TrackedLights", 48), ("R
                ("RosterX", 128), ("RosterY", 128), ("RosterZ", 128), ("RosterCell", 128), ("EntryCells", 16),
                ("EntryMarks", 16))
 ARRAYS = [("array_create", ("id", name), ("int", size)) for name, size in ARRAY_SIZES]
-# only the ones that are missing (an array is empty until it is created), one by one
+# only the ones that are missing or of another length (an array is empty until it is created, and a save keeps the
+# length it was made with), one by one
 ARRAYS_IF_MISSING = [ins for name, size in ARRAY_SIZES for ins in (
     ("array_length", ("id", "n"), ("id", name)),
-    ("cmp_lt", ("id", "::temp0"), ("id", "n"), ("int", 1)),
-    ("jmpf", ("id", "::temp0"), ("lbl", f"have_{name}")),
+    ("cmp_eq", ("id", "::temp0"), ("id", "n"), ("int", size)),
+    ("jmpf", ("id", "::temp0"), ("lbl", f"make_{name}")),
+    ("jmp", ("lbl", f"have_{name}")),
+    ("label", f"make_{name}"),
     ("array_create", ("id", name), ("int", size)),
     ("label", f"have_{name}"))]
 
@@ -468,7 +471,9 @@ def class_choice_quest() -> Script:
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference"), ("x", "Float"),
                 ("y", "Float"), ("z", "Float"), ("base", "Form"), ("cell", "Cell"), ("name", "String"), ("msg", "String")],
         code=[
+            ("assign", ("id", "LogStep"), ("int", 1)),
             call("MakeArrays"),
+            ("assign", ("id", "LogStep"), ("int", 2)),
             ("assign", ("id", "i"), ("int", 0)),
             ("label", "loop"),
             ("cmp_lt", ("id", "::temp0"), ("id", "i"), ("int", 128)),
@@ -482,12 +487,14 @@ def class_choice_quest() -> Script:
             ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
             ("jmp", ("lbl", "loop")),
             ("label", "claim"),
+            ("assign", ("id", "LogStep"), ("int", 3)),
             ("callmethod", ("id", "GetBaseObject"), ("id", "r"), ("id", "base")),
             ("callmethod", ("id", "FindLost"), SELF, ("id", "::temp0"), ("id", "r"), ("id", "base")),
             ("jmpf", ("id", "::temp0"), ("lbl", "add")),
             ("iadd", ("id", "LogMerged"), ("id", "LogMerged"), ("int", 1)),
             ("return", ("bool", False)),
             ("label", "add"),
+            ("assign", ("id", "LogStep"), ("int", 4)),
             ("iadd", ("id", "LogAdded"), ("id", "LogAdded"), ("int", 1)),
             ("callmethod", ("id", "GetPositionX"), ("id", "r"), ("id", "x")),
             ("callmethod", ("id", "GetPositionY"), ("id", "r"), ("id", "y")),
@@ -597,7 +604,7 @@ def class_choice_quest() -> Script:
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("a", "Actor"), ("r", "ObjectReference"),
                 ("i", "Int"), ("count", "Int"), ("known", "Int"), ("seen_a", "Int"), ("seen_b", "Int"), ("x", "Float"),
                 ("y", "Float"), ("z", "Float"), ("msg", "String"), ("sa", "String"), ("sb", "String"), ("sh", "String"),
-                ("sf", "String"), ("sn", "String"), ("sk", "String"), ("sd", "String"), ("sm", "String"), ("su", "String")],
+                ("sf", "String"), ("sn", "String"), ("sk", "String"), ("sd", "String"), ("sm", "String"), ("su", "String"), ("ss", "String")],
         code=[
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             ("callmethod", ("id", "GetPositionX"), ("id", "player"), ("id", "x")),
@@ -637,9 +644,10 @@ def class_choice_quest() -> Script:
             ("cast", ("id", "sd"), ("id", "LogDup")),
             ("cast", ("id", "sm"), ("id", "LogMerged")),
             ("cast", ("id", "su"), ("id", "LogAdded")),
+            ("cast", ("id", "ss"), ("id", "LogStep")),
             *notify(("str", "Pandora log: saw "), ("id", "sa"), ("str", " people; humanoid "), ("id", "sh"), ("str", ", hostile "), ("id", "sf"), ("str", ", new "),
                     ("id", "sn"), ("str", " ("), ("id", "sk"), ("str", " known; dup "), ("id", "sd"), ("str", ", merged "),
-                    ("id", "sm"), ("str", ", added "), ("id", "su"), ("str", ")")),
+                    ("id", "sm"), ("str", ", added "), ("id", "su"), ("str", "; step "), ("id", "ss"), ("str", ")")),
             ("label", "end"),
             ("return", ("id", "count")),
         ],
@@ -932,7 +940,7 @@ def class_choice_quest() -> Script:
                    ("JustLoaded", "Bool", ("bool", False)), ("Refreshed", "Bool", ("bool", False)), ("Mode", "Int", ("int", 0)),
                    ("Generation", "Int", ("int", 0)), ("TrackedNext", "Int", ("int", 0)), ("RosterNext", "Int", ("int", 0)),
                    ("Noted", "Int", ("int", 0)), ("LogHuman", "Int", ("int", 0)), ("LogFoes", "Int", ("int", 0)),
-                   ("LogDup", "Int", ("int", 0)), ("LogMerged", "Int", ("int", 0)), ("LogAdded", "Int", ("int", 0)),
+                   ("LogDup", "Int", ("int", 0)), ("LogStep", "Int", ("int", 0)), ("LogMerged", "Int", ("int", 0)), ("LogAdded", "Int", ("int", 0)),
                    ("EntryNext", "Int", ("int", 0)), ("LastCell", "Cell", None),
                    ("Tracked", "ObjectReference[]", None), ("TrackedBeams", "ObjectReference[]", None),
                    ("TrackedLights", "ObjectReference[]", None), ("RosterRef", "ObjectReference[]", None),
