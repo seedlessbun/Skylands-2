@@ -4,6 +4,8 @@ import struct
 import sys
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "setup"))
 
@@ -132,3 +134,52 @@ def test_two_plain_chunks_are_joined_in_order():
     out += struct.pack("<ii", 2, len(flat)) + struct.pack(f"<{len(flat)}H", *flat)
     raw = gunmesh.read_mesh_blob(bytes(out), end, "two")
     assert raw is not None and len(raw.mesh.positions) == 48 and raw.mesh.positions[30] == both.positions[30], raw and raw.note
+
+
+def real_layout_blob(mesh, junk=41):
+    """The layout seen in a real Borderlands 2 SkeletalMesh: the vertex bulk array header is not 4-byte aligned, elements are 36 bytes
+    (tangents, bone indices and weights, the position at +16, half-float UVs at +28), the index buffer is a bulk array of 16-bit values."""
+    lo, hi = mesh.bounds()
+    centre = [(a + b) / 2 for a, b in zip(lo, hi)]
+    ext = [(b - a) / 2 for a, b in zip(lo, hi)]
+    out = bytearray(b"\\x07" * junk)
+    end = len(out)
+    out += struct.pack("<7f", *centre, *ext, 1.0) + struct.pack("<i", 1) + b"\\0" * 28 + b"\\x02\\x00"  # materials, origin, a 2-byte field
+    flat = [i for t in mesh.tris for i in t]
+    out += struct.pack("<ii", 2, len(flat)) + struct.pack(f"<{len(flat)}H", *flat)
+    out += b"\\x00\\x00\\x00"
+    out += struct.pack("<ii", 36, len(mesh.positions))
+    for i, p in enumerate(mesh.positions):
+        v = bytearray(36)
+        struct.pack_into("<4B", v, 0, 127, 251, 99, 128)
+        struct.pack_into("<4B", v, 4, 5, 134, 162, 255)
+        struct.pack_into("<3f", v, 16, *p)
+        struct.pack_into("<2e", v, 28, *mesh.uvs[i])
+        out += v
+    return bytes(out), end
+
+
+def test_real_layout_with_unaligned_bulk_headers():
+    mesh = M.cylinder(0, 28, 3, 3, 40, sides=12)
+    mesh.uvs = [(min(0.99, u), min(0.99, v)) for u, v in mesh.uvs]
+    data, end = real_layout_blob(mesh)
+    raw = gunmesh.read_mesh_blob(data, end, "stock")
+    assert raw is not None, "not found"
+    assert len(raw.mesh.positions) == len(mesh.positions) and raw.mesh.tris == mesh.tris
+    assert raw.mesh.positions[10] == pytest.approx(mesh.positions[10], abs=1e-5) and len(raw.mesh.uvs) == len(mesh.uvs)
+    assert "(36, 16)" in raw.note
+
+
+def test_mip_chain_with_compressed_cache_mips_and_inline_tail():
+    w = 64
+    out = b"\\x01\\x02\\x03\\x04"
+    # the big mips live in a texture file cache (flags 0x11, size on disk a little more than the raw size), the small ones are inline
+    for size in (64, 32):
+        raw = (size // 4) * (size // 4) * 8
+        out += struct.pack("<Iiii", 0x11, raw, raw + 121, 0x1000 + size) + struct.pack("<ii", size, size)
+    for size in (16, 8, 4):
+        raw = (size // 4) * (size // 4) * 8
+        out += struct.pack("<Iiii", 0, raw, raw, 0x2000) + bytes([size]) * raw + struct.pack("<ii", size, size)
+    mips = gunmesh.parse_mips(out, w, w, 8)
+    assert [m["w"] for m in mips] == [64, 32, 16, 8, 4]
+    assert mips[0]["inline"] is None and mips[0]["disk"] == 64 * 64 // 2 + 121 and mips[3]["inline"] == bytes([8]) * 32

@@ -21,3 +21,10 @@
 - Reference blocks for the lit shape and box collision were taken from nifly's own output (tools/nifcheck/check.cpp prints
   what nifly reads back). Skyrim-side unknowns to confirm in game: weapon axis/size fit, havok layer 4 (clutter) for dropped
   guns, hand position (grip origin), inventory view.
+
+## 2026-10-19 - 0.10.8 gun models in their own plugin
+- Cause of "installing a gun model method removed all powers and weapons": the per-mesh first-person STAT records pushed
+  Skylands.esp past 0xFFF new forms, so it stopped being a light (ESL) plugin and every saved reference to it broke.
+- Skylands.esp is now byte-identical with models on or off (stays light). Meshes, first-person STATs and the WEAP overrides
+  live in SkylandsGunModels.esp (masters Skylands.esp), written and enabled only when a method is chosen; the plain install
+  disables and removes it. Old STAT ids are dropped from the form-id registry.

@@ -27,6 +27,7 @@ from .skyrim.strings import parse_table
 
 MASTERS = ["Skyrim.esm", "Update.esm", "Dawnguard.esm"]
 PLUGIN = "Skylands.esp"
+MODELS_PLUGIN = "SkylandsGunModels.esp"
 BEAM_TEXTURE = "textures\\skylands\\beam.dds"
 XMARKER = 0x0000003B  # Skyrim.esm: the invisible marker object
 ACTOR_TYPE_NPC = 0x00013794  # Skyrim.esm keyword: humanoids
@@ -372,7 +373,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
     m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE"})
+    for key in [k for k in (formids or {}) if k.startswith("STAT:SkylandsGunView_")]:
+        del formids[key]  # left by builds that kept these in Skylands.esp, which made it too big to stay light
     p = esp.Plugin(PLUGIN, MASTERS, ids=formids)
+    view = esp.Plugin(MODELS_PLUGIN, MASTERS + [PLUGIN])
     report: dict = {"guns": 0, "renamed_enemies": 0, "loot_lists": 0, "classes": []}
     rnd = random.Random(seed)
     G = S.GENERATION["main"]
@@ -456,14 +460,18 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             if models is not None:
                 mesh = models.model_for(g, built, rr.id, rarity_color(bl2["rarities"], rr.level), edid)
                 if mesh:
-                    w.set("MODL", esp.zstr(mesh))
-                    w.drop("MODT", "MODS", "MO2T", "MO2S")
+                    # The real model goes in a second plugin so Skylands.esp never changes (it must stay light
+                    # or every save made with it loses its powers and guns).
+                    w2 = esp.Rec(w.type, w.form_id, list(w.subs), flags=w.flags)
+                    w2.set("MODL", esp.zstr(mesh))
+                    w2.drop("MODT", "MODS", "MO2T", "MO2S")
                     if mesh not in first_person:  # the model Skyrim shows in first person (and, it seems, in the inventory)
-                        fp = p.new("STAT", "SkylandsGunView_" + mesh.rsplit("\\", 1)[-1].removesuffix(".nif"))
+                        fp = view.new("STAT", "SkylandsGunView_" + mesh.rsplit("\\", 1)[-1].removesuffix(".nif"))
                         fp.add("OBND", struct.pack("<6h", -40, -40, -40, 40, 40, 40)).add("MODL", esp.zstr(mesh))
                         fp.add("DNAM", struct.pack("<fI", 30.0, 0))
                         first_person[mesh] = fp.form_id
-                    insert_ordered(w, "WNAM", esp.u32(first_person[mesh]), WEAP_ORDER)
+                    insert_ordered(w2, "WNAM", esp.u32(first_person[mesh]), WEAP_ORDER)
+                    view.override(w2)
             p.override(w)
             by_rarity.setdefault(rr.level, []).append(w.form_id)
             if g["type"] == "pistol" and rr.level == 1 and element is None:
@@ -619,6 +627,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
 
     # ---- files ------------------------------------------------------------------------------------
     (out_data / PLUGIN).write_bytes(p.encode())
+    if view.records:
+        (out_data / MODELS_PLUGIN).write_bytes(view.encode())
     (out_data / "Scripts" / "SkylandsHunterQuest.pex").write_bytes(pex.write(scripts.class_choice_quest()))
     (out_data / "Scripts" / "SkylandsHunterPower.pex").write_bytes(pex.write(scripts.respawn_power()))
     (out_data / "Scripts" / "SkylandsHunter.pex").write_bytes(pex.write(scripts.watcher()))

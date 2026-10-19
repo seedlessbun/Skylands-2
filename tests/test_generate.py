@@ -230,7 +230,14 @@ def test_proxy_gun_models(tmp_path):
     out = tmp_path / "out"
     rep = generate.generate(bl2, sky, out, gun_models="proxy")
     data = out / "Data"
-    tes, recs = read_plugin(data / "Skylands.esp", {"WEAP"})
+    base_bytes = (data / "Skylands.esp").read_bytes()
+    plain = tmp_path / "plain"
+    generate.generate(bl2, sky, plain)
+    assert base_bytes == (plain / "Data" / "Skylands.esp").read_bytes()  # Skylands.esp never changes, so it stays light
+    assert int.from_bytes(base_bytes[8:12], "little") & 0x200 and not (plain / "Data" / "SkylandsGunModels.esp").exists()
+    tes, recs = read_plugin(data / "SkylandsGunModels.esp", {"WEAP", "STAT"})
+    assert b"Skylands.esp" in (data / "SkylandsGunModels.esp").read_bytes()[:400] and recs["STAT"]
+    assert all(r.first("WNAM") for r in recs["WEAP"])
     meshes = {r.first("MODL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert all(m.startswith("Skylands\\Guns\\proxy_") for m in meshes), meshes
     for m in meshes:
@@ -280,7 +287,7 @@ def test_native_gun_models_with_a_source_and_fallbacks(tmp_path):
     bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
     sky = fake_skyrim.build_full(tmp_path / "sky")
     rep = generate.generate(bl2, sky, tmp_path / "out", gun_models="auto", model_sources={"native": Source()})
-    tes, recs = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP"})
+    tes, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP"})
     paths = {r.first("MODL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert all(p.startswith("Skylands\\Guns\\native_") for p in paths), paths  # every fake gun is a pistol
     assert (tmp_path / "out" / "Data" / "Textures" / "Skylands" / "Guns" / "t_deadbeef.dds").is_file()
@@ -339,7 +346,7 @@ def test_gun_models_set_the_first_person_model_object(tmp_path):
     bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
     sky = fake_skyrim.build_full(tmp_path / "sky")
     generate.generate(bl2, sky, tmp_path / "out", gun_models="proxy")
-    tes, recs = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP", "STAT"})
+    tes, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP", "STAT"})
     views = {r.form_id: r for r in recs["STAT"] if r.edid.startswith("SkylandsGunView_")}
     assert views
     for w in recs["WEAP"]:

@@ -79,7 +79,7 @@ README = f"""Skylands {VERSION} test build: Skyrim played as a Borderlands vault
    plugins.txt.skylands-backup next to your plugins.txt is a copy from before the first install).
 
 GUN MODELS (new, being tested): Install-Skylands.bat leaves every gun looking like a crossbow. These install the same
-Skylands but give each gun its own mesh; try them one at a time (each re-run replaces the last):
+Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (Skylands.esp itself is never changed, so your saves keep their powers and guns; the plain installer removes the second plugin); try them one at a time (each re-run replaces the last):
 """ + "".join(f"  Install-Skylands-GunModels-{n}.bat  - {why}\n" for n, (_m, why) in MODEL_BATS.items()) + """  Check: the gun in your hand, on the ground and in the inventory (size, direction, colours, no crash), then send
   work\\skylands-setup.log: it says how many gun meshes each method built and which guns kept the crossbow.
   If guns face the wrong way or are too big/small, add --gun-spin 180 (any angle) or --gun-scale 1.5 to the same command,
@@ -95,7 +95,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-36.zip"
+    out = dist / "Skylands-TestBuild-37.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

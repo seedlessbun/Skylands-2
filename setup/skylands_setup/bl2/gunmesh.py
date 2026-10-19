@@ -60,7 +60,8 @@ def read_bounds(data: bytes, pos: int) -> tuple[M.Vec, M.Vec] | None:
 def _bulk_arrays(data: bytes, start: int, sizes: tuple[int, ...] | None, min_count: int = 3):
     """Every [elemSize][count] header at a 4-byte boundary whose payload fits in the data."""
     n = len(data)
-    for p in range(start - start % 4, n - 8, 4):
+    # every byte offset: the headers of the real files are not 4-byte aligned (a 2-byte property earlier shifts them)
+    for p in range(start, n - 8):
         size, count = struct.unpack_from("<ii", data, p)
         if count < min_count or count > 400000 or size <= 0 or size > 128:
             continue
@@ -277,19 +278,79 @@ def read_mesh_blob(data: bytes, props_end: int, label: str) -> RawMesh | None:
     return raw or read_plain_mesh(data, props_end, label)
 
 
+def vertex_arrays(data: bytes, start: int, bounds: tuple[M.Vec, M.Vec] | None) -> list[tuple[int, int, int, int, list[M.Vec]]]:
+    """Bulk arrays whose elements hold a position (three floats inside the bounds) somewhere inside the element, in file order and
+    without overlaps: (data offset, element size, count, position offset, positions)."""
+    out = []
+    taken = 0
+    for off, size, count in _bulk_arrays(data, start, ELEMENT_SIZES):
+        if off < taken or count > MAX_VERTS or count < 4:
+            continue
+        sample = range(0, count, max(1, count // 64))
+        for o in range(0, size - 11, 4):
+            if _positions_ok(data, off, size, count, o, bounds, sample):
+                pts = [struct.unpack_from("<3f", data, off + i * size + o) for i in range(count)]
+                if _spread_ok(pts, bounds):
+                    out.append((off, size, count, o, pts))
+                    taken = off + size * count
+                    break
+    return out
+
+
+def element_uvs(data: bytes, off: int, size: int, count: int, pos_offset: int):
+    """UVs inside a vertex element: a half-float pair (the usual) or a float pair that is not the position."""
+    for o in range(0, size - 3, 2):
+        if pos_offset - 4 < o < pos_offset + 12:
+            continue
+        for fmt, width in (("<2e", 4), ("<2f", 8)):
+            if o + width > size or (width == 8 and o % 4):
+                continue
+            uv = _uv_try(data, off, size, count, o, fmt)
+            if uv:
+                return uv
+    return None
+
+
 def _read_bulk_mesh(data: bytes, props_end: int, label: str) -> RawMesh | None:
     bounds = read_bounds(data, props_end)
     start = props_end + (28 if bounds else 0)
-    pos = find_positions(data, start, bounds)
-    if not pos:
+    arrays = vertex_arrays(data, start, bounds)
+    if not arrays:
         return None
-    pts, off, count = pos
-    tris = find_indices(data, start, count)
-    if not tris:
+    best = None
+    for _off, _size, tris in index_candidates(data, start):
+        need = max(max(t) for t in tris) + 1
+        use, total = [], 0
+        for arr in arrays:  # the first arrays in the file, enough to cover the highest index
+            use.append(arr)
+            total += arr[2]
+            if total >= need:
+                break
+        if total < need:
+            continue
+        if best is None or len(tris) > len(best[1]):
+            best = (use, tris, need)
+    if best is None:
         return None
-    uvs = find_uvs(data, start, count, off) or []
-    m = M.Mesh(positions=[(p[0], p[1], p[2]) for p in pts], uvs=uvs if len(uvs) == len(pts) else [], tris=tris)
-    return RawMesh(m, f"{label}: {count} vertices, {len(tris)} triangles, uvs {'yes' if m.uvs else 'no'}, bounds {'yes' if bounds else 'no'}", [])
+    use, tris, need = best
+    pts: list[M.Vec] = []
+    uvs: list[tuple[float, float]] = []
+    have_uv = True
+    for off, size, count, o, pos in use:
+        pts += pos
+        uv = element_uvs(data, off, size, count, o)
+        if uv is None:
+            have_uv = False
+        else:
+            uvs += uv
+    pts = pts[:need]
+    uvs = uvs[:need] if have_uv and len(uvs) >= need else []
+    if not uvs:  # UVs in a buffer of their own, one element per vertex
+        uvs = find_uvs(data, start, len(pts), use[0][0]) or []
+    m = M.Mesh(positions=[(q[0], q[1], q[2]) for q in pts], uvs=uvs, tris=tris)
+    sizes = [(u[1], u[3]) for u in use]
+    return RawMesh(m, f"{label}: {len(pts)} vertices, {len(tris)} triangles, uvs {'yes' if uvs else 'no'}, "
+                      f"bulk arrays {len(use)} (element size, position offset: {sizes}), bounds {'yes' if bounds else 'no'}", [])
 
 
 def material_refs(pkg: upk.Package, data: bytes, start: int) -> list[str]:
@@ -361,8 +422,8 @@ def dds_header(width: int, height: int, fourcc: bytes, size: int) -> bytes:
                        b"\0" * 44, 32, 0x4, struct.unpack("<I", fourcc)[0], 0, 0, 0, 0, 0, 0x1000, 0, 0, 0, 0)
 
 
-def read_texture(ix, path: str, tfc_dir, say) -> bytes | None:
-    """A Texture2D as a DDS file (DXT1 or DXT5), or None."""
+def read_texture(ix, path: str, tfc_dir, say, max_dim: int = 1024) -> bytes | None:
+    """A Texture2D as a DDS file (DXT1 or DXT5) at most max_dim wide, taken from the mip chain, or None."""
     found = ix.get(path)
     if not found:
         say(f"texture {path}: not found")
@@ -381,36 +442,71 @@ def read_texture(ix, path: str, tfc_dir, say) -> bytes | None:
     else:
         say(f"texture {path}: unsupported format {fmt or '?'}")
         return None
-    want = (w // 4) * (h // 4) * per
     data = pkg.export_data(idx)
-    pixels = _find_mip(data, want, tfc_dir, props.get("TextureFileCacheName"), say, path)
-    if pixels is None:
+    mips = parse_mips(data, w, h, per)
+    if not mips:
+        say(f"texture {path}: no mip table found ({w}x{h} {fmt}, {len(data)} bytes)")
         return None
-    return dds_header(w, h, fourcc, want) + pixels
-
-
-def _find_mip(data: bytes, want: int, tfc_dir, tfc_name, say, label: str) -> bytes | None:
-    for p in range(0, len(data) - 16, 4):
-        flags, count, disk, offset = struct.unpack_from("<IiiI", data, p)
-        if count != want or disk <= 0 or disk > want:
-            continue
-        if flags & 0x1:  # stored in a texture file cache
-            if not tfc_dir or not tfc_name:
-                continue
-            path = _tfc_path(tfc_dir, str(tfc_name))
-            if path is None:
-                say(f"texture {label}: cache file {tfc_name} not found")
-                return None
-            with open(path, "rb") as f:
-                f.seek(offset)
-                raw = f.read(disk)
-        else:
-            raw = data[p + 16 : p + 16 + disk]
-        out = _unpack(raw, flags, want)
-        if out is not None:
-            return out
-    say(f"texture {label}: no top mip of {want} bytes found")
+    usable = sorted((m for m in mips if m["w"] <= max_dim and m["h"] <= max_dim), key=lambda m: -m["w"] * m["h"]) or mips[-1:]
+    for mip in usable:  # the biggest first; a smaller one stands in when it cannot be read (the resident mips are inside the package)
+        pixels = _mip_pixels(mip, tfc_dir, props.get("TextureFileCacheName"), say, path)
+        if pixels is not None:
+            return dds_header(mip["w"], mip["h"], fourcc, len(pixels)) + pixels
     return None
+
+
+def parse_mips(data: bytes, w: int, h: int, per: int) -> list[dict]:
+    """The mip chain of a Texture2D export: entries [flags][element count][size on disk][offset] then, when the data is inline
+    (flags 0), the data, then [width][height]. The top mip's entry is found by its element count, at any byte offset."""
+    want = (w // 4) * (h // 4) * per
+    n = len(data)
+    for p0 in range(0, n - 24):
+        flags, count, disk, off = struct.unpack_from("<Iiii", data, p0)
+        if count != want or not 0 < disk <= want + want // 8 + 4096:  # compressed data can be a little bigger than the raw size
+            continue
+        mips: list[dict] = []
+        p = p0
+        cw, ch = w, h
+        while p + 24 <= n and cw >= 1 and ch >= 1:
+            flags, count, disk, off = struct.unpack_from("<Iiii", data, p)
+            need = max(1, (cw + 3) // 4) * max(1, (ch + 3) // 4) * per
+            if count != need or not 0 < disk <= need + need // 8 + 4096:
+                break
+            q = p + 16
+            inline = None
+            if not flags & 1:
+                inline = data[q:q + disk]
+                q += disk
+            if q + 8 > n or struct.unpack_from("<ii", data, q) != (cw, ch):
+                break
+            mips.append({"w": cw, "h": ch, "flags": flags, "count": count, "disk": disk, "offset": off, "inline": inline})
+            p = q + 8
+            if cw == 1 and ch == 1:
+                break
+            cw, ch = max(1, cw // 2), max(1, ch // 2)
+        if len(mips) >= 2:
+            return mips
+    return []
+
+
+def _mip_pixels(mip: dict, tfc_dir, tfc_name, say, label: str) -> bytes | None:
+    if mip["inline"] is not None:
+        raw = mip["inline"]
+    else:
+        if not tfc_dir or not tfc_name:
+            say(f"texture {label}: mip {mip['w']}x{mip['h']} is in a texture file cache but none is named")
+            return None
+        path = _tfc_path(tfc_dir, str(tfc_name))
+        if path is None:
+            say(f"texture {label}: cache file {tfc_name}.tfc not found")
+            return None
+        with open(path, "rb") as f:
+            f.seek(mip["offset"])
+            raw = f.read(mip["disk"])
+    out = _unpack(raw, mip["flags"], mip["count"])
+    if out is None:
+        say(f"texture {label}: mip {mip['w']}x{mip['h']} could not be unpacked (flags {mip['flags']:#x}, {len(raw)} bytes read)")
+    return out
 
 
 def _tfc_path(root, name: str):

@@ -21,9 +21,17 @@ def build_install(root, with_texture=True):
     b = fake_bl2.ObjBuilder()
     b.obj("Wpn_Pistol.Tex.Pistol_Diffuse", "Texture2D", b"")
     tex = b.paths["Wpn_Pistol.Tex.Pistol_Diffuse"]
+    def mips(w, h):  # real layout: [flags][count][size on disk][offset] data [width][height], largest first
+        out = b""
+        while w >= 4 and h >= 4:
+            size = (w // 4) * (h // 4) * 8
+            out += struct.pack("<Iiii", 0, size, size, 0x1000) + bytes(range(256)) * (size // 256) + bytes(range(size % 256)) + struct.pack("<ii", w, h)
+            w, h = w // 2, h // 2
+        return out
+
     b.exports[tex - 1]["body"] = (struct.pack("<i", -1) + b.i("SizeX", 16) + b.i("SizeY", 16) +
                                   b.prop("Format", "ByteProperty", b.n("PF_DXT1"), enum="EPixelFormat") + b.none() +
-                                  b"\x01\x02\x03\x04" + struct.pack("<IiiI", 0, 128, 128, 0) + bytes(range(128)))
+                                  b"\x01\x02\x03\x04" + mips(16, 16))
     b.obj("Wpn_Pistol.Mat.Pistol_MIC", "MaterialInstanceConstant", b"")
     mic = b.paths["Wpn_Pistol.Mat.Pistol_MIC"]
     b.exports[mic - 1]["body"] = (struct.pack("<i", -1) + b.arr_structs("TextureParameterValues", [

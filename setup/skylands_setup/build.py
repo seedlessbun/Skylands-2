@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.7"
+VERSION = "0.10.8"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -120,6 +120,9 @@ def verify(sky: Path, plugins: Path | None) -> list[str]:
     out = []
     esp = data / generate.PLUGIN
     out.append(f"{generate.PLUGIN}: {'present, ' + str(esp.stat().st_size // 1024) + ' KB' if esp.is_file() else 'MISSING'}")
+    models = data / generate.MODELS_PLUGIN
+    if models.is_file():
+        out.append(f"{generate.MODELS_PLUGIN}: present, {models.stat().st_size // 1024} KB")
     for name in ("SkylandsHunter", "SkylandsHunterQuest", "SkylandsHunterPower"):
         pex = data / "Scripts" / f"{name}.pex"
         out.append(f"Scripts\\{name}.pex: {'present' if pex.is_file() else 'MISSING'}")
@@ -154,6 +157,7 @@ def uninstall_main(argv: list[str]) -> int:
             removed += 1
     prune_empty(sky)
     unplugged = disable_plugin(generate.PLUGIN)
+    disable_plugin(generate.MODELS_PLUGIN)
     record.unlink()
     for marker in work.glob("setup-done*.txt"):
         marker.unlink()
@@ -284,6 +288,10 @@ def main(argv: list[str]) -> int:
         if gone:
             say(f"Removed {gone} files of the previous install that this one does not use.")
         plugins = enable_plugin(generate.PLUGIN)
+        if generate.MODELS_PLUGIN.lower() in {w.lower().rsplit("/", 1)[-1] for w in written}:
+            enable_plugin(generate.MODELS_PLUGIN)  # after Skylands.esp, which it needs
+        else:
+            disable_plugin(generate.MODELS_PLUGIN)
         say(f"Plugin enabled in {plugins}")
         for line in verify(sky, plugins):
             say(f"  check: {line}")
