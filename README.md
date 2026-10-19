@@ -78,7 +78,9 @@ and an ability already running on a character never restarts. So 0.9.3 gives the
 powers new names: the old copies drop out of the save, a fresh quest starts with correct properties, and it gives
 the player the ability, whose fresh script hands everything else over. (The vault hunter menu shows once more.)
 
-## Powers come with the race (0.9.4)
+## Powers come with the race and the ability (0.9.4, 0.9.5)
+
+The player's copy of the ability script (fresh, with this build's own forms) also grants both powers with AddSpell every couple of seconds if missing, since race powers are not re-applied to a character that already exists.
 
 Giving the powers from a script failed on old saves, so Pandora Respawn and Pandora Log Enemies are now spells of the
 race records, like the ability, and show in the Powers menu with no script involved. The ability's script also starts

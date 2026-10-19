@@ -1019,6 +1019,21 @@ def watcher() -> Script:
             ("return", None),
         ],
     )
+    give = Function(
+        "Give",
+        params=[("sp", "Spell"), ("title", "String")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
+        code=[
+            # the player's copy of this script has this build's own forms, so the powers are granted from here
+            ("callmethod", ("id", "HasSpell"), ("id", "Me"), ("id", "::temp0"), ("id", "sp")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "add")),
+            ("return", None),
+            ("label", "add"),
+            ("callmethod", ("id", "AddSpell"), ("id", "Me"), NONE, ("id", "sp"), ("bool", False)),
+            *notify(("str", "Skylands: you learned "), ("id", "title")),
+            ("return", None),
+        ],
+    )
     hand = Function(
         "Hand",
         locals=[("::nonevar", "None")],
@@ -1028,6 +1043,8 @@ def watcher() -> Script:
              ("id", "::RespawnPower_var"), ("id", "::LogPower_var"), ("id", "::Ability_var"), ("id", "::NpcKeyword_var"),
              ("id", "::ScanRadius_var"), ("id", "::Verbose_var")),
             ("callmethod", ("id", "Upgrade"), ("id", "::Owner_var"), NONE),
+            call("Give", ("id", "::RespawnPower_var"), ("str", "Pandora Respawn")),
+            call("Give", ("id", "::LogPower_var"), ("str", "Pandora Log Enemies")),
             ("return", None),
         ],
     )
@@ -1407,7 +1424,7 @@ def watcher() -> Script:
                          ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
-        functions=[on_start, on_update, wake, hand, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+        functions=[on_start, on_update, wake, give, hand, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 
