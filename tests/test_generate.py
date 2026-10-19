@@ -254,3 +254,34 @@ def test_gun_models_off_keeps_the_crossbow(tmp_path):
     tes, recs = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP"})
     assert all(r.first("MODL").startswith(b"dlc01") for r in recs["WEAP"])
     assert not (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Guns").exists()
+
+
+def test_native_gun_models_with_a_source_and_fallbacks(tmp_path):
+    from skylands_setup import meshes as M
+
+    class Source:
+        def gun_parts(self, g, built):
+            if g["type"] != "pistol":
+                return None
+            body = M.box(0, 0, 0, 0.1, 1.0, 0.2)
+            body.texture = "t_deadbeef"
+            return [body, M.box(0, 0.7, 0, 0.05, 0.5, 0.05)]
+
+        def take_textures(self):
+            return {"t_deadbeef": nif_dds()}
+
+    def nif_dds():
+        from skylands_setup.skyrim import nif
+
+        return nif.dds_solid((9, 9, 9))
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    rep = generate.generate(bl2, sky, tmp_path / "out", gun_models="auto", model_sources={"native": Source()})
+    tes, recs = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP"})
+    paths = {r.first("MODL").rstrip(b"\0").decode() for r in recs["WEAP"]}
+    assert all(p.startswith("Skylands\\Guns\\native_") for p in paths), paths  # every fake gun is a pistol
+    assert (tmp_path / "out" / "Data" / "Textures" / "Skylands" / "Guns" / "t_deadbeef.dds").is_file()
+    assert rep["gun_models"]["by_method"] == {"native": rep["guns"]}

@@ -1,0 +1,334 @@
+"""Read Borderlands 2 gun part meshes and their textures straight out of the cooked packages ("native" method).
+
+The exact byte layout of UE3 meshes differs between games and engine builds, and this code has to work on files nobody
+can look at from here. So it does not walk the mesh structure; it finds the data by what it must look like:
+
+* vertex buffers are bulk arrays: [int32 element size][int32 count][count * size bytes]. A buffer whose elements hold
+  a float triple inside the mesh's own bounding box (the FBoxSphereBounds that follows a mesh's properties) is a
+  position buffer, wherever the triple sits inside the element;
+* index buffers are bulk arrays of 2 or 4 byte values, a multiple of three long, every index below the vertex count;
+* UVs are the half or float pairs, in a buffer with the same vertex count, that stay within a few texture repeats;
+* materials are object references in the mesh data whose class is a material; their texture parameters name the
+  diffuse and normal textures; textures are DXT1/DXT5 mips, inline or in a texture file cache.
+
+Everything returns None (and a reason through `say`) rather than raising, so one odd part never stops a build.
+"""
+
+from __future__ import annotations
+
+import math
+import struct
+import zlib
+from dataclasses import dataclass
+
+from .. import meshes as M
+from . import upk
+
+MESH_CLASSES = ("StaticMesh", "SkeletalMesh")
+MATERIAL_CLASSES = ("MaterialInstanceConstant", "Material", "MaterialInstanceTimeVarying")
+ELEMENT_SIZES = (12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64)
+MAX_VERTS = 65535
+
+
+@dataclass
+class RawMesh:
+    mesh: M.Mesh
+    note: str
+    materials: list[str]
+
+
+def _finite(v: float) -> bool:
+    return v == v and abs(v) < 1e7
+
+
+def read_bounds(data: bytes, pos: int) -> tuple[M.Vec, M.Vec] | None:
+    """The FBoxSphereBounds after a mesh's properties: origin, box extent, radius. Returns (min, max) or None."""
+    try:
+        ox, oy, oz, ex, ey, ez, radius = struct.unpack_from("<7f", data, pos)
+    except struct.error:
+        return None
+    if not all(_finite(v) for v in (ox, oy, oz, ex, ey, ez, radius)):
+        return None
+    if min(ex, ey, ez) < 0 or max(ex, ey, ez) > 20000 or max(ex, ey, ez) <= 0:
+        return None
+    return (ox - ex, oy - ey, oz - ez), (ox + ex, oy + ey, oz + ez)
+
+
+def _bulk_arrays(data: bytes, start: int, sizes: tuple[int, ...] | None, min_count: int = 3):
+    """Every [elemSize][count] header at a 4-byte boundary whose payload fits in the data."""
+    n = len(data)
+    for p in range(start - start % 4, n - 8, 4):
+        size, count = struct.unpack_from("<ii", data, p)
+        if count < min_count or count > 400000 or size <= 0 or size > 128:
+            continue
+        if sizes is not None and size not in sizes:
+            continue
+        if p + 8 + size * count > n:
+            continue
+        yield p + 8, size, count
+
+
+def find_positions(data: bytes, start: int, bounds: tuple[M.Vec, M.Vec] | None) -> tuple[list[M.Vec], int, int] | None:
+    """The biggest buffer with a float triple that stays inside the bounds. Returns (positions, data offset, count)."""
+    best = None
+    for off, size, count in _bulk_arrays(data, start, ELEMENT_SIZES):
+        if count > MAX_VERTS or count < 4:
+            continue
+        sample = range(0, count, max(1, count // 64))
+        for o in range(0, size - 11, 4):
+            if _positions_ok(data, off, size, count, o, bounds, sample):
+                pts = [struct.unpack_from("<3f", data, off + i * size + o) for i in range(count)]
+                if _spread_ok(pts, bounds):
+                    if best is None or count > best[2]:
+                        best = (pts, off, count, size, o)
+                    break
+    if best is None:
+        return None
+    return best[0], best[1], best[2]
+
+
+def _positions_ok(data, off, size, count, o, bounds, sample) -> bool:
+    if bounds is None:
+        lo = (-3000.0,) * 3
+        hi = (3000.0,) * 3
+        pad = 0.0
+    else:
+        lo, hi = bounds
+        pad = 0.05 * max(hi[i] - lo[i] for i in range(3)) + 0.5
+    for i in sample:
+        x, y, z = struct.unpack_from("<3f", data, off + i * size + o)
+        if not (_finite(x) and _finite(y) and _finite(z)):
+            return False
+        if not (lo[0] - pad <= x <= hi[0] + pad and lo[1] - pad <= y <= hi[1] + pad and lo[2] - pad <= z <= hi[2] + pad):
+            return False
+    return True
+
+
+def _spread_ok(pts, bounds) -> bool:
+    """Reject buffers that are mostly zeros (a padding field that happens to sit inside the bounds)."""
+    if len({p for p in pts[:256]}) < min(8, len(pts)):
+        return False
+    xs, ys, zs = zip(*pts)
+    ext = [max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)]
+    if bounds is None:
+        return max(ext) > 1e-3
+    want = [bounds[1][i] - bounds[0][i] for i in range(3)]
+    return max(ext) >= 0.4 * max(want)
+
+
+def find_indices(data: bytes, start: int, vertex_count: int) -> list[tuple[int, int, int]] | None:
+    """The index buffer: a bulk array of 2 or 4 byte values, a multiple of 3 long, all below the vertex count."""
+    best = None
+    for off, size, count in _bulk_arrays(data, start, (2, 4), min_count=3):
+        if count % 3 or count > 3 * 400000:
+            continue
+        fmt = "<%dH" if size == 2 else "<%dI"
+        step = max(1, count // 4096)
+        vals = struct.unpack_from(fmt % count, data, off)
+        if max(vals) >= vertex_count:
+            continue
+        if max(vals) < 0.9 * (vertex_count - 1):
+            continue  # an index buffer uses (nearly) all the vertices
+        tris = [(vals[i], vals[i + 1], vals[i + 2]) for i in range(0, count, 3)]
+        degenerate = sum(1 for a, b, c in tris[::step] if a == b or b == c or a == c)
+        if degenerate > 0.2 * len(tris[::step]):
+            continue
+        if best is None or count > best[0]:
+            best = (count, tris)
+    return best[1] if best else None
+
+
+def find_uvs(data: bytes, start: int, vertex_count: int, skip_off: int) -> list[tuple[float, float]] | None:
+    """UV pairs in a buffer with one element per vertex (float or half), values within a few texture repeats."""
+    for off, size, count in _bulk_arrays(data, start, None):
+        if count != vertex_count or off == skip_off:
+            continue
+        if size < 4:
+            continue
+        for o in range(0, size - 3, 2):
+            for fmt, width in (("<2f", 8), ("<2e", 4)):
+                if o + width > size or (width == 8 and o % 4):
+                    continue
+                uv = _uv_try(data, off, size, count, o, fmt)
+                if uv:
+                    return uv
+    return None
+
+
+def _uv_try(data, off, size, count, o, fmt):
+    out = []
+    spread_u = set()
+    for i in range(count):
+        u, v = struct.unpack_from(fmt, data, off + i * size + o)
+        if not (_finite(u) and _finite(v)) or not (-4 <= u <= 8 and -8 <= v <= 8):
+            return None
+        out.append((u, v))
+        if i < 64:
+            spread_u.add(round(u, 3))
+    if len(spread_u) < max(2, min(count, 64) // 16):
+        return None
+    return out
+
+
+def read_mesh_blob(data: bytes, props_end: int, label: str) -> RawMesh | None:
+    """Positions, triangles and UVs of the first LOD found in an export's data (after its tagged properties)."""
+    bounds = read_bounds(data, props_end)
+    start = props_end + (28 if bounds else 0)
+    pos = find_positions(data, start, bounds)
+    if not pos:
+        return None
+    pts, off, count = pos
+    tris = find_indices(data, start, count)
+    if not tris:
+        return None
+    uvs = find_uvs(data, start, count, off) or []
+    m = M.Mesh(positions=[(p[0], p[1], p[2]) for p in pts], uvs=uvs if len(uvs) == len(pts) else [], tris=tris)
+    return RawMesh(m, f"{label}: {count} vertices, {len(tris)} triangles, uvs {'yes' if m.uvs else 'no'}, bounds {'yes' if bounds else 'no'}", [])
+
+
+def material_refs(pkg: upk.Package, data: bytes, start: int) -> list[str]:
+    """Object references in the data that point at materials (imports and exports), in order of first appearance."""
+    seen: list[str] = []
+    n_imp, n_exp = len(pkg.imports), len(pkg.exports)
+    for p in range(start - start % 4, len(data) - 3, 4):
+        (v,) = struct.unpack_from("<i", data, p)
+        if v == 0 or v < -n_imp or v > n_exp:
+            continue
+        try:
+            cls = pkg.obj_class(v)
+        except (IndexError, upk.UPKError):
+            continue
+        if cls in MATERIAL_CLASSES:
+            path = pkg.path_of(v)
+            if path not in seen:
+                seen.append(path)
+        if len(seen) >= 8:
+            break
+    return seen
+
+
+# ---- textures -------------------------------------------------------------------------------------------------------
+
+def texture_parameters(ix, material: str, depth: int = 0) -> dict[str, str]:
+    """{parameter name lower-case: texture path} of a material instance and its parents."""
+    out: dict[str, str] = {}
+    if depth > 4 or not material:
+        return out
+    props = ix.props(material) or {}
+    values = props.get("TextureParameterValues")
+    items = values.get("items") if isinstance(values, dict) else None
+    if isinstance(items, list):
+        for it in items:
+            if isinstance(it, dict) and isinstance(it.get("ParameterValue"), str):
+                out.setdefault(str(it.get("ParameterName", "")).lower(), it["ParameterValue"])
+    parent = props.get("Parent")
+    if isinstance(parent, str):
+        for k, v in texture_parameters(ix, parent, depth + 1).items():
+            out.setdefault(k, v)
+    if not out:  # a plain material: its texture sample expressions
+        try:
+            for child in ix.children(material):
+                cp = ix.props(child) or {}
+                tex = cp.get("Texture")
+                if isinstance(tex, str):
+                    out.setdefault(str(cp.get("ParameterName") or child).lower(), tex)
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def pick_textures(params: dict[str, str]) -> tuple[str | None, str | None]:
+    diffuse = normal = None
+    for name, path in params.items():
+        low = (name + " " + path).lower()
+        if normal is None and ("norm" in low or low.endswith("_n") or "_nrm" in low):
+            normal = path
+        elif diffuse is None and any(k in low for k in ("diff", "albedo", "base", "color", "_d", "diffuse")):
+            diffuse = path
+    if diffuse is None:
+        diffuse = next((p for p in params.values() if p != normal), None)
+    return diffuse, normal
+
+
+def dds_header(width: int, height: int, fourcc: bytes, size: int) -> bytes:
+    return struct.pack("<4sIIIIIII44sIIIIIIIIIIIII", b"DDS ", 124, 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000, height, width, size, 0, 1,
+                       b"\0" * 44, 32, 0x4, struct.unpack("<I", fourcc)[0], 0, 0, 0, 0, 0, 0x1000, 0, 0, 0, 0)
+
+
+def read_texture(ix, path: str, tfc_dir, say) -> bytes | None:
+    """A Texture2D as a DDS file (DXT1 or DXT5), or None."""
+    found = ix.get(path)
+    if not found:
+        say(f"texture {path}: not found")
+        return None
+    pkg, idx = found
+    props = ix.props(path) or {}
+    w, h = props.get("SizeX"), props.get("SizeY")
+    fmt = str(props.get("Format", ""))
+    if not isinstance(w, int) or not isinstance(h, int) or w < 4 or h < 4:
+        say(f"texture {path}: no size")
+        return None
+    if "DXT1" in fmt:
+        fourcc, per = b"DXT1", 8
+    elif "DXT5" in fmt:
+        fourcc, per = b"DXT5", 16
+    else:
+        say(f"texture {path}: unsupported format {fmt or '?'}")
+        return None
+    want = (w // 4) * (h // 4) * per
+    data = pkg.export_data(idx)
+    pixels = _find_mip(data, want, tfc_dir, props.get("TextureFileCacheName"), say, path)
+    if pixels is None:
+        return None
+    return dds_header(w, h, fourcc, want) + pixels
+
+
+def _find_mip(data: bytes, want: int, tfc_dir, tfc_name, say, label: str) -> bytes | None:
+    for p in range(0, len(data) - 16, 4):
+        flags, count, disk, offset = struct.unpack_from("<IiiI", data, p)
+        if count != want or disk <= 0 or disk > want:
+            continue
+        if flags & 0x1:  # stored in a texture file cache
+            if not tfc_dir or not tfc_name:
+                continue
+            path = _tfc_path(tfc_dir, str(tfc_name))
+            if path is None:
+                say(f"texture {label}: cache file {tfc_name} not found")
+                return None
+            with open(path, "rb") as f:
+                f.seek(offset)
+                raw = f.read(disk)
+        else:
+            raw = data[p + 16 : p + 16 + disk]
+        out = _unpack(raw, flags, want)
+        if out is not None:
+            return out
+    say(f"texture {label}: no top mip of {want} bytes found")
+    return None
+
+
+def _tfc_path(root, name: str):
+    from pathlib import Path
+
+    for f in Path(root).rglob("*.tfc"):
+        if f.stem.lower() == name.lower():
+            return f
+    return None
+
+
+def _unpack(raw: bytes, flags: int, want: int) -> bytes | None:
+    if len(raw) == want and not flags & 0x32:
+        return raw
+    if flags & 0x2:  # zlib
+        try:
+            out = zlib.decompress(raw)
+            return out if len(out) == want else None
+        except zlib.error:
+            return None
+    if flags & 0x10 or flags & 0x20 or raw[:4] == struct.pack("<I", upk.TAG):  # a compressed chunk, like the package's own
+        try:
+            out = upk._decompress_chunk(raw, 0)  # noqa: SLF001
+            return out[:want] if len(out) >= want else None
+        except Exception:  # noqa: BLE001
+            return None
+    return raw if len(raw) == want else None

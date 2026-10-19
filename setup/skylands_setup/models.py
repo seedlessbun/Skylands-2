@@ -238,6 +238,13 @@ class GunModels:
             parts = src.gun_parts(g, built)
             if not parts:
                 return None
+            for tkey, dds in src.take_textures().items():
+                self.add_texture(tkey, dds)
+            body = PALETTE.get(mfr, ((120, 120, 124), (60, 60, 64)))[0]
+            for part in parts:  # a part whose texture could not be read still gets the manufacturer's colour
+                if not part.texture or part.texture not in self.textures:
+                    part.texture = f"c_{body[0]:02x}{body[1]:02x}{body[2]:02x}"
+                part.normal_map = "flat_n"
             look = f"{method}|" + "|".join(f"{k}={v}" for k, v in sorted(built.get("parts", {}).items()))
         key = hashlib.sha1(look.encode()).hexdigest()[:10]
         if key in self.written:

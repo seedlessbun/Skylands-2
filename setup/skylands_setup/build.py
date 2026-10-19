@@ -180,7 +180,16 @@ def main(argv: list[str]) -> int:
                 ids = {}
         learned = harvest(sky / "Data" / generate.PLUGIN, ids)
         say(f"Form ids: {len(ids)} from before ({learned} read from the installed plugin).")
-        report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models)
+        sources = {}
+        if a.gun_models in ("native", "umodel", "auto"):
+            from .bl2 import gunparts
+            from .bl2.index import Index
+
+            ix = Index(bl2, work / "cache" / "bl2_index.json", say)
+            sources["native"] = gunparts.Bl2Source(ix, say)
+        report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources)
+        for src in sources.values():
+            say(src.summary())
         for line in report.get("model_log", []):
             say(line)
         registry.write_text(json.dumps(ids, indent=0), encoding="utf-8")
