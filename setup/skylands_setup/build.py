@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.4"
+VERSION = "0.10.5"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -220,6 +220,9 @@ def main(argv: list[str]) -> int:
 
             ix = Index(bl2, work / "cache" / "bl2_index.json", say)
             sources["native"] = gunparts.Bl2Source(ix, say, attach=a.gun_attach)
+            all_parts = sorted({p for g in data.get("weapons", {}).get("guns", []) for opts in g["slots"].values() for p in opts})
+            say(f"Finding the meshes of {len(all_parts)} gun parts (one pass over the package name tables) ...")
+            sources["native"].prepare(all_parts)
             if a.gun_models in ("umodel", "auto"):
                 from .bl2 import umodel
 
@@ -227,6 +230,8 @@ def main(argv: list[str]) -> int:
                 if command:
                     say(f"UModel: {command[0]}")
                     sources["umodel"] = umodel.UModelSource(ix, say, command, work, attach=a.gun_attach)
+                    sources["umodel"].name_files = sources["native"].name_files  # same lookup, one scan
+                    sources["umodel"].log = lambda msg, force=False, _s=sources["umodel"]: _s.say(f"  umodel: {msg}")
                 else:
                     say("UModel was not found and could not be downloaded. Download it from https://www.gildor.org/en/projects/umodel (the Windows zip), "
                         "unzip it and put umodel.exe (or umodel_64.exe) in the work folder next to this log, then run this installer again.")

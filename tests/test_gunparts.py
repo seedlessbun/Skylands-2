@@ -109,3 +109,21 @@ def test_mesh_found_by_name_when_the_part_has_no_reference(tmp_path):
     assert src.mesh_path("GD_Weap_Pistol.Body.Pistol_Body_B") == "Wpn_Pistol.Mesh.Pistol_Body"  # the mesh name is inside the part's
     assert src.mesh_path("GD_Weap_Pistol.Body.Pistol_Body") == "Wpn_Pistol.Mesh.Pistol_Body"  # exact leaf match
     assert src.mesh_path("GD_Weap_Pistol.Grip.Totally_Different") is None
+
+
+def test_gestalt_name_found_through_the_name_table(tmp_path):
+    cooked = tmp_path / "bl2" / "WillowGame" / "CookedPCConsole"
+    cooked.mkdir(parents=True)
+    # a part that only carries a plain mesh name (no '.', not an object reference), and a package that holds that mesh
+    b = fake_bl2.ObjBuilder()
+    b.obj("GD_Weap_Pistol.Barrel.Pistol_Barrel_Z", "WeaponPartDefinition", b.s("GestaltModeSkeletalMeshName", "Pistol_Barrel_Z_Mesh"))
+    (cooked / "GD_Parts.upk").write_bytes(b.build())
+    m = fake_bl2.ObjBuilder()
+    m.obj("Gestalt_Pistols.Meshes.Pistol_Barrel_Z_Mesh", "SkeletalMesh", b"")
+    (cooked / "Gestalt_Pistols.upk").write_bytes(m.build())
+    ix = Index(tmp_path / "bl2")
+    log = []
+    src = gunparts.Bl2Source(ix, log.append)
+    src.prepare(["GD_Weap_Pistol.Barrel.Pistol_Barrel_Z"])
+    assert src.name_files == {"pistol_barrel_z_mesh": [cooked / "Gestalt_Pistols.upk"]}
+    assert src.mesh_path("GD_Weap_Pistol.Barrel.Pistol_Barrel_Z") == "Gestalt_Pistols.Meshes.Pistol_Barrel_Z_Mesh", log

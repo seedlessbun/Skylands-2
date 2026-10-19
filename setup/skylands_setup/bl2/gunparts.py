@@ -43,6 +43,8 @@ class Bl2Source:
         self.stats = {"parts": 0, "meshes": 0, "no_mesh": 0, "no_geometry": 0, "textured": 0}
         self.logged = 0
         self._meshes_by_name: dict[str, list[str]] | None = None
+        self.name_files: dict[str, list] | None = None  # lower-case mesh name -> packages whose name table holds it
+        self.by_gestalt: dict[str, str | None] = {}
         self.deadline = time.time() + 30 * 60  # then the remaining guns fall back to the next method
 
     def log(self, msg: str, force: bool = False) -> None:
@@ -68,7 +70,69 @@ class Bl2Source:
             found = self.ix.get(c)
             if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
                 return c
-        return self._mesh_by_name(part)
+        return self._by_gestalt(part) or self._mesh_by_name(part)
+
+    # --- Borderlands 2 "gestalt" parts: the mesh is named by a plain name, not referenced as an object
+    def gestalt_names(self, part: str) -> list[str]:
+        props = self.ix.props(part) or {}
+        out: list[str] = []
+        v = props.get("GestaltModeSkeletalMeshName")
+        found: list[str] = []
+        _strings(v, found)
+        for f in found:
+            leaf = re.split(r"[.:]", f.strip())[-1].strip().lower()
+            if leaf and leaf not in out and leaf != "none":
+                out.append(leaf)
+        return out
+
+    def prepare(self, parts: list[str]) -> None:
+        """One pass over every package's name table to learn which packages hold the meshes the parts name."""
+        t0 = time.time()
+        wanted: set[str] = set()
+        for part in parts:
+            wanted.update(self.gestalt_names(part))
+        self.name_files = {}
+        if not wanted:
+            self.log(f"none of the {len(parts)} parts names a mesh (GestaltModeSkeletalMeshName)", force=True)
+            return
+        n = 0
+        for f in self.ix.files:
+            try:
+                names = upk.read_name_set(f)
+            except Exception:  # noqa: BLE001
+                continue
+            for hit in wanted & names:
+                self.name_files.setdefault(hit, []).append(f)
+            n += 1
+            if n % 400 == 0:
+                self.log(f"scanned {n}/{len(self.ix.files)} package name tables ({time.time() - t0:.0f} s)", force=True)
+        self.log(f"{len(wanted)} mesh names wanted; {sum(1 for w in wanted if w in self.name_files)} found in a package name table "
+                 f"({time.time() - t0:.0f} s); sample {sorted(wanted)[:5]}", force=True)
+
+    def _by_gestalt(self, part: str) -> str | None:
+        if part in self.by_gestalt:
+            return self.by_gestalt[part]
+        result = None
+        if self.name_files is not None:
+            for name in self.gestalt_names(part):
+                result = self._find_export(name)
+                if result:
+                    break
+        self.by_gestalt[part] = result
+        return result
+
+    def _find_export(self, name: str) -> str | None:
+        files = sorted(self.name_files.get(name, []), key=lambda f: f.stat().st_size)
+        for f in files[:8]:
+            try:
+                pkg = self.ix.package(f)
+                pkg._indexes()  # noqa: SLF001
+            except Exception:  # noqa: BLE001
+                continue
+            for i in pkg._by_name.get(name, ()):  # noqa: SLF001
+                if pkg.obj_class(i) in gunmesh.MESH_CLASSES:
+                    return pkg.path_of(i)
+        return None
 
     def _mesh_by_name_build(self) -> None:
         if self._meshes_by_name is None:

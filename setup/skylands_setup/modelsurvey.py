@@ -35,6 +35,11 @@ def inspect_part(ix: Index, src: gunparts.Bl2Source, part: str) -> dict:
     rep: dict = {"part": part}
     props = ix.props(part) or {}
     rep["property_keys"] = sorted(props)[:60]
+    for key in ("GestaltModeSkeletalMeshName", "AdditionalGestaltModeSkeletalMeshNames", "bIsGestaltMode", "PartType"):
+        if key in props:
+            rep.setdefault("raw", {})[key] = repr(props[key])[:300]
+    rep["gestalt_names"] = src.gestalt_names(part)
+    rep["name_table_packages"] = {n: [f.name for f in (src.name_files or {}).get(n, [])][:6] for n in rep["gestalt_names"]}
     cands: list[str] = []
     for v in props.values():
         gunparts._strings(v, cands)  # noqa: SLF001
@@ -144,7 +149,10 @@ def main(argv: list[str]) -> int:
                     if part not in by_slot.setdefault(slot, []):
                         by_slot[slot].append(part)
         report["slots"] = {k: len(v) for k, v in by_slot.items()}
-        src = gunparts.Bl2Source(ix, lambda m: None)
+        src = gunparts.Bl2Source(ix, say)
+        sample = [part for slot, parts in sorted(by_slot.items()) for part in parts[:PER_SLOT]]
+        say("Scanning the package name tables for the meshes the parts name ...")
+        src.prepare(sample)
         report["parts"] = []
         for slot, parts in sorted(by_slot.items()):
             for part in parts[:PER_SLOT]:
