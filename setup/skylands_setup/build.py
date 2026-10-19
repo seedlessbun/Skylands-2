@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.14"
+VERSION = "0.10.15"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -186,6 +186,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--done", required=True, help="marker file written when everything is installed")
     ap.add_argument("--gun-models", default="off", choices=["off", "proxy", "native", "umodel", "auto"],
                     help="where the guns get their own meshes from (default: off, every gun looks like the crossbow)")
+    ap.add_argument("--gun-pitch", type=float, default=0.0, help="raise the barrel this many more degrees (negative lowers it)")
     ap.add_argument("--gun-spin", type=float, default=0.0, help="turn every gun model this many degrees about its up axis (fixes a gun facing the wrong way)")
     ap.add_argument("--gun-scale", type=float, default=1.0, help="make every gun model this many times bigger or smaller")
     ap.add_argument("--gun-attach", default="auto", choices=["auto", "sockets", "none"],
@@ -260,7 +261,7 @@ def main(argv: list[str]) -> int:
                     say("UModel was not found and could not be downloaded. Download it from https://www.gildor.org/en/projects/umodel (the Windows zip), "
                         "unzip it and put umodel.exe (or umodel_64.exe) in the work folder next to this log, then run this installer again.")
         report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources,
-                                   model_spin=a.gun_spin, model_scale=a.gun_scale)
+                                   model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_scale=a.gun_scale)
         for src in sources.values():
             say(src.summary())
         for line in report.get("model_log", []):

@@ -298,19 +298,11 @@ class Bl2Source:
         self.stats["meshes"] += 1
         self.log(raw.note)
         sockets = self._sockets(pkg, path)
-        t2 = time.time()
-        mats = gunmesh.material_refs(pkg, data, props_end)
-        diffuse = None
-        for mat in mats:
-            d, _n = gunmesh.pick_textures(gunmesh.texture_parameters(self.ix, mat))
-            if d:
-                diffuse = d
-                break
-        key = None  # the gun's Material part supplies the texture (gun_parts); a texture per part cost minutes and is not used
-        self.prof["material_texture_s"] = self.prof.get("material_texture_s", 0) + time.time() - t2
+        mats = gunmesh.material_refs(pkg, data, props_end)  # looked up only if the body needs its own texture (see gun_parts)
+        key = None  # the gun's Material part supplies the texture; reading every part's material cost minutes and went unused
         raw.mesh.texture = key
         raw.mesh.normal_map = "flat_n"
-        return {"mesh": raw.mesh, "sockets": sockets, "path": path, "texture": key, "diffuse": diffuse}
+        return {"mesh": raw.mesh, "sockets": sockets, "path": path, "texture": key, "mats": mats}
 
     def _sockets(self, pkg: upk.Package, mesh_path: str) -> dict[str, tuple[float, float, float]]:
         out: dict[str, tuple[float, float, float]] = {}
@@ -369,8 +361,12 @@ class Bl2Source:
         matrix = orientation(placed)
         parts = [M.transformed(m, matrix, 1.0) for m in placed.values()]
         gun_texture = self._gun_material_texture(picked.get("Material"))
-        if not gun_texture and slots["Body"].get("diffuse"):  # no Material part: the body's own material stands in
-            gun_texture = self._texture(slots["Body"]["diffuse"])
+        if not gun_texture:  # no Material part: the body's own material stands in
+            for mat in slots["Body"].get("mats", [])[:3]:
+                d, _n = gunmesh.pick_textures(gunmesh.texture_parameters(self.ix, mat))
+                if d:
+                    gun_texture = self._texture(d)
+                    break
         if gun_texture:  # one material (a texture shared by every part, each part's UVs lie on it) covers the whole gun
             for m in parts:
                 m.texture = gun_texture

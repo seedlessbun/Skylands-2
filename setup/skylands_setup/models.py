@@ -30,7 +30,9 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
 # length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
 # as a fraction of the crossbow came out far too big next to the player
-LENGTH = {"pistol": 12.0, "smg": 18.0, "assault_rifle": 25.0, "shotgun": 25.0, "sniper": 32.0, "launcher": 27.0}
+LENGTH = {"pistol": 8.5, "smg": 12.5, "assault_rifle": 17.5, "shotgun": 17.5, "sniper": 22.0, "launcher": 19.0}
+# the first in-hand test showed a gun aimed down and to the right: turn it up and to the left (degrees, about the grip)
+HOLD_PITCH, HOLD_YAW = 22.0, 18.0
 
 PALETTE = {  # body colour, trim colour per manufacturer
     "Bandit": ((120, 78, 52), (70, 56, 48)),
@@ -221,10 +223,11 @@ class GunModels:
     """Builds and writes gun meshes into out_data (Meshes/..., Textures/...), one NIF per distinct look."""
 
     def __init__(self, method: str, out_data: Path, vanilla_nif: bytes | None, say=print, extra_sources=None,
-                 spin: float = 0.0, scale: float = 1.0) -> None:
+                 spin: float = 0.0, scale: float = 1.0, pitch: float = 0.0) -> None:
         if method not in METHODS:
             raise ValueError(f"unknown gun model method {method!r}")
         self.method = method
+        self.pitch = pitch  # extra nose-up angle in degrees on top of the built-in hold correction
         self.spin, self.scale = spin, scale  # extra turn about the up axis (degrees) and size multiplier, for correcting the fit by hand
         self.out = Path(out_data)
         self.say = say
@@ -326,8 +329,11 @@ class GunModels:
             placed = [M.transformed(p, None, 1.0, (-cx, -cy, -cz)) for p in placed]
         if method != "proxy":
             placed = [M.ensure_outward(p) for p in placed]
-        if self.spin:
-            a = math.radians(self.spin)
+        pitch = math.radians(HOLD_PITCH + self.pitch)
+        up_turn = ((1.0, 0.0, 0.0), (0.0, math.cos(pitch), -math.sin(pitch)), (0.0, math.sin(pitch), math.cos(pitch)))  # barrel +y towards +z
+        placed = [M.transformed(p, up_turn) for p in placed]
+        if self.spin or HOLD_YAW:
+            a = math.radians(self.spin + HOLD_YAW)
             turn = ((math.cos(a), -math.sin(a), 0.0), (math.sin(a), math.cos(a), 0.0), (0.0, 0.0, 1.0))
             placed = [M.transformed(p, turn) for p in placed]
         placed = [fit_mesh(p, self.fit, 1.0) for p in placed]
