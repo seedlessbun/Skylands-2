@@ -118,10 +118,9 @@ WATCHER = {
   Owner.NoteEntrance()
   Ticks += 1
   If Ticks % 4 == 0
-    Self.Hand()
     Self.Scan()
     Owner.Sweep()
-    Owner.LogAround(4, False)
+    Self.Rare()
   EndIf""",
     "flag": """  Float delay = Utility.RandomFloat(1.5, 4.0)""",
     "maintain": """  If !Checked

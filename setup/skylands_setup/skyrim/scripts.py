@@ -994,7 +994,7 @@ def watcher() -> Script:
             ("return", None),
             ("label", "other"),
             call("Maintain"),
-            ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 5.0), ("float", 8.0)),
+            ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 10.0), ("float", 16.0)),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "delay")),
             ("return", None),
         ],
@@ -1070,6 +1070,24 @@ def watcher() -> Script:
             ("return", None),
         ],
     )
+    rare = Function(
+        "Rare",
+        locals=[("::nonevar", "None"), ("::temp0", "Int"), ("::temp1", "Bool"), ("n", "Int")],
+        code=[
+            # the costlier chores: handing the quest its forms every 20 s, a quiet search for people every 4 s
+            ("imod", ("id", "::temp0"), ("id", "Ticks"), ("int", 40)),
+            ("cmp_eq", ("id", "::temp1"), ("id", "::temp0"), ("int", 4)),
+            ("jmpf", ("id", "::temp1"), ("lbl", "search")),
+            call("Hand"),
+            ("label", "search"),
+            ("imod", ("id", "::temp0"), ("id", "Ticks"), ("int", 8)),
+            ("cmp_eq", ("id", "::temp1"), ("id", "::temp0"), ("int", 0)),
+            ("jmpf", ("id", "::temp1"), ("lbl", "end")),
+            ("callmethod", ("id", "LogAround"), ("id", "::Owner_var"), ("id", "n"), ("int", 4), ("bool", False)),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
     player_tick = Function(
         "PlayerTick",
         locals=[("::nonevar", "None"), ("::temp0", "Int"), ("::temp1", "Bool")],
@@ -1079,10 +1097,9 @@ def watcher() -> Script:
             ("imod", ("id", "::temp0"), ("id", "Ticks"), ("int", 4)),
             ("cmp_eq", ("id", "::temp1"), ("id", "::temp0"), ("int", 0)),
             ("jmpf", ("id", "::temp1"), ("lbl", "end")),
-            call("Hand"),
             call("Scan"),
             ("callmethod", ("id", "Sweep"), ("id", "::Owner_var"), NONE),
-            ("callmethod", ("id", "LogAround"), ("id", "::Owner_var"), ("id", "::temp0"), ("int", 4), ("bool", False)),
+            call("Rare"),
             ("label", "end"),
             ("return", None),
         ],
@@ -1221,7 +1238,7 @@ def watcher() -> Script:
             ("callmethod", ("id", "GetPositionZ"), ("id", "Me"), ("id", "z")),
             ("assign", ("id", "tries"), ("int", 0)),
             ("label", "loop"),
-            ("cmp_lt", ("id", "::temp0"), ("id", "tries"), ("int", 6)),
+            ("cmp_lt", ("id", "::temp0"), ("id", "tries"), ("int", 3)),
             ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             ("callstatic", ("id", "Game"), ("id", "FindRandomReferenceOfAnyTypeInList"), ("id", "r"),
              ("id", "::GunList_var"), ("id", "x"), ("id", "y"), ("id", "z"), ("id", "::ScanRadius_var")),
@@ -1447,7 +1464,7 @@ def watcher() -> Script:
                          ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
-        functions=[on_start, on_update, wake, give, diag, hand, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+        functions=[on_start, on_update, wake, give, diag, hand, rare, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 
