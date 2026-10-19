@@ -45,6 +45,7 @@ class Bl2Source:
         self.stats = {"parts": 0, "meshes": 0, "no_mesh": 0, "no_geometry": 0, "textured": 0}
         self.logged = 0
         self._beat = time.time()
+        self.index_ready = False
         self.part_limit = float("inf")
         self.located: dict[str, Path] = {}  # object path -> the package it was found in
         self.mesh_index: dict[str, tuple[Path, str]] = {}  # wanted mesh name -> (package, object path)
@@ -72,6 +73,8 @@ class Bl2Source:
         for name in self.gestalt_names(part):  # the located real mesh first: no package hunting
             if name in self.mesh_index:
                 return self._by_gestalt(part)
+        if self.index_ready:  # every package that names a wanted mesh has been opened: nothing more to find by path
+            return self._stand_in(part)
         seen = []
         for c in cands:
             if "." in c and " " not in c and c not in seen and len(c) < 200:
@@ -87,7 +90,7 @@ class Bl2Source:
             if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
                 return c
         t1 = time.time()
-        r = self._by_gestalt(part) or self._mesh_by_name(part)
+        r = self._by_gestalt(part) or self._stand_in(part)
         self.prof["lookup_s"] = self.prof.get("lookup_s", 0) + time.time() - t1
         return r
 
@@ -141,6 +144,7 @@ class Bl2Source:
         self.log(f"{len(wanted)} mesh names wanted; {sum(1 for w in wanted if w in self.name_files)} found in a package name table "
                  f"({time.time() - t0:.0f} s); sample {sorted(wanted)[:5]}", force=True)
         self._index_meshes(wanted)
+        self.index_ready = True
 
     def _index_meshes(self, wanted: set[str]) -> None:
         """Each level package holds only the weapon meshes that level uses, so one gun's parts are spread over many packages.
@@ -203,7 +207,7 @@ class Bl2Source:
                 self.located[self.mesh_index[name][1]] = self.mesh_index[name][0]
                 result = self.mesh_index[name][1]
                 break
-        if result is None and self.name_files is not None:
+        if result is None and self.name_files is not None and not self.index_ready:
             for name in self.gestalt_names(part):
                 result = self._find_export(name)
                 if result:
@@ -232,6 +236,30 @@ class Bl2Source:
                     if self.ix.get(path):
                         return path
         return None
+
+    SLOTS_WITH_STAND_INS = ("body", "barrel", "grip", "stock")
+
+    def _stand_in(self, part: str) -> str | None:
+        """Most manufacturers' meshes are not in the game's files at all (a level package holds only the meshes it uses). A part
+        whose own mesh is missing borrows the closest real one of the same gun type and slot (same manufacturer first), so every
+        gun still gets a real Borderlands 2 body instead of the crossbow."""
+        segs = part.split(".")
+        if len(segs) < 3 or segs[1].lower() not in self.SLOTS_WITH_STAND_INS or not segs[0].lower().startswith("gd_weap"):
+            return None
+        kind, slot = segs[0][3:].lower().rstrip("s"), segs[1].lower()
+        pool = []
+        for name, (f, path) in sorted(self.mesh_index.items()):
+            ps = path.split(".")
+            if len(ps) >= 3 and ps[0].lower().rstrip("s") == kind and ps[1].lower() == slot:
+                pool.append((name, f, path))
+        if not pool:
+            return None
+        token = re.split(r"[_.]", segs[-1].lower())
+        mfr = next((t for t in reversed(token) if t in ("bandit", "dahl", "hyperion", "jakobs", "maliwan", "tediore", "torgue", "vladof")), "")
+        pick = next((p for p in pool if mfr and mfr in p[0]), pool[0])
+        self.located[pick[2]] = pick[1]
+        self.stats["stand_ins"] = self.stats.get("stand_ins", 0) + 1
+        return pick[2]
 
     def _mesh_by_name_build(self) -> None:
         if self._meshes_by_name is None:
@@ -498,7 +526,7 @@ class Bl2Source:
         extra = f"; {len(errs)} packages could not be opened, e.g. {dict(list(errs.items())[:3])}" if errs else ""
         return (f"native: {s['parts']} parts looked at, {s['meshes']} meshes read, {s['no_mesh']} without a mesh object, "
                 f"{s['no_geometry']} whose geometry could not be found, {s['textured']} textures decoded, "
-                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh{extra}")
+                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh, {s.get('stand_ins', 0)} parts using another manufacturer's mesh{extra}")
 
 
 def orientation(placed: dict[str, M.Mesh]) -> tuple[M.Vec, M.Vec, M.Vec]:

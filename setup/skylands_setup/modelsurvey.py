@@ -181,6 +181,31 @@ def part_name_dump(ix: Index, src: gunparts.Bl2Source, by_slot: dict[str, list[s
             "mesh_class_counts": {n: sum(1 for h in hs if h.get("class") in ("SkeletalMesh", "StaticMesh")) for n, hs in found.items() if n != "_stopped"}}
 
 
+def weapon_mesh_inventory(ix: Index, budget: float = 420.0, biggest: int = 150 * 1024 * 1024) -> dict:
+    """Every object directly under a Weap_<gun type>.<slot> group, in every package that has one: shows which manufacturers'
+    meshes exist at all and what they are called."""
+    t0 = time.time()
+    wanted = ("weap_pistol", "weap_smg", "weap_assaultrifles", "weap_shotgun", "weap_sniperrifles", "weap_launchers")
+    files = sorted({f for k, v in ix.groups.items() if k.startswith(wanted) for f in (ix.files[i] for i, _n in v)}, key=lambda f: f.stat().st_size)
+    out: dict[str, list] = {}
+    skipped, errors = [], {}
+    for f in files:
+        if time.time() - t0 > budget:
+            skipped.append(f"{f.stem}: out of time")
+            continue
+        if f.stat().st_size > biggest:
+            skipped.append(f"{f.stem}: {f.stat().st_size // 1048576} MB")
+            continue
+        try:
+            pkg = ix.package(f)
+            names = sorted(f"{pkg.path_of(i)} [{pkg.obj_class(i)}]" for i in range(1, len(pkg.exports) + 1)
+                           if pkg.path_of(i).lower().startswith(wanted) and pkg.obj_class(i) in ("SkeletalMesh", "StaticMesh"))
+            out[f.stem] = names
+        except Exception as e:  # noqa: BLE001
+            errors[f.stem] = f"{type(e).__name__}: {str(e)[:80]}"
+    return {"packages": len(files), "seconds": round(time.time() - t0), "skipped": skipped, "errors": errors, "meshes_by_package": out}
+
+
 def main(argv: list[str]) -> int:
     import argparse
 
@@ -190,7 +215,7 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out = Path(a.out)
-    report: dict = {"tool": "skylands modelsurvey 2", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    report: dict = {"tool": "skylands modelsurvey 3", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
 
     def say(msg: str) -> None:
         print(msg, flush=True)
@@ -244,6 +269,12 @@ def main(argv: list[str]) -> int:
             report["part_name_dump"] = part_name_dump(ix, src, by_slot)
         except Exception:  # noqa: BLE001
             report["part_name_dump"] = traceback.format_exc()[-800:]
+        save()
+        say("Listing every weapon mesh that exists, package by package ...")
+        try:
+            report["weapon_mesh_inventory"] = weapon_mesh_inventory(ix)
+        except Exception:  # noqa: BLE001
+            report["weapon_mesh_inventory"] = traceback.format_exc()[-800:]
         save()
         say("Looking for character meshes ...")
         try:

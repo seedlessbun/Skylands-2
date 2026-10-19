@@ -103,20 +103,18 @@ def test_attach_modes(tmp_path):
     assert barrel_y("auto") > 40  # centred on its origin, so the socket applies
 
 
-def test_mesh_found_by_name_when_the_part_has_no_reference(tmp_path):
+def test_missing_mesh_borrows_another_manufacturers_of_the_same_slot(tmp_path):
     build_install(tmp_path / "bl2")
-    # a part with no mesh property at all, named like a mesh in a weapon asset package
-    cooked = tmp_path / "bl2" / "WillowGame" / "CookedPCConsole"
-    b = fake_bl2.ObjBuilder()
-    b.obj("GD_Weap_Pistol.Body.Pistol_Body_B", "WeaponPartDefinition", b"")
-    (cooked / "GD_Parts_Fake.upk").write_bytes(b.build())
-    # rename the mesh package so it looks like weapon assets, and add a mesh with the part's name
-    (cooked / "Wpn_Fake.upk").rename(cooked / "Wpn_Pistol_Assets.upk")
     ix = Index(tmp_path / "bl2")
     src = gunparts.Bl2Source(ix, lambda m: None)
-    assert src.mesh_path("GD_Weap_Pistol.Body.Pistol_Body_B") == "Wpn_Pistol.Mesh.Pistol_Body"  # the mesh name is inside the part's
-    assert src.mesh_path("GD_Weap_Pistol.Body.Pistol_Body") == "Wpn_Pistol.Mesh.Pistol_Body"  # exact leaf match
-    assert src.mesh_path("GD_Weap_Pistol.Grip.Totally_Different") is None
+    f = tmp_path / "bl2" / "WillowGame" / "CookedPCConsole" / "Wpn_Fake.upk"
+    src.mesh_index = {"pistol_body_hyperion": (f, "Weap_Pistol.Body.Pistol_Body_Hyperion"),
+                      "pistol_body_jakobs": (f, "Weap_Pistol.Body.Pistol_Body_Jakobs"),
+                      "pistol_grip_jakobs": (f, "Weap_Pistol.Grip.Pistol_Grip_Jakobs")}
+    assert src._stand_in("GD_Weap_Pistol.Body.Pistol_Body_Jakobs_2") == "Weap_Pistol.Body.Pistol_Body_Jakobs"  # same manufacturer first
+    assert src._stand_in("GD_Weap_Pistol.Body.Pistol_Body_Dahl") == "Weap_Pistol.Body.Pistol_Body_Hyperion"
+    assert src._stand_in("GD_Weap_Pistol.Sight.Pistol_Sight_None") is None  # only structural parts are borrowed
+    assert src._stand_in("GD_Weap_SMG.Body.SMG_Body_Dahl") is None  # never from another gun type
 
 
 def test_gestalt_name_found_through_the_name_table(tmp_path):
