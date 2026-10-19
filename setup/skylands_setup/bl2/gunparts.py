@@ -45,7 +45,7 @@ class Bl2Source:
         self._meshes_by_name: dict[str, list[str]] | None = None
         self.name_files: dict[str, list] | None = None  # lower-case mesh name -> packages whose name table holds it
         self.by_gestalt: dict[str, str | None] = {}
-        self.deadline = time.time() + 30 * 60  # then the remaining guns fall back to the next method
+        self.deadline = time.time() + 10 * 60  # then the remaining guns fall back to the next method
 
     def log(self, msg: str, force: bool = False) -> None:
         if force or self.logged < 40:
@@ -159,7 +159,12 @@ class Bl2Source:
             for f in self.ix.files:
                 if not WEAPON_PACKAGES.search(f.stem) or f.stem.lower().startswith(("gd_", "d_")) or n >= 60:
                     continue
+                if time.time() - t0 > 25:  # a guess at best: never hold the install up for it
+                    self.log("name fallback: stopped after 25 s", force=True)
+                    break
                 n += 1
+                if n % 10 == 1:
+                    self.log(f"name fallback: indexing weapon package {n} ({f.stem}), {time.time() - t0:.0f} s so far", force=True)
                 try:
                     pkg = self.ix.package(f)
                 except Exception:  # noqa: BLE001
