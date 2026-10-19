@@ -37,6 +37,7 @@ class Index:
         self._props: dict[str, dict | None] = {}
         total = len(self.files)
         key = hashlib.sha1(json.dumps([INDEX_VERSION, [(str(f.relative_to(self.root)), f.stat().st_size) for f in self.files]]).encode()).hexdigest()
+        self.cache_path, self.key = cache, key
         if cache is not None and self._load(cache, key):
             self.say(f"Using the saved index of {total} Borderlands 2 packages.")
             return

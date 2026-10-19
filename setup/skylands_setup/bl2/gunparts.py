@@ -8,8 +8,10 @@ Everything is best effort and logged; a part that cannot be read is skipped, a g
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import time
+from pathlib import Path
 
 from .. import meshes as M
 from . import gunmesh, upk
@@ -44,6 +46,8 @@ class Bl2Source:
         self.logged = 0
         self._beat = time.time()
         self.part_limit = float("inf")
+        self.located: dict[str, Path] = {}  # object path -> the package it was found in
+        self.mesh_index: dict[str, tuple[Path, str]] = {}  # wanted mesh name -> (package, object path)
         self.prof: dict[str, float] = {}
         self._meshes_by_name: dict[str, list[str]] | None = None
         self.name_files: dict[str, list] | None = None  # lower-case mesh name -> packages whose name table holds it
@@ -65,11 +69,14 @@ class Bl2Source:
         for key, v in props.items():
             if key not in MESH_KEYS:
                 _strings(v, cands)
+        for name in self.gestalt_names(part):  # the located real mesh first: no package hunting
+            if name in self.mesh_index:
+                return self._by_gestalt(part)
         seen = []
         for c in cands:
             if "." in c and " " not in c and c not in seen and len(c) < 200:
                 seen.append(c)
-        for c in seen[:14]:
+        for c in seen[:6]:
             if time.time() > self.part_limit:
                 return None
             found = self.ix.get(c)
@@ -133,12 +140,70 @@ class Bl2Source:
                 self.log(f"scanned {n}/{len(self.ix.files)} package name tables ({time.time() - t0:.0f} s)", force=True)
         self.log(f"{len(wanted)} mesh names wanted; {sum(1 for w in wanted if w in self.name_files)} found in a package name table "
                  f"({time.time() - t0:.0f} s); sample {sorted(wanted)[:5]}", force=True)
+        self._index_meshes(wanted)
+
+    def _index_meshes(self, wanted: set[str]) -> None:
+        """Each level package holds only the weapon meshes that level uses, so one gun's parts are spread over many packages.
+        Open the packages whose name tables mention a wanted mesh (smallest first) once each and note where every wanted mesh
+        really is. The result is saved, so the next install skips this."""
+        cache = None
+        if getattr(self.ix, "cache_path", None):
+            cache = Path(self.ix.cache_path).with_name("gun_mesh_index.json")
+            try:
+                saved = json.loads(cache.read_text(encoding="utf-8"))
+                if saved.get("key") == self.ix.key and saved.get("wanted", 0) >= len(wanted):
+                    for name, (rel, path) in saved["found"].items():
+                        f = self.ix.root / rel
+                        if f.is_file():
+                            self.mesh_index[name] = (f, path)
+                    self.log(f"mesh locations: {len(self.mesh_index)} of {len(wanted)} from the saved list", force=True)
+                    return
+            except (OSError, ValueError, KeyError):
+                pass
+        t0 = time.time()
+        files: dict[Path, int] = {}
+        for n in wanted:
+            for f in (self.name_files or {}).get(n, []):
+                files[f] = files.get(f, 0) + 1
+        order = sorted(files, key=lambda f: (f.stat().st_size, f.name))
+        self.log(f"looking for the real meshes in {len(order)} packages", force=True)
+        left = set(wanted)
+        for k, f in enumerate(order):
+            if not left or time.time() - t0 > 480:
+                break
+            if k % 10 == 0:
+                self.log(f"opened {k}/{len(order)} packages, {len(self.mesh_index)} of {len(wanted)} meshes located ({time.time() - t0:.0f} s)", force=True)
+            try:
+                pkg = self.ix.package(f)
+                pkg._indexes()  # noqa: SLF001
+            except Exception:  # noqa: BLE001
+                continue
+            for name in list(left):
+                for i in pkg._by_name.get(name, ()):  # noqa: SLF001
+                    if pkg.obj_class(i) in gunmesh.MESH_CLASSES:
+                        self.mesh_index[name] = (f, pkg.path_of(i))
+                        left.discard(name)
+                        break
+        self.log(f"{len(self.mesh_index)} of {len(wanted)} meshes located in {time.time() - t0:.0f} s; "
+                 f"never found: {sorted(left)[:12]}{'...' if len(left) > 12 else ''}", force=True)
+        if cache is not None and (not left or time.time() - t0 <= 480):
+            try:
+                cache.write_text(json.dumps({"key": self.ix.key, "wanted": len(wanted),
+                                             "found": {n: [str(f.relative_to(self.ix.root)), p] for n, (f, p) in self.mesh_index.items()}}),
+                                 encoding="utf-8")
+            except OSError:
+                pass
 
     def _by_gestalt(self, part: str) -> str | None:
         if part in self.by_gestalt:
             return self.by_gestalt[part]
         result = None
-        if self.name_files is not None:
+        for name in self.gestalt_names(part):
+            if name in self.mesh_index:
+                self.located[self.mesh_index[name][1]] = self.mesh_index[name][0]
+                result = self.mesh_index[name][1]
+                break
+        if result is None and self.name_files is not None:
             for name in self.gestalt_names(part):
                 result = self._find_export(name)
                 if result:
@@ -278,7 +343,11 @@ class Bl2Source:
                 self.log(f"  where the named mesh is: {self.diagnose(part)}", force=True)
             return None
         t1 = time.time()
-        pkg, idx = self.ix.get(path)
+        if path in self.located:
+            pkg = self.ix.package(self.located[path])
+            idx = pkg.find(path)
+        else:
+            pkg, idx = self.ix.get(path)
         data = pkg.export_data(idx)
         self.prof["open_export_s"] = self.prof.get("open_export_s", 0) + time.time() - t1
         props_end = None
