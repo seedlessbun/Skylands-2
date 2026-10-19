@@ -356,7 +356,7 @@ def _sanity(parts: list[M.Mesh], lo: M.Vec, hi: M.Vec) -> None:
     ext = sorted(hi[i] - lo[i] for i in range(3))
     if tris < 30:
         raise ValueError(f"only {tris} triangles")
-    if ext[0] <= 1e-6 or ext[2] / ext[0] > 400 or ext[2] / max(ext[1], 1e-6) < 1.2:
+    if ext[0] <= 1e-6 or ext[2] / ext[0] > 400 or ext[2] / ext[0] < 1.8:  # a pistol is nearly as tall as it is long, but thin
         raise ValueError(f"extents {ext[0]:.2f} x {ext[1]:.2f} x {ext[2]:.2f} do not look like a gun")
 
 

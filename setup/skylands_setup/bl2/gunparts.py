@@ -43,6 +43,8 @@ class Bl2Source:
         self.stats = {"parts": 0, "meshes": 0, "no_mesh": 0, "no_geometry": 0, "textured": 0}
         self.logged = 0
         self._beat = time.time()
+        self.part_limit = float("inf")
+        self.prof: dict[str, float] = {}
         self._meshes_by_name: dict[str, list[str]] | None = None
         self.name_files: dict[str, list] | None = None  # lower-case mesh name -> packages whose name table holds it
         self.by_gestalt: dict[str, str | None] = {}
@@ -68,6 +70,8 @@ class Bl2Source:
             if "." in c and " " not in c and c not in seen and len(c) < 200:
                 seen.append(c)
         for c in seen[:14]:
+            if time.time() > self.part_limit:
+                return None
             found = self.ix.get(c)
             if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
                 return c
@@ -75,7 +79,10 @@ class Bl2Source:
             found = self.ix.get(c)
             if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
                 return c
-        return self._by_gestalt(part) or self._mesh_by_name(part)
+        t1 = time.time()
+        r = self._by_gestalt(part) or self._mesh_by_name(part)
+        self.prof["lookup_s"] = self.prof.get("lookup_s", 0) + time.time() - t1
+        return r
 
     def derived_paths(self, part: str) -> list[str]:
         """GD_Weap_Pistol.Barrel.Pistol_Barrel_Bandit -> Weap_Pistol.Barrel.<gestalt name or the part's own name>: this is where
@@ -141,7 +148,11 @@ class Bl2Source:
 
     def _find_export(self, name: str) -> str | None:
         files = sorted(self.name_files.get(name, []), key=lambda f: (0 if "startup" in f.stem.lower() else 1, f.stat().st_size))
-        for f in files[:8]:
+        t0 = time.time()
+        for f in files[:30]:
+            if time.time() - t0 > 15 or time.time() > self.part_limit:  # some packages are huge: never let one part eat the budget
+                self.prof["gave_up"] = self.prof.get("gave_up", 0) + 1
+                break
             try:
                 pkg = self.ix.package(f)
                 pkg._indexes()  # noqa: SLF001
@@ -218,18 +229,20 @@ class Bl2Source:
         self.group_hint()
         result = None
         t0 = time.time()
+        self.part_limit = t0 + 25
         try:
             result = self._read_part(part)
         except Exception as e:  # noqa: BLE001
             self.log(f"{part}: {type(e).__name__}: {e}")
         took = time.time() - t0
+        self.prof["parts_s"] = self.prof.get("parts_s", 0) + took
         if took > 5:
             self.log(f"{part}: took {took:.0f} s", force=True)
         if time.time() - self._beat > 10:  # the log goes quiet after the first lines; this shows the install is still working
             self._beat = time.time()
             self.log(f"still working: {self.stats['parts']} parts looked at, {self.stats['meshes']} meshes read, "
                      f"{self.stats['textured']} textures, {self.stats['no_mesh']} without a mesh, "
-                     f"{int(self.deadline - time.time())} s of budget left", force=True)
+                     f"{int(self.deadline - time.time())} s of budget left; seconds spent {({k: int(v) for k, v in self.prof.items()})}", force=True)
         self.cache[part] = result
         return result
 
@@ -239,8 +252,10 @@ class Bl2Source:
             self.stats["no_mesh"] += 1
             self.log(f"{part}: no mesh object found; " + self.describe(part), force=self.stats["no_mesh"] <= 8)
             return None
+        t1 = time.time()
         pkg, idx = self.ix.get(path)
         data = pkg.export_data(idx)
+        self.prof["open_export_s"] = self.prof.get("open_export_s", 0) + time.time() - t1
         props_end = None
         for start in (4, 0, 8):
             try:
@@ -258,6 +273,7 @@ class Bl2Source:
         self.stats["meshes"] += 1
         self.log(raw.note)
         sockets = self._sockets(pkg, path)
+        t2 = time.time()
         mats = gunmesh.material_refs(pkg, data, props_end)
         diffuse = None
         for mat in mats:
@@ -265,7 +281,8 @@ class Bl2Source:
             if d:
                 diffuse = d
                 break
-        key = self._texture(diffuse) if diffuse else None
+        key = self._texture(diffuse) if diffuse and time.time() < self.part_limit else None
+        self.prof["material_texture_s"] = self.prof.get("material_texture_s", 0) + time.time() - t2
         raw.mesh.texture = key
         raw.mesh.normal_map = "flat_n"
         return {"mesh": raw.mesh, "sockets": sockets, "path": path, "texture": key}
