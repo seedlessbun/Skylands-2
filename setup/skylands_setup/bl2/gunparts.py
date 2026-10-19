@@ -42,6 +42,7 @@ class Bl2Source:
         self.textures: dict[str, bytes] = {}
         self.stats = {"parts": 0, "meshes": 0, "no_mesh": 0, "no_geometry": 0, "textured": 0}
         self.logged = 0
+        self._beat = time.time()
         self._meshes_by_name: dict[str, list[str]] | None = None
         self.name_files: dict[str, list] | None = None  # lower-case mesh name -> packages whose name table holds it
         self.by_gestalt: dict[str, str | None] = {}
@@ -216,10 +217,19 @@ class Bl2Source:
         self.stats["parts"] += 1
         self.group_hint()
         result = None
+        t0 = time.time()
         try:
             result = self._read_part(part)
         except Exception as e:  # noqa: BLE001
             self.log(f"{part}: {type(e).__name__}: {e}")
+        took = time.time() - t0
+        if took > 5:
+            self.log(f"{part}: took {took:.0f} s", force=True)
+        if time.time() - self._beat > 10:  # the log goes quiet after the first lines; this shows the install is still working
+            self._beat = time.time()
+            self.log(f"still working: {self.stats['parts']} parts looked at, {self.stats['meshes']} meshes read, "
+                     f"{self.stats['textured']} textures, {self.stats['no_mesh']} without a mesh, "
+                     f"{int(self.deadline - time.time())} s of budget left", force=True)
         self.cache[part] = result
         return result
 

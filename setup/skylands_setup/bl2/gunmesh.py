@@ -460,7 +460,15 @@ def parse_mips(data: bytes, w: int, h: int, per: int) -> list[dict]:
     (flags 0), the data, then [width][height]. The top mip's entry is found by its element count, at any byte offset."""
     want = (w // 4) * (h // 4) * per
     n = len(data)
-    for p0 in range(0, n - 24):
+    needle = struct.pack("<i", want)
+    hits = []
+    at = data.find(needle, 4)
+    while at >= 0:
+        hits.append(at - 4)
+        at = data.find(needle, at + 1)
+    for p0 in hits:
+        if p0 < 0 or p0 + 16 > n:
+            continue
         flags, count, disk, off = struct.unpack_from("<Iiii", data, p0)
         if count != want or not 0 < disk <= want + want // 8 + 4096:  # compressed data can be a little bigger than the raw size
             continue
@@ -509,13 +517,16 @@ def _mip_pixels(mip: dict, tfc_dir, tfc_name, say, label: str) -> bytes | None:
     return out
 
 
+_TFC_FILES: dict[str, dict] = {}
+
+
 def _tfc_path(root, name: str):
     from pathlib import Path
 
-    for f in Path(root).rglob("*.tfc"):
-        if f.stem.lower() == name.lower():
-            return f
-    return None
+    key = str(root)
+    if key not in _TFC_FILES:  # one walk of the game folder, not one per texture
+        _TFC_FILES[key] = {f.stem.lower(): f for f in Path(root).rglob("*.tfc")}
+    return _TFC_FILES[key].get(name.lower())
 
 
 def _unpack(raw: bytes, flags: int, want: int) -> bytes | None:
