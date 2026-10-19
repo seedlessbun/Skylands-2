@@ -8,12 +8,14 @@ Everything is best effort and logged; a part that cannot be read is skipped, a g
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 
 from .. import meshes as M
 from . import gunmesh, upk
 
 MESH_KEYS = ("GestaltModeSkeletalMeshName", "Mesh", "SkeletalMesh", "StaticMesh", "GearModel", "Model", "WeaponMesh")
+WEAPON_PACKAGES = re.compile(r"(wpn|weapon|weap_|pistol|smg|shotgun|sniper|launcher|assault|rifle|gun)", re.I)
 SLOT_ORDER = ("Body", "Barrel", "Grip", "Stock", "Sight", "Magazine", "Accessory", "Material", "Elemental")
 
 
@@ -40,6 +42,7 @@ class Bl2Source:
         self.textures: dict[str, bytes] = {}
         self.stats = {"parts": 0, "meshes": 0, "no_mesh": 0, "no_geometry": 0, "textured": 0}
         self.logged = 0
+        self._meshes_by_name: dict[str, list[str]] | None = None
         self.deadline = time.time() + 30 * 60  # then the remaining guns fall back to the next method
 
     def log(self, msg: str, force: bool = False) -> None:
@@ -65,6 +68,37 @@ class Bl2Source:
             found = self.ix.get(c)
             if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
                 return c
+        return self._mesh_by_name(part)
+
+    def _mesh_by_name_build(self) -> None:
+        if self._meshes_by_name is None:
+            t0 = time.time()
+            names: dict[str, list[str]] = {}
+            n = 0
+            for f in self.ix.files:
+                if not WEAPON_PACKAGES.search(f.stem) or f.stem.lower().startswith(("gd_", "d_")) or n >= 60:
+                    continue
+                n += 1
+                try:
+                    pkg = self.ix.package(f)
+                except Exception:  # noqa: BLE001
+                    continue
+                for i in range(1, len(pkg.exports) + 1):
+                    if pkg.obj_class(i) in gunmesh.MESH_CLASSES:
+                        names.setdefault(pkg.obj_name(i).lower(), []).append(pkg.path_of(i))
+            self._meshes_by_name = names
+            self.log(f"indexed {sum(len(v) for v in names.values())} meshes in {n} weapon packages by name ({time.time() - t0:.0f} s)", force=True)
+
+    def _mesh_by_name(self, part: str) -> str | None:
+        """Fallback: a mesh whose name matches the part's, among the packages that look like weapon assets."""
+        self._mesh_by_name_build()
+        leaf = part.split(".")[-1].split(":")[-1].lower()
+        if leaf in self._meshes_by_name:
+            return self._meshes_by_name[leaf][0]
+        if len(leaf) >= 8:
+            for name, paths in self._meshes_by_name.items():
+                if len(name) >= 8 and (leaf in name or name in leaf):
+                    return paths[0]
         return None
 
     def part_data(self, part: str) -> dict | None:

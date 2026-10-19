@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.2"
+VERSION = "0.10.3"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -79,6 +79,39 @@ def disable_plugin(plugin: str) -> bool:
     return len(kept) != len(lines)
 
 
+def prune_empty(sky: Path) -> None:
+    """Remove the Skylands folders under Meshes and Textures once nothing is left in them."""
+    import os
+
+    for top in (sky / "Data" / "Meshes" / "Skylands", sky / "Data" / "Textures" / "Skylands"):
+        for root, _dirs, _files in os.walk(top, topdown=False):
+            try:
+                Path(root).rmdir()
+            except OSError:
+                pass
+
+
+def remove_previous(work: Path, sky: Path) -> int:
+    """Delete the files an earlier setup installed (another gun model method leaves different meshes behind)."""
+    record = work / "installed-files.json"
+    if not record.is_file():
+        return 0
+    try:
+        info = json.loads(record.read_text(encoding="utf-8"))
+        if Path(info["skyrim"]) != sky:
+            return 0
+        n = 0
+        for rel in info["files"]:
+            f = sky / rel
+            if rel.lower().startswith("data/") and f.is_file():
+                f.unlink()
+                n += 1
+        prune_empty(sky)
+        return n
+    except (OSError, ValueError, KeyError):
+        return 0
+
+
 def uninstall_main(argv: list[str]) -> int:
     """Remove exactly the files the setup installed, and the plugin line it added."""
     import argparse
@@ -99,11 +132,7 @@ def uninstall_main(argv: list[str]) -> int:
         if f.is_file():
             f.unlink()
             removed += 1
-    for d in (sky / "Data" / "Meshes" / "Skylands", sky / "Data" / "Textures" / "Skylands"):
-        try:
-            d.rmdir()
-        except OSError:
-            pass
+    prune_empty(sky)
     unplugged = disable_plugin(generate.PLUGIN)
     record.unlink()
     for marker in work.glob("setup-done*.txt"):
@@ -215,6 +244,9 @@ def main(argv: list[str]) -> int:
         if a.stage_only:
             say(f"Staged only, in {stage}")
             return 0
+        gone = remove_previous(work, sky)
+        if gone:
+            say(f"Removed {gone} files of the previous install.")
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values
             (sky / "Data" / "Scripts" / old).unlink(missing_ok=True)
         written = install(stage, sky)

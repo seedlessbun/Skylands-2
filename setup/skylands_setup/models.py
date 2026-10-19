@@ -254,6 +254,8 @@ class GunModels:
             return self.written[key]
         length = self.fit.length * LENGTH.get(gun_type, 1.0) * self.scale
         lo, hi = _bounds_of(parts)
+        if method != "proxy":
+            _sanity(parts, lo, hi)
         size = hi[1] - lo[1]
         scale = length / size if size > 1e-6 else 1.0
         placed = [M.transformed(p, None, scale, (0.0, 0.0, 0.0)) for p in parts]
@@ -300,6 +302,16 @@ class GunModels:
     def summary(self) -> str:
         return (f"Gun models: {self.stats['built']} meshes written, {self.stats['shared']} guns share one, "
                 f"{self.stats['failed']} kept the crossbow mesh; by method {self.by_method or 'none'}; {len(self.textures)} textures")
+
+
+def _sanity(parts: list[M.Mesh], lo: M.Vec, hi: M.Vec) -> None:
+    """A mesh read from unknown data must look like a gun before it replaces the crossbow: enough triangles and elongated."""
+    tris = sum(len(p.tris) for p in parts)
+    ext = sorted(hi[i] - lo[i] for i in range(3))
+    if tris < 30:
+        raise ValueError(f"only {tris} triangles")
+    if ext[0] <= 1e-6 or ext[2] / ext[0] > 400 or ext[2] / max(ext[1], 1e-6) < 1.2:
+        raise ValueError(f"extents {ext[0]:.2f} x {ext[1]:.2f} x {ext[2]:.2f} do not look like a gun")
 
 
 def _bounds_of(parts: list[M.Mesh]) -> tuple[M.Vec, M.Vec]:

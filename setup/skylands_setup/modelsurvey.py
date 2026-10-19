@@ -154,6 +154,13 @@ def main(argv: list[str]) -> int:
                 except Exception:  # noqa: BLE001
                     report["parts"].append({"slot": slot, "part": part, "error": traceback.format_exc()[-800:]})
                 save()
+        try:
+            src._mesh_by_name_build()  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            pass
+        names = src._meshes_by_name or {}  # noqa: SLF001
+        report["weapon_mesh_names"] = {"count": sum(len(v) for v in names.values()),
+                                       "sample": [p for v in list(names.values())[:60] for p in v[:1]]}
         say("Looking for character meshes ...")
         try:
             report["characters"] = character_survey(ix)

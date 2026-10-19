@@ -265,7 +265,7 @@ def test_native_gun_models_with_a_source_and_fallbacks(tmp_path):
                 return None
             body = M.box(0, 0, 0, 0.1, 1.0, 0.2)
             body.texture = "t_deadbeef"
-            return [body, M.box(0, 0.7, 0, 0.05, 0.5, 0.05)]
+            return [body, M.cylinder(0, 0.7, 0, 0.03, 0.5, sides=12)]
 
         def take_textures(self):
             return {"t_deadbeef": nif_dds()}
