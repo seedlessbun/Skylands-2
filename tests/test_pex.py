@@ -185,8 +185,8 @@ def decompile(tmp_path, script, name):
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
-    psc = decompile(tmp_path, scripts.class_choice_quest(), "SkylandsClassQuest")
-    assert "ScriptName SkylandsClassQuest Extends Quest" in psc
+    psc = decompile(tmp_path, scripts.class_choice_quest(), "SkylandsHunterQuest")
+    assert "ScriptName SkylandsHunterQuest Extends Quest" in psc
     for prop in ("Message Property ClassChoice Auto", "Shout[] Property Shouts Auto", "Form Property StarterGun Auto",
                  "Form Property StarterAmmo Auto"):
         assert prop in psc
@@ -197,9 +197,9 @@ def test_class_quest_decompiles_to_intended_papyrus(tmp_path):
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_watcher_decompiles_to_intended_papyrus(tmp_path):
-    psc = decompile(tmp_path, scripts.watcher(), "SkylandsWatcher")
-    assert "ScriptName SkylandsWatcher Extends ActiveMagicEffect" in psc
-    for prop in ("SkylandsClassQuest Property Owner Auto", "Keyword[] Property SpeedKeywords Auto", "FormList Property GunList Auto",
+    psc = decompile(tmp_path, scripts.watcher(), "SkylandsHunter")
+    assert "ScriptName SkylandsHunter Extends ActiveMagicEffect" in psc
+    for prop in ("SkylandsHunterQuest Property Owner Auto", "Keyword[] Property SpeedKeywords Auto", "FormList Property GunList Auto",
                  "Spell Property RespawnPower Auto", "Message Property PromptMsg Auto",
                  "Form Property GunDrop Auto", "Int Property ArmChance Auto", "Float Property ScanRadius Auto"):
         assert prop in psc
@@ -209,6 +209,6 @@ def test_watcher_decompiles_to_intended_papyrus(tmp_path):
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_respawn_power_decompiles_to_intended_papyrus(tmp_path):
-    psc = decompile(tmp_path, scripts.respawn_power(), "SkylandsRespawn")
-    assert "ScriptName SkylandsRespawn Extends ActiveMagicEffect" in psc and "Owner.Settings()" in psc
+    psc = decompile(tmp_path, scripts.respawn_power(), "SkylandsHunterPower")
+    assert "ScriptName SkylandsHunterPower Extends ActiveMagicEffect" in psc and "Owner.Settings()" in psc
     assert "Owner.LogNow()" in psc and "Int Property Action Auto" in psc

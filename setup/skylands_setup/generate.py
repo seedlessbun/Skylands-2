@@ -321,17 +321,17 @@ def make_powers(p: esp.Plugin, m: "Masters", quest_id: int) -> tuple[int, int]:
     for edid, name, text, action in (
             ("SkylandsPandoraRespawn", "Pandora Respawn", "Respawn the enemies around you, or choose when enemies respawn.", 0),
             ("SkylandsPandoraLog", "Pandora Log Enemies", "Note the hostile people around you, so they can respawn.", 1)):
-        fx = script_effect(p, template, f"{edid}Effect", name, "SkylandsRespawn",
+        fx = script_effect(p, template, f"{edid}Effect", name, "SkylandsHunterPower",
                            [("Owner", esp.P_OBJECT, quest_id), ("Action", esp.P_INT, action)], fire_and_forget=True)
         out.append(spell(p, f"{edid}Power", name, text, spit, [(fx, 0.0, 0, 0)]).form_id)
     return out[0], out[1]
 
 
 def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: dict, powers: tuple = ()) -> int:
-    """The ability that runs the SkylandsWatcher script, given to every humanoid race (so to everybody).
+    """The ability that runs the SkylandsHunter script, given to every humanoid race (so to everybody).
     Returns the ability's form id."""
     template = m.need("MGEF", "AbWeaknessFireConstant")
-    effect = script_effect(p, template, "SkylandsWatcherFx", "Skylands", "SkylandsWatcher", props)
+    effect = script_effect(p, template, "SkylandsWatcherFx", "Skylands", "SkylandsHunter", props)
     ability = spell(p, "SkylandsPandoraAbility", "", "",
                     struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0),
                     [(effect, 0.0, 0, 0)])
@@ -559,7 +559,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                                 "Respawn the enemies around you now, or choose what happens when you load a save.",
                                 ["Respawn enemies now", "Ask me every time I load", "Always respawn when I load",
                                  "Never respawn when I load", "Cancel"])
-    quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
+    quest.add("VMAD", esp.vmad([("SkylandsHunterQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
         ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun),
         ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
@@ -597,8 +597,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
 
     # ---- files ------------------------------------------------------------------------------------
     (out_data / PLUGIN).write_bytes(p.encode())
-    (out_data / "Scripts" / "SkylandsClassQuest.pex").write_bytes(pex.write(scripts.class_choice_quest()))
-    (out_data / "Scripts" / "SkylandsRespawn.pex").write_bytes(pex.write(scripts.respawn_power()))
-    (out_data / "Scripts" / "SkylandsWatcher.pex").write_bytes(pex.write(scripts.watcher()))
+    (out_data / "Scripts" / "SkylandsHunterQuest.pex").write_bytes(pex.write(scripts.class_choice_quest()))
+    (out_data / "Scripts" / "SkylandsHunterPower.pex").write_bytes(pex.write(scripts.respawn_power()))
+    (out_data / "Scripts" / "SkylandsHunter.pex").write_bytes(pex.write(scripts.watcher()))
     report["records"] = len(p.records)
     return report

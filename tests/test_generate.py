@@ -26,7 +26,7 @@ def test_generate_from_both_games(tmp_path):
     out = tmp_path / "out"
     rep = generate.generate(bl2, sky, out)
     data = out / "Data"
-    assert (data / "Scripts" / "SkylandsClassQuest.pex").is_file() and (data / "Scripts" / "SkylandsWatcher.pex").is_file() and (data / "Scripts" / "SkylandsRespawn.pex").is_file()
+    assert (data / "Scripts" / "SkylandsHunterQuest.pex").is_file() and (data / "Scripts" / "SkylandsHunter.pex").is_file() and (data / "Scripts" / "SkylandsHunterPower.pex").is_file()
     assert (data / "Meshes" / "Skylands" / "Beam_legendary.nif").is_file() and (data / "Textures" / "Skylands" / "beam.dds").is_file()
     tes4, recs = read_plugin(data / "Skylands.esp", {"WEAP", "KYWD", "ENCH", "MGEF", "LVLI", "SHOU", "WOOP", "SPEL", "MESG", "QUST", "NPC_", "STAT", "LIGH", "RACE", "FLST"})
     names = {r.edid: r.first("FULL").rstrip(b"\0").decode() for r in recs["WEAP"]}
@@ -67,16 +67,16 @@ def test_generate_from_both_games(tmp_path):
     power = next(r for r in recs["SPEL"] if r.edid == "SkylandsPandoraRespawnPower")
     assert struct.unpack_from("<I", power.first("SPIT"), 8)[0] == 3  # a lesser power
     power_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsPandoraRespawnEffect")
-    assert b"SkylandsRespawn" in power_fx.first("VMAD") and struct.unpack_from("<I", power_fx.first("DATA"), 80)[0] == 1
+    assert b"SkylandsHunterPower" in power_fx.first("VMAD") and struct.unpack_from("<I", power_fx.first("DATA"), 80)[0] == 1
     logger = next(r for r in recs["SPEL"] if r.edid == "SkylandsPandoraLogPower")
     assert struct.unpack_from("<I", logger.first("SPIT"), 8)[0] == 3
     log_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsPandoraLogEffect")
-    assert b"SkylandsRespawn" in log_fx.first("VMAD") and b"Action" in log_fx.first("VMAD")
+    assert b"SkylandsHunterPower" in log_fx.first("VMAD") and b"Action" in log_fx.first("VMAD")
     boxes = {r.edid: [d.rstrip(b"\0").decode() for d in r.all("ITXT")] for r in recs["MESG"]}
     assert boxes["SkylandsRespawnPrompt"][0] == "Respawn enemies here" and len(boxes["SkylandsRespawnSettings"]) == 5
     # the watcher: an ability whose effect runs the script, carried by every humanoid race
     watch_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsWatcherFx")
-    for prop in (b"SkylandsWatcher", b"Owner", b"GunKeyword", b"SpeedKeywords", b"GunList", b"GunDrop", b"NpcKeyword", b"Bolts",
+    for prop in (b"SkylandsHunter", b"Owner", b"GunKeyword", b"SpeedKeywords", b"GunList", b"GunDrop", b"NpcKeyword", b"Bolts",
                  b"ArmChance", b"DropChance", b"GoodLevel", b"ScanRadius", b"RarityKeywords", b"Beams", b"Lights", b"PromptMsg",
                  b"SettingsMsg", b"MarkerForm", b"RespawnPower", b"LogPower", b"Ability"):
         assert prop in watch_fx.first("VMAD")
@@ -129,7 +129,7 @@ def test_build_installs_and_enables(tmp_path, monkeypatch):
     done = tmp_path / "managed" / "setup-done.txt"
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
     assert done.read_text().startswith(f"ok {build.VERSION}")
-    assert (sky / "Data" / "Skylands.esp").is_file() and (sky / "Data" / "Scripts" / "SkylandsWatcher.pex").is_file()
+    assert (sky / "Data" / "Skylands.esp").is_file() and (sky / "Data" / "Scripts" / "SkylandsHunter.pex").is_file()
     assert plugins.read_text().splitlines() == ["# keep me", "*Unofficial Patch.esp", "*Skylands.esp"]
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
     assert plugins.read_text().count("Skylands.esp") == 1
@@ -151,7 +151,7 @@ def test_uninstall_removes_only_what_was_installed(tmp_path, monkeypatch):
     assert build.main(["--bl2", str(tmp_path / "bl2"), "--skyrim", str(sky), "--done", str(done)]) == 0
     assert (plugins.parent / "plugins.txt.skylands-backup").read_text() == "*Unofficial Patch.esp\n"
     assert build.uninstall_main(["--work", str(done.parent)]) == 0
-    assert not (sky / "Data" / "Skylands.esp").exists() and not (sky / "Data" / "Scripts" / "SkylandsWatcher.pex").exists()
+    assert not (sky / "Data" / "Skylands.esp").exists() and not (sky / "Data" / "Scripts" / "SkylandsHunter.pex").exists()
     assert not (sky / "Data" / "Meshes" / "Skylands").exists()
     assert (sky / "Data" / "Other.esp").read_bytes() == b"keep me" and (sky / "Data" / "Skyrim.esm").exists()
     assert plugins.read_text().splitlines() == ["*Unofficial Patch.esp"]

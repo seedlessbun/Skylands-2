@@ -43,7 +43,7 @@ player (the class quest, ticking once a second) reads from the stats effect of t
 ## Guns in the world (0.8)
 
 Skylands needs no script extender, so its scripts use only what plain Skyrim offers. Every humanoid race (and so
-every person and the player) carries one ability whose effect runs the `SkylandsWatcher` script.
+every person and the player) carries one ability whose effect runs the `SkylandsHunter` script.
 * On the player it applies the equipped gun's speed to the player's weapon speed (the speed is a `SkylandsSpeed_n`
   keyword on the gun); every two seconds it looks for guns lying nearby (through a form list of every gun) and the
   quest gives each a rarity-coloured beam (a plain static) and light, which follow the gun and go away when it is
@@ -85,6 +85,13 @@ The player's copy of the ability script (fresh, with this build's own forms) als
 Giving the powers from a script failed on old saves, so Pandora Respawn and Pandora Log Enemies are now spells of the
 race records, like the ability, and show in the Powers menu with no script involved. The ability's script also starts
 the Skylands quest if an old save never started it (and says so).
+
+## New script names (0.9.7)
+
+A saved game keeps the property values of a script class it already knows and leaves properties added later empty
+(the 0.9.6 report showed 0 rarity keywords and no power names while the older properties were fine). The three scripts
+are now `SkylandsHunter`, `SkylandsHunterQuest` and `SkylandsHunterPower`, so an old save has no values for them and
+takes everything from the plugin.
 
 ## Form ids stay put (0.9)
 

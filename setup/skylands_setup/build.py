@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.9.6"
+VERSION = "0.9.7"
 
 
 RECORD_TYPES = {"STAT", "KYWD", "LIGH", "FLST", "WEAP", "ENCH", "MGEF", "SPEL", "SHOU", "WOOP", "MESG", "QUST", "LVLI", "ACTI"}

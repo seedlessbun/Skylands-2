@@ -49,7 +49,7 @@ ARRAYS_IF_MISSING = [ins for name, size in ARRAY_SIZES for ins in (
 
 
 def class_choice_quest() -> Script:
-    """SkylandsClassQuest extends Quest.
+    """SkylandsHunterQuest extends Quest.
 
     * Shows the vault hunter choice once the player can move, teaches and equips that vault hunter's
       shout, and hands over the starter gun, ammo and the respawn power.
@@ -920,7 +920,7 @@ def class_choice_quest() -> Script:
         ],
     )
     return Script(
-        name="SkylandsClassQuest",
+        name="SkylandsHunterQuest",
         parent="Quest",
         variables=[("Chosen", "Bool", ("bool", False)), ("PendingPrompt", "Bool", ("bool", False)),
                    ("JustLoaded", "Bool", ("bool", False)), ("Refreshed", "Bool", ("bool", False)), ("Mode", "Int", ("int", 0)),
@@ -948,7 +948,7 @@ def class_choice_quest() -> Script:
 
 
 def watcher() -> Script:
-    """SkylandsWatcher extends ActiveMagicEffect: the effect of an ability every humanoid race (and so
+    """SkylandsHunter extends ActiveMagicEffect: the effect of an ability every humanoid race (and so
     every person, and the player) carries. It runs once per person.
 
     On the player: applies the equipped Skylands gun's speed as the player's WeaponSpeedMult (the speed is
@@ -1441,13 +1441,13 @@ def watcher() -> Script:
         ],
     )
     return Script(
-        name="SkylandsWatcher",
+        name="SkylandsHunter",
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("IsPlayer", "Bool", ("bool", False)), ("Armed", "Bool", ("bool", False)),
                    ("Foe", "Bool", ("bool", False)), ("Checked", "Bool", ("bool", False)), ("MyGen", "Int", ("int", 0)),
                    ("Ticks", "Int", ("int", 0)), ("Speed", "Float", ("float", 0.0)),
                    ("Told", "Bool", ("bool", False))],
-        auto_properties=[("Owner", "SkylandsClassQuest"), ("GunKeyword", "Keyword"), ("SpeedKeywords", "Keyword[]"),
+        auto_properties=[("Owner", "SkylandsHunterQuest"), ("GunKeyword", "Keyword"), ("SpeedKeywords", "Keyword[]"),
                          ("GunList", "FormList"), ("GunDrop", "Form"), ("GunDropGood", "Form"), ("NpcKeyword", "Keyword"),
                          ("Bolts", "Form"), ("ArmChance", "Int"), ("DropChance", "Int"), ("GoodLevel", "Int"),
                          ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
@@ -1459,7 +1459,7 @@ def watcher() -> Script:
 
 
 def respawn_power() -> Script:
-    """SkylandsRespawn extends ActiveMagicEffect: the effect of the lesser powers "Pandora Respawn" (Action 0:
+    """SkylandsHunterPower extends ActiveMagicEffect: the effect of the lesser powers "Pandora Respawn" (Action 0:
     open the respawn settings) and "Pandora Log Enemies" (Action 1: note the hostile people around right now).
 
       Event OnEffectStart(Actor akTarget, Actor akCaster)
@@ -1485,8 +1485,8 @@ def respawn_power() -> Script:
         ],
     )
     return Script(
-        name="SkylandsRespawn",
+        name="SkylandsHunterPower",
         parent="ActiveMagicEffect",
-        auto_properties=[("Owner", "SkylandsClassQuest"), ("Action", "Int")],
+        auto_properties=[("Owner", "SkylandsHunterQuest"), ("Action", "Int")],
         functions=[on_start],
     )
