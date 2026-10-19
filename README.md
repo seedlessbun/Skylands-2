@@ -78,6 +78,12 @@ and an ability already running on a character never restarts. So 0.9.3 gives the
 powers new names: the old copies drop out of the save, a fresh quest starts with correct properties, and it gives
 the player the ability, whose fresh script hands everything else over. (The vault hunter menu shows once more.)
 
+## Powers come with the race (0.9.4)
+
+Giving the powers from a script failed on old saves, so Pandora Respawn and Pandora Log Enemies are now spells of the
+race records, like the ability, and show in the Powers menu with no script involved. The ability's script also starts
+the Skylands quest if an old save never started it (and says so).
+
 ## Form ids stay put (0.9)
 
 A save refers to spells, guns and the quest by form id, so a rebuild must not renumber them. Setup keeps

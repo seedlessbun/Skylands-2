@@ -327,7 +327,7 @@ def make_powers(p: esp.Plugin, m: "Masters", quest_id: int) -> tuple[int, int]:
     return out[0], out[1]
 
 
-def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: dict) -> int:
+def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: dict, powers: tuple = ()) -> int:
     """The ability that runs the SkylandsWatcher script, given to every humanoid race (so to everybody).
     Returns the ability's form id."""
     template = m.need("MGEF", "AbWeaknessFireConstant")
@@ -352,7 +352,7 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
         if not ok:
             report.setdefault("race_skipped", []).append(race.edid)
             continue
-        spells = [d for sg, d in rec.subs if sg == "SPLO"] + [esp.u32(ability.form_id)]
+        spells = [d for sg, d in rec.subs if sg == "SPLO"] + [esp.u32(f) for f in (ability.form_id, *powers)]
         anchor = next((i for i, (sg, _) in enumerate(rec.subs) if sg in ("SPCT", "SPLO")), None)
         if anchor is None:
             anchor = next((i + 1 for i, (sg, _) in reversed(list(enumerate(rec.subs))) if sg in ("DESC", "FULL")), len(rec.subs))
@@ -504,7 +504,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         ("RespawnPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraRespawnPower")),
         ("LogPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraLogPower")),
         ("Ability", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraAbility"))]
-    watcher_ability = make_watcher(p, m, Texts(data_dir), watcher_props, report)
+    # the powers ride on the races too (no script has to hand them over, so a saved game cannot get this wrong)
+    respawn_power, log_power = make_powers(p, m, quest.form_id)
+    watcher_ability = make_watcher(p, m, Texts(data_dir), watcher_props, report, (respawn_power, log_power))
 
     # ---- vault hunters ---------------------------------------------------------------------------
     fus = next((w for w in m.by_type["WOOP"].values() if w.edid == "WordFus"), None)
@@ -557,7 +559,6 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                                 "Respawn the enemies around you now, or choose what happens when you load a save.",
                                 ["Respawn enemies now", "Ask me every time I load", "Always respawn when I load",
                                  "Never respawn when I load", "Cancel"])
-    respawn_power, log_power = make_powers(p, m, quest.form_id)
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
         ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun),

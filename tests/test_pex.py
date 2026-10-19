@@ -104,6 +104,7 @@ WATCHER = {
   Actor player = Game.GetPlayer()
   If Me == player
     IsPlayer = True
+    Self.Wake()
     Owner.Refresh(RarityKeywords, Beams, Lights, PromptMsg, SettingsMsg, MarkerForm, RespawnPower, LogPower, Ability, NpcKeyword, ScanRadius, Verbose)
     Owner.Upgrade()
     Weapon w = Me.GetEquippedWeapon(False)

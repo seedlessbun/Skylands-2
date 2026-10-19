@@ -973,6 +973,7 @@ def watcher() -> Script:
             ("cmp_eq", ("id", "::temp0"), ("id", "Me"), ("id", "player")),
             ("jmpf", ("id", "::temp0"), ("lbl", "other")),
             ("assign", ("id", "IsPlayer"), ("bool", True)),
+            call("Wake"),
             ("callmethod", ("id", "Refresh"), ("id", "::Owner_var"), NONE, ("id", "::RarityKeywords_var"), ("id", "::Beams_var"),
              ("id", "::Lights_var"), ("id", "::PromptMsg_var"), ("id", "::SettingsMsg_var"), ("id", "::MarkerForm_var"),
              ("id", "::RespawnPower_var"), ("id", "::LogPower_var"), ("id", "::Ability_var"), ("id", "::NpcKeyword_var"),
@@ -1001,6 +1002,20 @@ def watcher() -> Script:
             call("Maintain"),
             ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 5.0), ("float", 8.0)),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "delay")),
+            ("return", None),
+        ],
+    )
+    wake = Function(
+        "Wake",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("::temp1", "Bool"), ("msg", "String")],
+        code=[
+            # a quest added to an old save may not have started
+            ("callmethod", ("id", "IsRunning"), ("id", "::Owner_var"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "start")),
+            ("return", None),
+            ("label", "start"),
+            ("callmethod", ("id", "Start"), ("id", "::Owner_var"), ("id", "::temp1")),
+            *notify(("str", "Skylands: the quest was stopped; started it")),
             ("return", None),
         ],
     )
@@ -1392,7 +1407,7 @@ def watcher() -> Script:
                          ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
-        functions=[on_start, on_update, hand, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+        functions=[on_start, on_update, wake, hand, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 
