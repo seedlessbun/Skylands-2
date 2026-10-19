@@ -504,9 +504,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         ("RespawnPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraRespawnPower")),
         ("LogPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraLogPower")),
         ("Ability", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraAbility"))]
-    # the powers ride on the races too (no script has to hand them over, so a saved game cannot get this wrong)
     respawn_power, log_power = make_powers(p, m, quest.form_id)
-    watcher_ability = make_watcher(p, m, Texts(data_dir), watcher_props, report, (respawn_power, log_power))
+    watcher_ability = make_watcher(p, m, Texts(data_dir), watcher_props, report)
 
     # ---- vault hunters ---------------------------------------------------------------------------
     fus = next((w for w in m.by_type["WOOP"].values() if w.edid == "WordFus"), None)

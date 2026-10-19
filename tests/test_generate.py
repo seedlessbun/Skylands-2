@@ -88,7 +88,7 @@ def test_generate_from_both_games(tmp_path):
     nord = races["NordRace"]
     assert nord.first("FULL") == b"Nord\0" and nord.first("DESC").endswith(b"\0") and len(nord.first("DESC")) > 4  # names written out, not string ids
     spells = [struct.unpack("<I", d)[0] for d in nord.all("SPLO")]
-    assert {ability.form_id, power.form_id, logger.form_id} <= set(spells)  # the powers ride on the race
+    assert power.form_id not in spells and logger.form_id not in spells  # the ability script grants the powers, not the race
     assert ability.form_id in spells and struct.unpack("<I", nord.first("SPCT"))[0] == len(spells)
     guns = next(r for r in recs["FLST"] if r.edid == "SkylandsGunList")
     assert len(guns.all("LNAM")) == rep["guns"]
