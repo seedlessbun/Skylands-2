@@ -135,6 +135,8 @@ def main(argv: list[str]) -> int:
                     help="where the guns get their own meshes from (default: off, every gun looks like the crossbow)")
     ap.add_argument("--gun-spin", type=float, default=0.0, help="turn every gun model this many degrees about its up axis (fixes a gun facing the wrong way)")
     ap.add_argument("--gun-scale", type=float, default=1.0, help="make every gun model this many times bigger or smaller")
+    ap.add_argument("--gun-attach", default="auto", choices=["auto", "sockets", "none"],
+                    help="how Borderlands 2 gun parts are placed on the body (native/umodel methods)")
     ap.add_argument("--stage-only", action="store_true", help="build into the work folder without installing")
     a = ap.parse_args(argv)
     done = Path(a.done)
@@ -188,14 +190,14 @@ def main(argv: list[str]) -> int:
             from .bl2.index import Index
 
             ix = Index(bl2, work / "cache" / "bl2_index.json", say)
-            sources["native"] = gunparts.Bl2Source(ix, say)
+            sources["native"] = gunparts.Bl2Source(ix, say, attach=a.gun_attach)
             if a.gun_models in ("umodel", "auto"):
                 from .bl2 import umodel
 
                 command = umodel.locate(work, say)
                 if command:
                     say(f"UModel: {command[0]}")
-                    sources["umodel"] = umodel.UModelSource(ix, say, command, work)
+                    sources["umodel"] = umodel.UModelSource(ix, say, command, work, attach=a.gun_attach)
                 else:
                     say("UModel was not found and could not be downloaded; put umodel.exe in the work folder to use that method.")
         report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources,

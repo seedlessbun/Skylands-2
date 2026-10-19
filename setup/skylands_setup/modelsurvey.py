@@ -61,6 +61,9 @@ def inspect_part(ix: Index, src: gunparts.Bl2Source, part: str) -> dict:
     rep["bulk_arrays"] = _bulk_summary(data, end + 28)
     raw = gunmesh.read_mesh_blob(data, end, path)
     rep["geometry"] = raw.note if raw else "NOT FOUND"
+    if raw:
+        lo, hi = raw.mesh.bounds()
+        rep["geometry_bounds"] = {"min": [round(v, 2) for v in lo], "max": [round(v, 2) for v in hi]}  # around the part's own origin, or placed in weapon space?
     if not raw:
         rep["hex_after_properties"] = data[end:end + 160].hex()
     rep["sockets"] = {k: v for k, v in list(src._sockets(pkg, path).items())[:12]}  # noqa: SLF001

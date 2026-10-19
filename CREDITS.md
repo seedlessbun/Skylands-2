@@ -9,3 +9,6 @@
 - Borderlands 2 object paths were checked against the OpenBLCMM BL2 data pack (BLCM); techniques from the
   universal-modder field notes. Scripts verified with Champollion (MIT); meshes with nifly (GPL-3.0, test
   only, not shipped).
+- **UModel / UE Viewer** by Konstantin Nosov (Gildor), used only by the optional "umodel" gun-model method: setup
+  downloads it from its author's site into the player's work folder at install time (or uses a copy the player
+  puts there). It is not part of the Skylands download. It reads Borderlands 2's meshes and textures on the player's PC.

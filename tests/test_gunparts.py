@@ -78,3 +78,18 @@ def test_native_source_reports_a_part_without_a_mesh(tmp_path):
     src = gunparts.Bl2Source(ix, log.append)
     assert src.gun_parts({"type": "pistol"}, {"parts": {"Body": "GD_Weap_Pistol.Nothing.Missing"}}) is None
     assert src.stats["no_mesh"] == 1 and any("no mesh object" in m for m in log)
+
+
+def test_attach_modes(tmp_path):
+    build_install(tmp_path / "bl2")
+    ix = Index(tmp_path / "bl2")
+    built = {"parts": {"Body": "GD_Weap_Pistol.Body.Pistol_Body_A", "Barrel": "GD_Weap_Pistol.Barrel.Pistol_Barrel_A"}}
+
+    def barrel_y(mode):
+        src = gunparts.Bl2Source(ix, lambda m: None, attach=mode)
+        parts = src.gun_parts({"type": "pistol"}, built)
+        return sum(p[1] for p in parts[1].positions) / len(parts[1].positions)
+
+    assert barrel_y("sockets") > 40  # the barrel is moved out to the socket
+    assert abs(barrel_y("none")) < 1  # it stays where its own mesh puts it
+    assert barrel_y("auto") > 40  # centred on its origin, so the socket applies

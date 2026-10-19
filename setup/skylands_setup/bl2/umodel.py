@@ -67,8 +67,9 @@ def locate(work: Path, say) -> list[str] | None:
 
 
 class UModelSource(gunparts.Bl2Source):
-    def __init__(self, ix, say, command: list[str], work: Path, game: str = "bl2", minutes: float = 35.0) -> None:
-        super().__init__(ix, say)
+    def __init__(self, ix, say, command: list[str], work: Path, game: str = "bl2", minutes: float = 35.0,
+                 attach: str = "auto") -> None:
+        super().__init__(ix, say, attach=attach)
         self.command = command
         self.out_root = Path(work) / "umodel-export"
         self.game = game

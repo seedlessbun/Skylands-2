@@ -65,6 +65,23 @@ person still alive is left alone; a dead or missing one is removed and a fresh c
 they stood (and rolls for a gun again). In an interior you are moved back to where you first came in (the quest keeps
 an invisible marker at each interior's entrance, set when you arrive).
 
+## Gun models (0.10)
+
+Every gun used to be the vanilla crossbow mesh. `--gun-models` (see `models.py`) gives each gun its own mesh, built on the
+player's PC at setup, several ways so they can be compared:
+
+- `proxy`: stylised guns made of boxes and cylinders in each manufacturer's colours, a stripe in the rarity colour.
+- `native`: Borderlands 2's own part meshes read from its packages (`bl2/gunmesh.py` finds vertex/index buffers by their
+  shape, since the UE3 layout cannot be inspected offline; `bl2/gunparts.py` places parts on their sockets and picks the
+  diffuse texture of their material).
+- `umodel`: the same, but UModel exports the meshes (`bl2/umodel.py`, `bl2/psk.py`, `imgconv.py`).
+- `auto`: native, then umodel, then proxy, per gun.
+
+All end the same way (`models.py`): fit to the vanilla crossbow's axes and length (measured from its NIF in the BSA), write a lit
+`BSTriShape` NIF with a box collision body (`skyrim/nif.py`), textures under `Textures/Skylands/Guns`, and point the gun's
+`MODL` at it. A failure on one gun leaves that gun on the crossbow. `--gun-spin`, `--gun-scale` and `--gun-attach` correct a
+fit by hand; `python -m skylands_setup modelsurvey` writes a report of what Borderlands' real mesh files hold.
+
 ## Powers on an existing character (0.9.1)
 
 The quest no longer trusts values saved in an old game: the player's watcher hands it the current forms (powers,

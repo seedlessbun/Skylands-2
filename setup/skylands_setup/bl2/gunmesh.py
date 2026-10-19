@@ -26,7 +26,7 @@ from . import upk
 
 MESH_CLASSES = ("StaticMesh", "SkeletalMesh")
 MATERIAL_CLASSES = ("MaterialInstanceConstant", "Material", "MaterialInstanceTimeVarying")
-ELEMENT_SIZES = (12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64)
+ELEMENT_SIZES = tuple(range(12, 97))  # vertex element sizes (a rigid vertex is not always a multiple of 4)
 MAX_VERTS = 65535
 
 

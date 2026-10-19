@@ -31,7 +31,8 @@ def _strings(value, out: list[str], depth: int = 0) -> None:
 
 
 class Bl2Source:
-    def __init__(self, ix, say, tfc_dir=None) -> None:
+    def __init__(self, ix, say, tfc_dir=None, attach: str = "auto") -> None:
+        self.attach = attach  # "sockets": move each part to its socket on the body; "none": parts share the weapon's space; "auto": guess
         self.ix = ix
         self.say = say
         self.tfc_dir = tfc_dir or ix.root
@@ -155,12 +156,25 @@ class Bl2Source:
         placed: dict[str, M.Mesh] = {}
         for slot, d in slots.items():
             offset = (0.0, 0.0, 0.0)
-            if d is not body:
+            if d is not body and self._use_sockets(d, body):
                 offset = self._attach_offset(body, slot, picked.get(slot))
             placed[slot] = M.transformed(d["mesh"], None, 1.0, offset)
         matrix = orientation(placed)
         parts = [M.transformed(m, matrix, 1.0) for m in placed.values()]
         return parts
+
+    def _use_sockets(self, part: dict, body: dict) -> bool:
+        """Parts modelled around their own attach point need the socket offset; parts already placed in the weapon's space do not.
+        In auto mode a part whose centre sits far from its own origin (relative to the body's size) is taken as already placed."""
+        if self.attach == "sockets":
+            return True
+        if self.attach == "none":
+            return False
+        lo, hi = part["mesh"].bounds()
+        blo, bhi = body["mesh"].bounds()
+        size = max(bhi[i] - blo[i] for i in range(3)) or 1.0
+        centre = [abs((lo[i] + hi[i]) / 2) for i in range(3)]
+        return max(centre) <= 0.45 * size
 
     def _attach_offset(self, body: dict, slot: str, part_path: str | None) -> tuple[float, float, float]:
         props = (self.ix.props(part_path) or {}) if part_path else {}

@@ -14,3 +14,10 @@
   for skyrim_load, opening, race_chosen, damage_out, skill_up, shout, skills_menu, perk_taken, save_load.
 - Open risks: StartActionSkill may not be called before the action skill unlocks (the F keybind covers it);
   AddVelocity knockback strength; money polling also counts mission rewards as Pickpocket.
+
+## 2026-10-19 - 0.10 gun models
+- Gun meshes: proxy / native / umodel / auto methods (README "Gun models"). Only tested on synthetic data and with nifly
+  (loads and re-saves the NIFs); none of it has been seen in Skyrim or against the real Borderlands 2 files yet.
+- Reference blocks for the lit shape and box collision were taken from nifly's own output (tools/nifcheck/check.cpp prints
+  what nifly reads back). Skyrim-side unknowns to confirm in game: weapon axis/size fit, havok layer 4 (clutter) for dropped
+  guns, hand position (grip origin), inventory view.
