@@ -217,3 +217,40 @@ def test_build_learns_ids_from_the_installed_plugin(tmp_path, monkeypatch):
     again = {f"{r.type}:{r.edid}": r.form_id for rs in read_plugin(sky / "Data" / "Skylands.esp", build.RECORD_TYPES)[1].values()
              for r in rs if r.edid and r.form_id >> 24 == 3}
     assert again == installed and len(installed) > 100
+
+
+def test_proxy_gun_models(tmp_path):
+    import os
+    import subprocess
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    out = tmp_path / "out"
+    rep = generate.generate(bl2, sky, out, gun_models="proxy")
+    data = out / "Data"
+    tes, recs = read_plugin(data / "Skylands.esp", {"WEAP"})
+    meshes = {r.first("MODL").rstrip(b"\0").decode() for r in recs["WEAP"]}
+    assert all(m.startswith("Skylands\\Guns\\proxy_") for m in meshes), meshes
+    for m in meshes:
+        assert (data / "Meshes" / Path(*m.split("\\"))).is_file()
+    assert all("MODT" not in [s for s, _ in r.subrecords] for r in recs["WEAP"])
+    assert rep["gun_models"]["built"] >= 1 and rep["gun_models"]["failed"] == 0
+    assert any((data / "Textures" / "Skylands" / "Guns").glob("c_*.dds")) and (data / "Textures" / "Skylands" / "Guns" / "flat_n.dds").is_file()
+    exe = os.environ.get("NIFCHECK")
+    if exe:
+        for m in meshes:
+            r = subprocess.run([exe, str(data / "Meshes" / Path(*m.split("\\")))], capture_output=True, text=True, check=True)
+            assert "shape SkylandsGun0" in r.stdout
+
+
+def test_gun_models_off_keeps_the_crossbow(tmp_path):
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    generate.generate(bl2, sky, tmp_path / "out")
+    tes, recs = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP"})
+    assert all(r.first("MODL").startswith(b"dlc01") for r in recs["WEAP"])
+    assert not (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Guns").exists()

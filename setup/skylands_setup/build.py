@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.9.15"
+VERSION = "0.10.0"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -131,6 +131,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--bl2")
     ap.add_argument("--skyrim")
     ap.add_argument("--done", required=True, help="marker file written when everything is installed")
+    ap.add_argument("--gun-models", default="off", choices=["off", "proxy", "native", "umodel", "auto"],
+                    help="where the guns get their own meshes from (default: off, every gun looks like the crossbow)")
     ap.add_argument("--stage-only", action="store_true", help="build into the work folder without installing")
     a = ap.parse_args(argv)
     done = Path(a.done)
@@ -178,7 +180,9 @@ def main(argv: list[str]) -> int:
                 ids = {}
         learned = harvest(sky / "Data" / generate.PLUGIN, ids)
         say(f"Form ids: {len(ids)} from before ({learned} read from the installed plugin).")
-        report = generate.generate(data, sky, stage, formids=ids)
+        report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models)
+        for line in report.get("model_log", []):
+            say(line)
         registry.write_text(json.dumps(ids, indent=0), encoding="utf-8")
         (work / "generate-report.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
         say(f"Built Skylands.esp: {report['records']} records, {report['guns']} guns, "

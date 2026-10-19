@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import sheet_data as S
 from . import assemble, stats
+from . import models as models_mod
 from .skyrim import esp, nif, pex, scripts
 from .skyrim.bsa import BSA
 from .skyrim.esm import Record, is_localized, read_plugin
@@ -364,8 +365,10 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
     return ability.form_id
 
 
-def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None) -> dict:
-    """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin."""
+def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
+             gun_models: str = "off", model_sources: dict | None = None) -> dict:
+    """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
+    gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
     m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE"})
     p = esp.Plugin(PLUGIN, MASTERS, ids=formids)
@@ -396,6 +399,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
 
     # ---- guns ---------------------------------------------------------------------------------
     crossbow = m.need("WEAP", S.SKYRIM_BASE["crossbow"].edid)
+    models = models_mod.GunModels(gun_models, out_data, models_mod.find_vanilla_mesh(data_dir, crossbow.first("MODL")),
+                                  report.setdefault("model_log", []).append, model_sources) if gun_models != "off" else None
     bolts = m.need("AMMO", S.SKYRIM_BASE["bolts"].edid)
     base_enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment) for e in S.ELEMENTS.values()}
     any_enchant = next(iter(base_enchant.values()))
@@ -445,6 +450,11 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             crit = w.get("CRDT")
             if crit and len(crit) >= 2:
                 w.set("CRDT", u16(st["crit_damage"]) + crit[2:])
+            if models is not None:
+                mesh = models.model_for(g, built, rr.id, rarity_color(bl2["rarities"], rr.level), edid)
+                if mesh:
+                    w.set("MODL", esp.zstr(mesh))
+                    w.drop("MODT", "MODS", "MO2T", "MO2S")
             p.override(w)
             by_rarity.setdefault(rr.level, []).append(w.form_id)
             if g["type"] == "pistol" and rr.level == 1 and element is None:
@@ -454,6 +464,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                                                    **{k2: v for k2, v in st.items() if v is not None}}
     if not by_rarity:
         raise GenerateError("no Borderlands guns were extracted")
+    if models is not None:
+        models.flush_textures()
+        report["gun_models"] = {"method": gun_models, **models.stats, "by_method": models.by_method, "textures": len(models.textures)}
+        report["model_log"].append(models.summary())
 
     tier_lists = {lvl: leveled_list(p, f"SkylandsGuns_{rarity_row(lvl).id}", [(f, 1) for f in ids]).form_id
                   for lvl, ids in sorted(by_rarity.items())}

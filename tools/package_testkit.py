@@ -30,6 +30,13 @@ echo.
 echo Log: %~dp0work\skylands-setup.log
 pause
 """.replace("%VERSION%", VERSION)
+MODEL_BATS = {
+    "Proxy": ("proxy", "stylised guns made from boxes and cylinders in each manufacturer's colours (always works)"),
+    "Native": ("native", "Borderlands 2 gun meshes read straight from the game's packages"),
+    "UModel": ("umodel", "Borderlands 2 gun meshes exported with the free UModel tool (downloaded during setup)"),
+    "Auto": ("auto", "native, then UModel, then proxy, for each gun"),
+}
+MODEL_BAT = INSTALL.replace("%*", "--gun-models %METHOD% %*").replace("%METHOD%", "{method}")
 UNINSTALL = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -61,6 +68,11 @@ README = f"""Skylands {VERSION} test build: Skyrim played as a Borderlands vault
 7. To undo everything: Uninstall-Skylands.bat (removes only the files Skylands installed and its plugin line;
    plugins.txt.skylands-backup next to your plugins.txt is a copy from before the first install).
 
+GUN MODELS (new, being tested): Install-Skylands.bat leaves every gun looking like a crossbow. These install the same
+Skylands but give each gun its own mesh; try them one at a time (each re-run replaces the last):
+""" + "".join(f"  Install-Skylands-GunModels-{n}.bat  - {why}\n" for n, (_m, why) in MODEL_BATS.items()) + """  Check: the gun in your hand, on the ground and in the inventory (size, direction, colours, no crash), then send
+  work\\skylands-setup.log: it says how many gun meshes each method built and which guns kept the crossbow.
+
 Includes Python 3.13 (python-build-standalone, PSF license) and lzokay (MIT, LICENSE-lzokay).
 Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC from your own copies.
 """
@@ -69,7 +81,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-28.zip"
+    out = dist / "Skylands-TestBuild-29.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -82,6 +94,8 @@ def main() -> int:
         z.write(ROOT / "native" / "lzo" / "LICENSE-lzokay", "LICENSE-lzokay")
         z.write(ROOT / "CREDITS.md", "CREDITS.md")
         z.writestr("Install-Skylands.bat", INSTALL.replace("\n", "\r\n"))
+        for name, (method, _why) in MODEL_BATS.items():
+            z.writestr(f"Install-Skylands-GunModels-{name}.bat", MODEL_BAT.format(method=method).replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))
     print(f"{out.relative_to(ROOT)} {out.stat().st_size} bytes")

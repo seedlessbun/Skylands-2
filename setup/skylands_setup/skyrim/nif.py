@@ -252,3 +252,22 @@ def gun(parts: list, box_half: tuple[float, float, float] = (0.1, 0.4, 0.05), ma
     node += struct.pack("<I", 0)
     b.set(root, node)
     return b.encode()
+
+
+def dds_solid(rgb: tuple[int, int, int], size: int = 4, alpha: int = 255) -> bytes:
+    """A tiny uncompressed BGRA texture of one colour (the diffuse of a proxy gun part)."""
+    return _dds_bgra(size, size, bytes([rgb[2], rgb[1], rgb[0], alpha]) * (size * size))
+
+
+def dds_flat_normal(size: int = 4) -> bytes:
+    """A flat tangent-space normal map (straight out of the surface)."""
+    return _dds_bgra(size, size, bytes([255, 128, 128, 255]) * (size * size))
+
+
+def _dds_bgra(width: int, height: int, pixels: bytes) -> bytes:
+    header = struct.pack(
+        "<4sIIIIIII44sIIIIIIIIIIIII",
+        b"DDS ", 124, 0x1 | 0x2 | 0x4 | 0x1000 | 0x8, height, width, width * 4, 0, 1, b"\0" * 44,
+        32, 0x41, 0, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000, 0x1000, 0, 0, 0, 0,
+    )
+    return header + pixels
