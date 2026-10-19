@@ -34,3 +34,32 @@ def test_beam_resaves_identically_in_nifly(tmp_path):
     r = subprocess.run([NIFCHECK, str(src), str(out)], capture_output=True, text=True, check=True)
     assert "shape LootBeam0 verts=4 tris=2" in r.stdout and "emissive 0.24 0.82 0.04" in r.stdout
     assert src.read_bytes() == out.read_bytes()
+
+
+def _gun_parts():
+    from skylands_setup import meshes as M
+
+    return [(M.box(0, 0, 0, 0.2, 1.0, 0.3), "textures\\skylands\\guns\\t.dds", "textures\\skylands\\guns\\t_n.dds"),
+            (M.cylinder(0, 0.8, 0.1, 0.05, 0.6), None, None)]
+
+
+def test_gun_nif_blocks():
+    data = nif.gun(_gun_parts())
+    assert data.startswith(b"Gamebryo File Format, Version 20.2.0.7\n")
+    for t in (b"BSLightingShaderProperty", b"BSShaderTextureSet", b"bhkRigidBodyT", b"bhkCollisionObject", b"BSXFlags"):
+        assert t in data
+
+
+def test_gun_nif_rejects_empty_and_huge_meshes():
+    from skylands_setup import meshes as M
+
+    with pytest.raises(ValueError):
+        nif.gun([(M.Mesh(), None, None)])
+
+
+@pytest.mark.skipif(not NIFCHECK, reason="set NIFCHECK to the nifly checker")
+def test_gun_nif_loads_in_nifly(tmp_path):
+    src, out = tmp_path / "gun.nif", tmp_path / "resaved.nif"
+    src.write_bytes(nif.gun(_gun_parts()))
+    r = subprocess.run([NIFCHECK, str(src), str(out)], capture_output=True, text=True, check=True)
+    assert "shape SkylandsGun0 verts=24 tris=12" in r.stdout and "shape SkylandsGun1" in r.stdout and "resaved" in r.stdout

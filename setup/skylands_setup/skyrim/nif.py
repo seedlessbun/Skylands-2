@@ -147,3 +147,108 @@ def dds_gradient(height: int = 64) -> bytes:
         a = int(255 * (y / (height - 1)))  # DDS rows go top to bottom; top transparent
         rows += bytes([255, 255, 255, a]) * width
     return header + rows
+
+
+# ---- a lit, textured weapon mesh with simple havok collision --------------------------------------------------------
+
+SLSF1_LIT = 0x82400301  # what nifly writes for a plain lit shape (specular, shadows, z-buffer test)
+SLSF2_LIT = 0x00008001
+VF_TANGENT_SET = VF_VERTEX | VF_UV | VF_NORMAL | VF_TANGENT | VF_FULLPREC
+HAVOK_LAYER_CLUTTER = 4
+
+
+def _byte(v: float) -> int:
+    return max(0, min(255, int(round(v * 127.5 + 127.5))))
+
+
+def _extra_net(b: NifBuilder, name: str, extras: list[int]) -> bytes:
+    return struct.pack("<iI", b.s(name), len(extras)) + b"".join(struct.pack("<i", e) for e in extras) + struct.pack("<i", -1)
+
+
+def _av_c(flags: int = 14, collision: int = -1, scale: float = 1.0) -> bytes:
+    return struct.pack("<I3f", flags, 0, 0, 0) + IDENTITY + struct.pack("<fi", scale, collision)
+
+
+def lit_shape(b: NifBuilder, name: str, mesh, texture: str | None, normal_map: str | None, glossiness: float = 40.0,
+              specular: float = 1.0) -> int:
+    """Add one BSTriShape (+ lighting shader + texture set) for a `meshes.Mesh`; returns the shape's block index."""
+    from .. import meshes as M  # local import: nif.py is also used without the mesh module
+
+    mesh = M.with_normals(mesh)
+    n = len(mesh.positions)
+    if n == 0 or not mesh.tris:
+        raise ValueError(f"{name}: empty mesh")
+    if n > 65535 or len(mesh.tris) > 65535:
+        raise ValueError(f"{name}: too many vertices or triangles for one shape ({n}/{len(mesh.tris)})")
+    tans = M.tangents(mesh)
+    uvs = mesh.uvs if len(mesh.uvs) == n else [(0.0, 0.0)] * n
+    desc = vertex_desc(VF_TANGENT_SET, 7, 4, 5, 0) | (6 << 20)
+    verts = b""
+    for i in range(n):
+        x, y, z = mesh.positions[i]
+        nx, ny, nz = mesh.normals[i]
+        (tx, ty, tz), hand = tans[i]
+        bt = M.cross((nx, ny, nz), (tx, ty, tz))
+        verts += struct.pack("<4f", x, y, z, bt[0] * hand)
+        verts += _half(uvs[i][0]) + _half(uvs[i][1])
+        verts += bytes([_byte(nx), _byte(ny), _byte(nz), _byte(bt[1] * hand)])
+        verts += bytes([_byte(tx), _byte(ty), _byte(tz), _byte(bt[2] * hand)])
+    tris = b"".join(struct.pack("<3H", *t) for t in mesh.tris)
+    lo, hi = mesh.bounds()
+    centre = tuple((a + c) / 2 for a, c in zip(lo, hi))
+    radius = max(((p[0] - centre[0]) ** 2 + (p[1] - centre[1]) ** 2 + (p[2] - centre[2]) ** 2) ** 0.5 for p in mesh.positions)
+    idx = b.add("BSTriShape", b"")
+    shader = b.add("BSLightingShaderProperty", b"")
+    texset = b.add("BSShaderTextureSet", b"")
+    shape = _extra_net(b, name, []) + _av_c()
+    shape += struct.pack("<4f", *centre, radius)
+    shape += struct.pack("<iii", -1, shader, -1)  # skin, shader, alpha
+    shape += struct.pack("<Q", desc)
+    shape += struct.pack("<HHI", len(mesh.tris), n, len(verts) + len(tris)) + verts + tris
+    shape += struct.pack("<I", 0)
+    b.set(idx, shape)
+    sh = struct.pack("<I", 0) + _extra_net(b, "", [])
+    sh += struct.pack("<II", SLSF1_LIT, SLSF2_LIT)
+    sh += struct.pack("<4f", 0, 0, 1, 1)  # uv offset, scale
+    sh += struct.pack("<i", texset)
+    sh += struct.pack("<3ffIf", 0, 0, 0, 1.0, 3, 1.0)  # emissive colour, multiple, clamp, alpha
+    sh += struct.pack("<ff", 0.0, glossiness)  # refraction, glossiness
+    sh += struct.pack("<3ff", 1.0, 1.0, 1.0, specular)
+    sh += struct.pack("<ff", 0.3, 2.0)  # lighting effects
+    b.set(shader, sh)
+    slots = [texture or "", normal_map or ""] + [""] * 7
+    b.set(texset, struct.pack("<I", 9) + b"".join(_sized(s) for s in slots))
+    return idx
+
+
+def collision_blocks(b: NifBuilder, half: tuple[float, float, float], mass: float, root: int, layer: int = HAVOK_LAYER_CLUTTER) -> int:
+    """A box collision body (havok units, half extents) for the root; returns the collision object's block index."""
+    box = b.add("bhkBoxShape", struct.pack("<II", 0, 0) + b"\0" * 8 + struct.pack("<3ff", half[0], half[1], half[2], 0.0))
+    # inertia of a solid box, as three rows of four floats
+    hx, hy, hz = (2 * h for h in half)
+    ix, iy, iz = mass * (hy * hy + hz * hz) / 12, mass * (hx * hx + hz * hz) / 12, mass * (hx * hx + hy * hy) / 12
+    body = struct.pack("<i", box) + bytes([layer, 0, 0, 0]) + struct.pack("<i", 0) + bytes([1, 0, 0, 0])
+    body += struct.pack("<III", 0, 0, 0x80000000)  # world object property
+    body += bytes([1, 0]) + struct.pack("<H", 0xFFFF) + struct.pack("<I", 0) + bytes([layer, 0, 0, 0]) + b"\0" * 12
+    body += struct.pack("<4f", 0, 0, 0, 0) + struct.pack("<4f", 0, 0, 0, 1) + struct.pack("<4f", 0, 0, 0, 0) * 2
+    body += struct.pack("<12f", ix, 0, 0, 0, 0, iy, 0, 0, 0, 0, iz, 0)
+    body += struct.pack("<4f", 0, 0, 0, 0)  # centre of mass
+    body += struct.pack("<ffffffffff", mass, 0.1, 0.05, 1.0, 1.0, 0.5, 1.0, 0.4, 104.4, 31.57)
+    body += struct.pack("<f", 0.15)
+    body += bytes([1, 1, 1, 4, 0, 0, 0, 0]) + b"\0" * 12 + struct.pack("<I", 0) + struct.pack("<H", 0)
+    rb = b.add("bhkRigidBodyT", body)
+    return b.add("bhkCollisionObject", struct.pack("<iHi", root, 0x81, rb))
+
+
+def gun(parts: list, box_half: tuple[float, float, float] = (0.1, 0.4, 0.05), mass: float = 2.0, name: str = "SkylandsGun") -> bytes:
+    """A weapon NIF: one lit shape per (mesh, diffuse path, normal path) in `parts`, a BSX flags block, box collision."""
+    b = NifBuilder()
+    root = b.add("BSFadeNode", b"")
+    bsx = b.add("BSXFlags", struct.pack("<iI", b.s("BSX"), 2))
+    shapes = [lit_shape(b, f"{name}{i}", m, tex, nrm) for i, (m, tex, nrm) in enumerate(parts)]
+    col = collision_blocks(b, box_half, mass, root)
+    node = _extra_net(b, name, [bsx]) + _av_c(14, col)
+    node += struct.pack("<I", len(shapes)) + b"".join(struct.pack("<i", i) for i in shapes)
+    node += struct.pack("<I", 0)
+    b.set(root, node)
+    return b.encode()
