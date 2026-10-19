@@ -319,8 +319,8 @@ def make_powers(p: esp.Plugin, m: "Masters", quest_id: int) -> tuple[int, int]:
     spit = struct.pack("<IIIfIIffI", 0, 0, SPELL_LESSER_POWER, 0, CAST_FIRE_FORGET, DELIVERY_SELF, 0, 0, 0)
     out = []
     for edid, name, text, action in (
-            ("SkylandsRespawn", "Pandora Respawn", "Respawn the enemies around you, or choose when enemies respawn.", 0),
-            ("SkylandsLogEnemies", "Pandora Log Enemies", "Note the hostile people around you, so they can respawn.", 1)):
+            ("SkylandsPandoraRespawn", "Pandora Respawn", "Respawn the enemies around you, or choose when enemies respawn.", 0),
+            ("SkylandsPandoraLog", "Pandora Log Enemies", "Note the hostile people around you, so they can respawn.", 1)):
         fx = script_effect(p, template, f"{edid}Effect", name, "SkylandsRespawn",
                            [("Owner", esp.P_OBJECT, quest_id), ("Action", esp.P_INT, action)], fire_and_forget=True)
         out.append(spell(p, f"{edid}Power", name, text, spit, [(fx, 0.0, 0, 0)]).form_id)
@@ -331,8 +331,8 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
     """The ability that runs the SkylandsWatcher script, given to every humanoid race (so to everybody).
     Returns the ability's form id."""
     template = m.need("MGEF", "AbWeaknessFireConstant")
-    effect = script_effect(p, template, "SkylandsWatcher", "Skylands", "SkylandsWatcher", props)
-    ability = spell(p, "SkylandsWatcherAbility", "", "",
+    effect = script_effect(p, template, "SkylandsWatcherFx", "Skylands", "SkylandsWatcher", props)
+    ability = spell(p, "SkylandsPandoraAbility", "", "",
                     struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0),
                     [(effect, 0.0, 0, 0)])
     races = 0
@@ -390,7 +390,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     # Keywords the scripts look for: one on every Skylands gun, and one per rarity (picks the beam).
     gun_keyword = p.new("KYWD", "SkylandsGun").form_id
     rarity_keywords = {row.level: p.new("KYWD", f"SkylandsRarity_{row.id}").form_id for row in S.RARITIES.values()}
-    quest = p.new("QUST", "SkylandsClassQuest")
+    quest = p.new("QUST", "SkylandsPandoraQuest")
     speed_keywords = [p.new("KYWD", f"SkylandsSpeed_{i}").form_id for i in range(SPEED_BUCKETS)]
     lights = make_lights(p, m, {row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()}, report)
 
@@ -501,9 +501,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         ("Lights", esp.P_OBJECT_ARRAY, [lights[k] for k in sorted(lights)] if len(lights) == len(beams) else []),
         ("PromptMsg", esp.P_OBJECT, p.new_id("MESG:SkylandsRespawnPrompt")),
         ("SettingsMsg", esp.P_OBJECT, p.new_id("MESG:SkylandsRespawnSettings")), ("MarkerForm", esp.P_OBJECT, XMARKER),
-        ("RespawnPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsRespawnPower")),
-        ("LogPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsLogEnemiesPower")),
-        ("Ability", esp.P_OBJECT, p.new_id("SPEL:SkylandsWatcherAbility"))]
+        ("RespawnPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraRespawnPower")),
+        ("LogPower", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraLogPower")),
+        ("Ability", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraAbility"))]
     watcher_ability = make_watcher(p, m, Texts(data_dir), watcher_props, report)
 
     # ---- vault hunters ---------------------------------------------------------------------------
@@ -561,7 +561,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     quest.add("VMAD", esp.vmad([("SkylandsClassQuest", [
         ("ClassChoice", esp.P_OBJECT, msg.form_id), ("Shouts", esp.P_OBJECT_ARRAY, shouts),
         ("Words", esp.P_OBJECT_ARRAY, words), ("StarterGun", esp.P_OBJECT, starter_gun),
-        ("StarterAmmo", esp.P_OBJECT, bolts.form_id)])], quest=True))
+        ("StarterAmmo", esp.P_OBJECT, bolts.form_id),
+        ("AbilityInit", esp.P_OBJECT, p.new_id("SPEL:SkylandsPandoraAbility"))])], quest=True))
     quest.add("FULL", esp.zstr("Skylands")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     quest.add("ANAM", esp.u32(0))
 

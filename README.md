@@ -71,6 +71,13 @@ The quest no longer trusts values saved in an old game: the player's watcher han
 messages, beams, ability) every time the game loads and every two seconds (an ability already running on a saved character never restarts, so handing over only at start missed it), and the quest rebuilds its roster arrays if they are empty.
 The Pandora Log message ends with `dup / merged / added` counts so a "0 known" can be traced.
 
+## Old saves (0.9.3)
+
+A saved game keeps the old copies of the scripts' properties, which can point at records that have since moved,
+and an ability already running on a character never restarts. So 0.9.3 gives the quest, the ability and the two
+powers new names: the old copies drop out of the save, a fresh quest starts with correct properties, and it gives
+the player the ability, whose fresh script hands everything else over. (The vault hunter menu shows once more.)
+
 ## Form ids stay put (0.9)
 
 A save refers to spells, guns and the quest by form id, so a rebuild must not renumber them. Setup keeps

@@ -15,6 +15,7 @@ from skylands_setup.skyrim import pex, scripts  # noqa: E402
 CHAMPOLLION = os.environ.get("CHAMPOLLION", "")
 
 QUEST_EXPECTED = """Event OnUpdate()
+  Self.Bootstrap()
   If !Chosen
     Self.Choose()
     Self.RegisterForSingleUpdate(1.0)

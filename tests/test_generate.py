@@ -59,29 +59,29 @@ def test_generate_from_both_games(tmp_path):
     lights = {r.edid: r for r in recs["LIGH"]}
     assert len(lights) == 6 and lights["SkylandsLight_common"].first("DATA")[8:12] == bytes([40, 100, 50, 0])
     assert struct.unpack_from("<I", lights["SkylandsLight_rare"].first("DATA"), 4)[0] == generate.LIGHT_RADIUS and "MODL" not in [s for s, _ in lights["SkylandsLight_rare"].subrecords]
-    quest = next(r for r in recs["QUST"] if r.edid == "SkylandsClassQuest")
+    quest = next(r for r in recs["QUST"] if r.edid == "SkylandsPandoraQuest")
     for prop in (b"ClassChoice", b"Shouts", b"Words", b"StarterGun", b"StarterAmmo"):
         assert prop in quest.first("VMAD")
     for prop in (b"RarityKeywords", b"Beams", b"Lights", b"PromptMsg", b"RespawnPower", b"LogPower", b"NpcKeyword"):
         assert prop not in quest.first("VMAD")  # a saved game would keep stale values; the player's watcher hands these over
-    power = next(r for r in recs["SPEL"] if r.edid == "SkylandsRespawnPower")
+    power = next(r for r in recs["SPEL"] if r.edid == "SkylandsPandoraRespawnPower")
     assert struct.unpack_from("<I", power.first("SPIT"), 8)[0] == 3  # a lesser power
-    power_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsRespawnEffect")
+    power_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsPandoraRespawnEffect")
     assert b"SkylandsRespawn" in power_fx.first("VMAD") and struct.unpack_from("<I", power_fx.first("DATA"), 80)[0] == 1
-    logger = next(r for r in recs["SPEL"] if r.edid == "SkylandsLogEnemiesPower")
+    logger = next(r for r in recs["SPEL"] if r.edid == "SkylandsPandoraLogPower")
     assert struct.unpack_from("<I", logger.first("SPIT"), 8)[0] == 3
-    log_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsLogEnemiesEffect")
+    log_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsPandoraLogEffect")
     assert b"SkylandsRespawn" in log_fx.first("VMAD") and b"Action" in log_fx.first("VMAD")
     boxes = {r.edid: [d.rstrip(b"\0").decode() for d in r.all("ITXT")] for r in recs["MESG"]}
     assert boxes["SkylandsRespawnPrompt"][0] == "Respawn enemies here" and len(boxes["SkylandsRespawnSettings"]) == 5
     # the watcher: an ability whose effect runs the script, carried by every humanoid race
-    watch_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsWatcher")
+    watch_fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsWatcherFx")
     for prop in (b"SkylandsWatcher", b"Owner", b"GunKeyword", b"SpeedKeywords", b"GunList", b"GunDrop", b"NpcKeyword", b"Bolts",
                  b"ArmChance", b"DropChance", b"GoodLevel", b"ScanRadius", b"RarityKeywords", b"Beams", b"Lights", b"PromptMsg",
                  b"SettingsMsg", b"MarkerForm", b"RespawnPower", b"LogPower", b"Ability"):
         assert prop in watch_fx.first("VMAD")
     assert struct.unpack_from("<I", watch_fx.first("DATA"), 64)[0] == generate.MGEF_ARCHETYPE_SCRIPT
-    ability = next(r for r in recs["SPEL"] if r.edid == "SkylandsWatcherAbility")
+    ability = next(r for r in recs["SPEL"] if r.edid == "SkylandsPandoraAbility")
     assert struct.unpack_from("<I", ability.first("SPIT"), 8)[0] == 4 and struct.unpack_from("<I", ability.first("EFID"))[0] == watch_fx.form_id
     races = {r.edid: r for r in recs["RACE"]}
     assert set(races) == {"NordRace", "BretonRace", "NordRaceVampire"} and rep["watched_races"] == 3  # not the Dremora

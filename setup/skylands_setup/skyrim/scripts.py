@@ -65,10 +65,21 @@ def class_choice_quest() -> Script:
         locals=[("::nonevar", "None")],
         code=[*ARRAYS, ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)],
     )
+    bootstrap = Function(
+        "Bootstrap",
+        locals=[("::nonevar", "None"), ("player", "Actor")],
+        code=[
+            # this quest's own properties are fresh, so it can give the player the ability that carries the watcher
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "AbilityInit"), ("bool", False)),
+            ("return", None),
+        ],
+    )
     on_update = Function(
         "OnUpdate",
         locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
+            call("Bootstrap"),
             ("not", ("id", "::temp0"), ("id", "Chosen")),
             ("jmpf", ("id", "::temp0"), ("lbl", "ready")),
             call("Choose"),
@@ -180,6 +191,7 @@ def class_choice_quest() -> Script:
         "LoadedSave",
         locals=[("::nonevar", "None")],
         code=[
+            call("Bootstrap"),
             call("Upgrade"),
             ("assign", ("id", "JustLoaded"), ("bool", True)),
             ("assign", ("id", "LastCell"), None),
@@ -929,8 +941,8 @@ def class_choice_quest() -> Script:
                    ("::Ability_var", "Spell", None), ("::NpcKeyword_var", "Keyword", None),
                    ("::LogRadius_var", "Float", ("float", 5000.0)), ("::Verbose_var", "Bool", ("bool", True))],
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
-                         ("StarterGun", "Form"), ("StarterAmmo", "Form")],
-        functions=[on_init, on_update, choose, make_arrays, refresh, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
+                         ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("AbilityInit", "Spell")],
+        functions=[on_init, on_update, bootstrap, choose, make_arrays, refresh, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
                    entry_index, entrance_for, note_entrance, arrive, consider, place, report, clear, alive, follow, sweep],
     )
 
