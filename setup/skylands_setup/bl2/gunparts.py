@@ -199,6 +199,22 @@ class Bl2Source:
                     return paths[0]
         return None
 
+    def diagnose(self, part: str) -> str:
+        """Where the mesh a part names does exist (path and class of every export of that name), for the log."""
+        out = []
+        for name in self.gestalt_names(part)[:2]:
+            files = (self.name_files or {}).get(name, [])
+            out.append(f"{name}: in {len(files)} name tables")
+            for f in files[:6]:
+                try:
+                    pkg = self.ix.package(f)
+                    pkg._indexes()  # noqa: SLF001
+                    hits = [(pkg.path_of(i), pkg.obj_class(i)) for i in pkg._by_name.get(name, ())][:3]  # noqa: SLF001
+                except Exception as e:  # noqa: BLE001
+                    hits = [f"{type(e).__name__}: {str(e)[:60]}"]
+                out.append(f"{f.stem} ({f.stat().st_size // 1048576} MB): {hits}")
+        return "; ".join(out)
+
     def describe(self, part: str) -> str:
         """What a part's properties hold, for the log when no mesh could be found from them."""
         props = self.ix.props(part)
@@ -250,7 +266,9 @@ class Bl2Source:
         path = self.mesh_path(part)
         if not path:
             self.stats["no_mesh"] += 1
-            self.log(f"{part}: no mesh object found; " + self.describe(part), force=self.stats["no_mesh"] <= 8)
+            self.log(f"{part}: no mesh object found; " + self.describe(part), force=self.stats["no_mesh"] <= 3)
+            if self.stats["no_mesh"] <= 10:
+                self.log(f"  where the named mesh is: {self.diagnose(part)}", force=True)
             return None
         t1 = time.time()
         pkg, idx = self.ix.get(path)
@@ -281,11 +299,11 @@ class Bl2Source:
             if d:
                 diffuse = d
                 break
-        key = self._texture(diffuse) if diffuse and time.time() < self.part_limit else None
+        key = None  # the gun's Material part supplies the texture (gun_parts); a texture per part cost minutes and is not used
         self.prof["material_texture_s"] = self.prof.get("material_texture_s", 0) + time.time() - t2
         raw.mesh.texture = key
         raw.mesh.normal_map = "flat_n"
-        return {"mesh": raw.mesh, "sockets": sockets, "path": path, "texture": key}
+        return {"mesh": raw.mesh, "sockets": sockets, "path": path, "texture": key, "diffuse": diffuse}
 
     def _sockets(self, pkg: upk.Package, mesh_path: str) -> dict[str, tuple[float, float, float]]:
         out: dict[str, tuple[float, float, float]] = {}
@@ -306,7 +324,17 @@ class Bl2Source:
         key = "t_" + hashlib.sha1(path.lower().encode()).hexdigest()[:8]
         if key in self.textures:
             return key
+        if self.prof.get("texture_s", 0) > 150:  # textures are the slow part: past this the rest of the guns get a plain colour
+            if not self.prof.get("texture_stop"):
+                self.prof["texture_stop"] = 1
+                self.log("texture time budget used up; remaining guns are not textured", force=True)
+            return None
+        t0 = time.time()
         dds = gunmesh.read_texture(self.ix, path, self.tfc_dir, self.log)
+        spent = time.time() - t0
+        self.prof["texture_s"] = self.prof.get("texture_s", 0) + spent
+        if spent > 10:
+            self.log(f"texture {path} took {spent:.0f} s", force=True)
         if dds is None:
             return None
         self.textures[key] = dds
@@ -334,6 +362,8 @@ class Bl2Source:
         matrix = orientation(placed)
         parts = [M.transformed(m, matrix, 1.0) for m in placed.values()]
         gun_texture = self._gun_material_texture(picked.get("Material"))
+        if not gun_texture and slots["Body"].get("diffuse"):  # no Material part: the body's own material stands in
+            gun_texture = self._texture(slots["Body"]["diffuse"])
         if gun_texture:  # one material (a texture shared by every part, each part's UVs lie on it) covers the whole gun
             for m in parts:
                 m.texture = gun_texture
