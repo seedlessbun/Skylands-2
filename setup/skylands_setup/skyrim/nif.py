@@ -241,14 +241,21 @@ def collision_blocks(b: NifBuilder, half: tuple[float, float, float], mass: floa
     return b.add("bhkCollisionObject", struct.pack("<iHi", root, 0x81, rb))
 
 
-def gun(parts: list, box_half: tuple[float, float, float] = (0.1, 0.4, 0.05), mass: float = 2.0, name: str = "SkylandsGun") -> bytes:
+def gun(parts: list, box_half: tuple[float, float, float] = (0.1, 0.4, 0.05), mass: float = 2.0, name: str = "SkylandsGun",
+        extra: list[tuple[str, str, str, int]] | None = None) -> bytes:
     """A weapon NIF: one lit shape per (mesh, diffuse path, normal path) in `parts`, a BSX flags block, box collision."""
     b = NifBuilder()
     root = b.add("BSFadeNode", b"")
     bsx = b.add("BSXFlags", struct.pack("<iI", b.s("BSX"), 2))
+    extras = [bsx]
+    for kind, ename, value, flag in extra or []:  # the vanilla weapon's attach point ("Prn") and behaviour graph
+        if kind == "NiStringExtraData":
+            extras.append(b.add(kind, struct.pack("<ii", b.s(ename), b.s(value))))
+        elif kind == "BSBehaviorGraphExtraData":
+            extras.append(b.add(kind, struct.pack("<iiB", b.s(ename), b.s(value), flag)))
     shapes = [lit_shape(b, f"{name}{i}", m, tex, nrm) for i, (m, tex, nrm) in enumerate(parts)]
     col = collision_blocks(b, box_half, mass, root)
-    node = _extra_net(b, name, [bsx]) + _av_c(14, col)
+    node = _extra_net(b, name, extras) + _av_c(14, col)
     node += struct.pack("<I", len(shapes)) + b"".join(struct.pack("<i", i) for i in shapes)
     node += struct.pack("<I", 0)
     b.set(root, node)

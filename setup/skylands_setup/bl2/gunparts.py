@@ -161,6 +161,11 @@ class Bl2Source:
             for i in pkg._by_name.get(name, ()):  # noqa: SLF001
                 if pkg.obj_class(i) in gunmesh.MESH_CLASSES:
                     return pkg.path_of(i)
+            for k, imp in enumerate(pkg.imports):  # a package that only uses the mesh still names where it lives
+                if imp.name.lower() == name and imp.class_name in gunmesh.MESH_CLASSES:
+                    path = pkg.path_of(-(k + 1))
+                    if self.ix.get(path):
+                        return path
         return None
 
     def _mesh_by_name_build(self) -> None:
@@ -210,6 +215,8 @@ class Bl2Source:
                     pkg = self.ix.package(f)
                     pkg._indexes()  # noqa: SLF001
                     hits = [(pkg.path_of(i), pkg.obj_class(i)) for i in pkg._by_name.get(name, ())][:3]  # noqa: SLF001
+                    hits += [("import " + pkg.path_of(-(k + 1)), imp.class_name) for k, imp in enumerate(pkg.imports)
+                             if imp.name.lower() == name][:3]
                 except Exception as e:  # noqa: BLE001
                     hits = [f"{type(e).__name__}: {str(e)[:60]}"]
                 out.append(f"{f.stem} ({f.stat().st_size // 1048576} MB): {hits}")
@@ -371,8 +378,15 @@ class Bl2Source:
 
     def _gun_material_texture(self, material_part: str | None) -> str | None:
         """The diffuse texture of the gun's Material part (a manufacturer/rarity paint job: Common_GunMaterials...Mati_*)."""
-        if not material_part:
+        if not material_part or self.prof.get("material_s", 0) > 120:  # looking materials up is what ate the minutes
             return None
+        t0 = time.time()
+        try:
+            return self._gun_material_texture_inner(material_part)
+        finally:
+            self.prof["material_s"] = self.prof.get("material_s", 0) + time.time() - t0
+
+    def _gun_material_texture_inner(self, material_part: str) -> str | None:
         props = self.ix.props(material_part) or {}
         mic = props.get("Material")
         if not isinstance(mic, str):

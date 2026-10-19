@@ -75,3 +75,11 @@ def test_skin_partition_vertices_are_read():
     block = struct.pack("<IIIQ", 0, len(verts), 16, desc) + verts
     s = nifread.read_partition(block)
     assert s.positions == [(1.0, 2.0, 3.0), (2.0, 4.0, 3.0), (3.0, 6.0, 3.0)]
+
+
+def test_gun_carries_the_vanilla_attach_point():
+    from skylands_setup import meshes as M
+    from skylands_setup.skyrim import nifread
+
+    data = nif.gun([(M.box(0, 0, 0, 1, 1, 1), None, None)], extra=[("NiStringExtraData", "Prn", "WeaponBack", 0)])
+    assert ("NiStringExtraData", "Prn", "WeaponBack", 0) in nifread.extra_data(data)

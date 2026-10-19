@@ -91,7 +91,7 @@ def read_shape(block: bytes) -> Shape:
     attrs = desc >> 44
     if not attrs & 0x1 or unit < 8:
         raise NifError("shape has no positions")
-    full = bool(attrs & 0x400)
+    full = True  # Skyrim SE always stores float positions (the flag only matters for Fallout 4)
     pos = []
     for i in range(nverts):
         o = p + i * unit
@@ -100,6 +100,52 @@ def read_shape(block: bytes) -> Shape:
         else:
             pos.append((_half(block[o:o + 2]), _half(block[o + 2:o + 4]), _half(block[o + 4:o + 6])))
     return Shape(name, trans, rot, scale, pos)
+
+
+def extra_data(data: bytes) -> list[tuple[str, str, str, int]]:
+    """The string extra data and behaviour-graph references of a NIF as (type, name, value, flag): the vanilla crossbow's
+    'Prn' tells Skyrim where the sheathed weapon hangs and its behaviour graph drives the weapon's own animation."""
+    out = []
+    strings = _strings(data)
+    for kind, blk in blocks(data):
+        try:
+            if kind == "NiStringExtraData":
+                a, b = struct.unpack_from("<ii", blk, 0)
+                out.append((kind, strings[a] if a >= 0 else "", strings[b] if b >= 0 else "", 0))
+            elif kind == "BSBehaviorGraphExtraData":
+                a, b = struct.unpack_from("<ii", blk, 0)
+                out.append((kind, strings[a] if a >= 0 else "", strings[b] if b >= 0 else "", blk[8]))
+        except (struct.error, IndexError):
+            continue
+    return out
+
+
+def _strings(data: bytes) -> list[str]:
+    nl = data.find(b"\n")
+    p = nl + 1
+    version, endian, user, count = struct.unpack_from("<IBII", data, p)
+    p += 13
+    if user >= 3:
+        (bsver,) = struct.unpack_from("<I", data, p)
+        p += 4
+        for _ in range(3):
+            p += 1 + data[p]
+        if bsver >= 103:
+            p += 1 + data[p]
+    (ntypes,) = struct.unpack_from("<H", data, p)
+    p += 2
+    for _ in range(ntypes):
+        (ln,) = struct.unpack_from("<I", data, p)
+        p += 4 + ln
+    p += 2 * count + 4 * count
+    nstr, _maxlen = struct.unpack_from("<II", data, p)
+    p += 8
+    out = []
+    for _ in range(nstr):
+        (ln,) = struct.unpack_from("<I", data, p)
+        out.append(data[p + 4:p + 4 + ln].decode("ascii", "replace"))
+        p += 4 + ln
+    return out
 
 
 def read_partition(block: bytes) -> Shape:
@@ -111,7 +157,7 @@ def read_partition(block: bytes) -> Shape:
     attrs = desc >> 44
     if not attrs & 0x1:
         raise NifError("partition has no positions")
-    full = bool(attrs & 0x400)
+    full = True  # Skyrim SE always stores float positions
     off = (desc >> 4) & 0xF
     pos = []
     for i in range(dsize // vsize):

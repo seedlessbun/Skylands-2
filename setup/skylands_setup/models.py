@@ -15,6 +15,7 @@ Nothing here may stop an install: any failure leaves that gun on the vanilla mes
 from __future__ import annotations
 
 import hashlib
+import struct
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,7 +30,7 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
 # length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
 # as a fraction of the crossbow came out far too big next to the player
-LENGTH = {"pistol": 16.0, "smg": 24.0, "assault_rifle": 34.0, "shotgun": 34.0, "sniper": 42.0, "launcher": 36.0}
+LENGTH = {"pistol": 12.0, "smg": 18.0, "assault_rifle": 25.0, "shotgun": 25.0, "sniper": 32.0, "launcher": 27.0}
 
 PALETTE = {  # body colour, trim colour per manufacturer
     "Bandit": ((120, 78, 52), (70, 56, 48)),
@@ -59,6 +60,9 @@ def fit_from_points(points: list[M.Vec]) -> Fit:
     thinnest of the others) and its length."""
     if len(points) < 4:
         return Fit(IDENTITY, 50.0, "no vanilla mesh: assuming barrel +y, up +z, 50 long")
+    spread = max(max(p[i] for p in points) - min(p[i] for p in points) for i in range(3))
+    if not 3.0 < spread < 400.0:  # a crossbow is about 70 units: anything else is a misread, not a measurement
+        return Fit(IDENTITY, 50.0, f"the vanilla mesh measured {spread:.0f} units, which is not a crossbow: assuming barrel +y, up +z")
     lo = [min(p[i] for p in points) for i in range(3)]
     hi = [max(p[i] for p in points) for i in range(3)]
     ext = [hi[i] - lo[i] for i in range(3)]
@@ -234,6 +238,15 @@ class GunModels:
             if len(pts) < 4:
                 say(f"Gun models: the vanilla crossbow mesh gave {len(pts)} points: {describe_nif(vanilla_nif)}")
         self.fit = fit_from_points(pts)
+        self.extra: list[tuple[str, str, str, int]] = []
+        if vanilla_nif:
+            try:
+                found = nifread.extra_data(vanilla_nif)
+                say(f"Gun models: the vanilla crossbow's extra data: {found}")
+                # the "Prn" attach point (where the sheathed weapon hangs): without it a weapon is drawn at the player's feet
+                self.extra = [e for e in found if e[0] == "NiStringExtraData"]
+            except (nifread.NifError, ValueError, struct.error) as e:
+                say(f"Gun models: could not read the vanilla crossbow's extra data ({e})")
         say(f"Gun models ({method}): {self.fit.note}")
         self.written: dict[str, str] = {}  # look key -> mesh path under Meshes\
         self.textures: dict[str, bytes] = {}
@@ -330,7 +343,7 @@ class GunModels:
         allp = M.merged([s[0] for s in shapes])
         lo2, hi2 = allp.bounds()
         half = tuple(max(0.02, (hi2[i] - lo2[i]) / 2 / HAVOK_SCALE) for i in range(3))
-        data = nif.gun(shapes, half, 2.0, "SkylandsGun")  # type: ignore[arg-type]
+        data = nif.gun(shapes, half, 2.0, "SkylandsGun", self.extra)  # type: ignore[arg-type]
         rel = f"{MESH_DIR}\\{method}_{key}.nif"
         path = self.out / "Meshes" / Path(*rel.split("\\"))
         path.parent.mkdir(parents=True, exist_ok=True)
