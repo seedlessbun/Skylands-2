@@ -366,7 +366,8 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
 
 
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
-             gun_models: str = "off", model_sources: dict | None = None) -> dict:
+             gun_models: str = "off", model_sources: dict | None = None, model_spin: float = 0.0,
+             model_scale: float = 1.0) -> dict:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
@@ -400,7 +401,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     # ---- guns ---------------------------------------------------------------------------------
     crossbow = m.need("WEAP", S.SKYRIM_BASE["crossbow"].edid)
     models = models_mod.GunModels(gun_models, out_data, models_mod.find_vanilla_mesh(data_dir, crossbow.first("MODL")),
-                                  report.setdefault("model_log", []).append, model_sources) if gun_models != "off" else None
+                                  report.setdefault("model_log", []).append, model_sources, model_spin, model_scale) if gun_models != "off" else None
     bolts = m.need("AMMO", S.SKYRIM_BASE["bolts"].edid)
     base_enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment) for e in S.ELEMENTS.values()}
     any_enchant = next(iter(base_enchant.values()))

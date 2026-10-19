@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.10.0"
+VERSION = "0.10.1"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -133,6 +133,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--done", required=True, help="marker file written when everything is installed")
     ap.add_argument("--gun-models", default="off", choices=["off", "proxy", "native", "umodel", "auto"],
                     help="where the guns get their own meshes from (default: off, every gun looks like the crossbow)")
+    ap.add_argument("--gun-spin", type=float, default=0.0, help="turn every gun model this many degrees about its up axis (fixes a gun facing the wrong way)")
+    ap.add_argument("--gun-scale", type=float, default=1.0, help="make every gun model this many times bigger or smaller")
     ap.add_argument("--stage-only", action="store_true", help="build into the work folder without installing")
     a = ap.parse_args(argv)
     done = Path(a.done)
@@ -187,7 +189,17 @@ def main(argv: list[str]) -> int:
 
             ix = Index(bl2, work / "cache" / "bl2_index.json", say)
             sources["native"] = gunparts.Bl2Source(ix, say)
-        report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources)
+            if a.gun_models in ("umodel", "auto"):
+                from .bl2 import umodel
+
+                command = umodel.locate(work, say)
+                if command:
+                    say(f"UModel: {command[0]}")
+                    sources["umodel"] = umodel.UModelSource(ix, say, command, work)
+                else:
+                    say("UModel was not found and could not be downloaded; put umodel.exe in the work folder to use that method.")
+        report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources,
+                                   model_spin=a.gun_spin, model_scale=a.gun_scale)
         for src in sources.values():
             say(src.summary())
         for line in report.get("model_log", []):

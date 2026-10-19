@@ -171,10 +171,12 @@ def _hex_rgb(key: str) -> tuple[int, int, int] | None:
 class GunModels:
     """Builds and writes gun meshes into out_data (Meshes/..., Textures/...), one NIF per distinct look."""
 
-    def __init__(self, method: str, out_data: Path, vanilla_nif: bytes | None, say=print, extra_sources=None) -> None:
+    def __init__(self, method: str, out_data: Path, vanilla_nif: bytes | None, say=print, extra_sources=None,
+                 spin: float = 0.0, scale: float = 1.0) -> None:
         if method not in METHODS:
             raise ValueError(f"unknown gun model method {method!r}")
         self.method = method
+        self.spin, self.scale = spin, scale  # extra turn about the up axis (degrees) and size multiplier, for correcting the fit by hand
         self.out = Path(out_data)
         self.say = say
         self.sources = extra_sources or {}  # method name -> object with part_meshes(g, built) -> {slot: Mesh|None} and textures
@@ -250,7 +252,7 @@ class GunModels:
         if key in self.written:
             self.stats["shared"] += 1
             return self.written[key]
-        length = self.fit.length * LENGTH.get(gun_type, 1.0)
+        length = self.fit.length * LENGTH.get(gun_type, 1.0) * self.scale
         lo, hi = _bounds_of(parts)
         size = hi[1] - lo[1]
         scale = length / size if size > 1e-6 else 1.0
@@ -260,6 +262,12 @@ class GunModels:
             plo, phi = _bounds_of(placed)
             cx, cy, cz = (plo[0] + phi[0]) / 2, plo[1] + (phi[1] - plo[1]) * 0.28, phi[2] - (phi[2] - plo[2]) * 0.62
             placed = [M.transformed(p, None, 1.0, (-cx, -cy, -cz)) for p in placed]
+        if method != "proxy":
+            placed = [M.ensure_outward(p) for p in placed]
+        if self.spin:
+            a = math.radians(self.spin)
+            turn = ((math.cos(a), -math.sin(a), 0.0), (math.sin(a), math.cos(a), 0.0), (0.0, 0.0, 1.0))
+            placed = [M.transformed(p, turn) for p in placed]
         placed = [fit_mesh(p, self.fit, 1.0) for p in placed]
         groups: dict[tuple[str | None, str | None], list[M.Mesh]] = {}
         for p in placed:

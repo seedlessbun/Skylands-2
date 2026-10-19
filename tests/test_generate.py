@@ -285,3 +285,27 @@ def test_native_gun_models_with_a_source_and_fallbacks(tmp_path):
     assert all(p.startswith("Skylands\\Guns\\native_") for p in paths), paths  # every fake gun is a pistol
     assert (tmp_path / "out" / "Data" / "Textures" / "Skylands" / "Guns" / "t_deadbeef.dds").is_file()
     assert rep["gun_models"]["by_method"] == {"native": rep["guns"]}
+
+
+def test_gun_models_spin_and_scale(tmp_path):
+    import subprocess
+
+    from skylands_setup.skyrim import nifread
+
+    def bounds(spin, scale):
+        d = tmp_path / f"o{spin}_{scale}"
+        fake_bl2.pandora_install(d / "bl2")
+        bl2 = extract.extract(d / "bl2", d / "cache")
+        bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+        sky = fake_skyrim.build_full(d / "sky")
+        generate.generate(bl2, sky, d / "out", gun_models="proxy", model_spin=spin, model_scale=scale)
+        f = next((d / "out" / "Data" / "Meshes" / "Skylands" / "Guns").glob("proxy_*.nif"))
+        pts = nifread.world_points(f.read_bytes())
+        return [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)], pts
+
+    e0, p0 = bounds(0, 1.0)
+    e2, p2 = bounds(0, 2.0)
+    assert all(abs(b - 2 * a) < 1e-3 * max(1, b) for a, b in zip(e0, e2))
+    e90, p90 = bounds(90, 1.0)
+    assert len(p90) == len(p0) and p90 != p0  # turned, not changed in size
+    assert abs(sum(e90) - sum(e0)) < 1.0

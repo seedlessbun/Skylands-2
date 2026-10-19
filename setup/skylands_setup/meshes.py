@@ -80,6 +80,24 @@ def norm(v: Vec) -> Vec:
     return (v[0] / n, v[1] / n, v[2] / n) if n > 1e-12 else (0.0, 0.0, 1.0)
 
 
+def signed_volume(m: Mesh) -> float:
+    v = 0.0
+    for a, b, c in m.tris:
+        p, q, r = m.positions[a], m.positions[b], m.positions[c]
+        v += (p[0] * (q[1] * r[2] - q[2] * r[1]) - p[1] * (q[0] * r[2] - q[2] * r[0]) + p[2] * (q[0] * r[1] - q[1] * r[0])) / 6.0
+    return v
+
+
+def ensure_outward(m: Mesh) -> Mesh:
+    """Flip the winding when the mesh is inside out (negative enclosed volume); a no-op for outward meshes."""
+    if signed_volume(m) >= 0:
+        return m
+    out = m.copy()
+    out.tris = [(a, c, b) for a, b, c in m.tris]
+    out.normals = [(-n[0], -n[1], -n[2]) for n in m.normals]
+    return out
+
+
 def with_normals(m: Mesh) -> Mesh:
     """Smooth vertex normals from the triangles when the mesh has none (or have the wrong count)."""
     if len(m.normals) == len(m.positions) and any(n != (0.0, 0.0, 0.0) for n in m.normals):

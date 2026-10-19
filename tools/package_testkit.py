@@ -37,6 +37,16 @@ MODEL_BATS = {
     "Auto": ("auto", "native, then UModel, then proxy, for each gun"),
 }
 MODEL_BAT = INSTALL.replace("%*", "--gun-models %METHOD% %*").replace("%METHOD%", "{method}")
+SURVEY = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+echo Reading what Borderlands 2 holds for gun meshes and textures (changes nothing; a few minutes) ...
+"%~dp0python\python.exe" -X utf8 -m skylands_setup modelsurvey --out "%~dp0work\gun-model-survey.json" %*
+echo.
+echo Send work\gun-model-survey.json back to Claude.
+pause
+"""
 UNINSTALL = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -72,6 +82,10 @@ GUN MODELS (new, being tested): Install-Skylands.bat leaves every gun looking li
 Skylands but give each gun its own mesh; try them one at a time (each re-run replaces the last):
 """ + "".join(f"  Install-Skylands-GunModels-{n}.bat  - {why}\n" for n, (_m, why) in MODEL_BATS.items()) + """  Check: the gun in your hand, on the ground and in the inventory (size, direction, colours, no crash), then send
   work\\skylands-setup.log: it says how many gun meshes each method built and which guns kept the crossbow.
+  If guns face the wrong way or are too big/small, add --gun-spin 180 (any angle) or --gun-scale 1.5 to the same command,
+  e.g.  Install-Skylands-GunModels-Proxy.bat --gun-spin 90
+  Run-GunModelSurvey.bat reads Borderlands 2 and writes work\\gun-model-survey.json (what the real mesh files look like);
+  send it whenever the native or UModel method builds fewer meshes than it should.
 
 Includes Python 3.13 (python-build-standalone, PSF license) and lzokay (MIT, LICENSE-lzokay).
 Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC from your own copies.
@@ -81,7 +95,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-29.zip"
+    out = dist / "Skylands-TestBuild-30.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -96,6 +110,7 @@ def main() -> int:
         z.writestr("Install-Skylands.bat", INSTALL.replace("\n", "\r\n"))
         for name, (method, _why) in MODEL_BATS.items():
             z.writestr(f"Install-Skylands-GunModels-{name}.bat", MODEL_BAT.format(method=method).replace("\n", "\r\n"))
+        z.writestr("Run-GunModelSurvey.bat", SURVEY.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))
     print(f"{out.relative_to(ROOT)} {out.stat().st_size} bytes")

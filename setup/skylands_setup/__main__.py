@@ -4,7 +4,7 @@ import sys
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] not in ("survey", "build", "uninstall"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("survey", "build", "uninstall", "modelsurvey"):
         print("usage: python -m skylands_setup survey --out FILE [--bl2 DIR --skyrim DIR]")
         print("       python -m skylands_setup build --done FILE [--bl2 DIR --skyrim DIR] [--stage-only]")
         print("       python -m skylands_setup uninstall --work DIR")
@@ -13,6 +13,10 @@ def main() -> int:
         from . import build
 
         return build.uninstall_main(sys.argv[2:])
+    if sys.argv[1] == "modelsurvey":
+        from . import modelsurvey
+
+        return modelsurvey.main(sys.argv[2:])
     if sys.argv[1] == "build":
         from . import build
 
