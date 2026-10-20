@@ -355,3 +355,16 @@ def test_gun_models_set_the_first_person_model_object(tmp_path):
     for w in recs["WEAP"]:
         fp = views[struct.unpack("<I", w.first("WNAM"))[0]]
         assert fp.first("MODL") == w.first("MODL")  # first person and world model are the same mesh
+
+
+def test_calibration_build_holds_each_rarity_differently(tmp_path):
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    rep = generate.generate(bl2, sky, tmp_path / "out", gun_models="proxy", model_calibrate=True)
+    assert any("CALIBRATION" in line for line in rep["model_log"])
+    plain = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky2"), tmp_path / "out2", gun_models="proxy")
+    cal = {f.name: f.read_bytes() for f in (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Guns").glob("*.nif")}
+    pla = {f.name: f.read_bytes() for f in (tmp_path / "out2" / "Data" / "Meshes" / "Skylands" / "Guns").glob("*.nif")}
+    assert cal and set(cal) != set(pla)  # the calibration holds change the mesh files (their names include the hold)

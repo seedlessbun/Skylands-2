@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import meshes as M
+from . import sheet_data as S
 from .skyrim import nif, nifread
 
 METHODS = ("off", "proxy", "native", "umodel", "auto")
@@ -32,6 +33,9 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 # as a fraction of the crossbow came out far too big next to the player
 LENGTH = {"pistol": 10.2, "smg": 15.0, "assault_rifle": 21.0, "shotgun": 21.0, "sniper": 26.4, "launcher": 22.8}
 # the first in-hand test showed a gun aimed down and to the right: turn it up and to the left (degrees, about the grip)
+# calibration build: each rarity (level 1-6) gets a different turn from the plain fit, so one install shows six holds side by side
+# (pitch, yaw, roll about the barrel axis, degrees)
+CALIBRATION = {1: (90.0, 0.0, 0.0), 2: (-90.0, 0.0, 0.0), 3: (0.0, 0.0, 90.0), 4: (0.0, 0.0, -90.0), 5: (0.0, 90.0, 0.0), 6: (0.0, -90.0, 0.0)}
 HOLD_PITCH, HOLD_YAW = 112.0, 18.0  # 22 from the first correction + 90 asked for after the second in-hand test
 
 PALETTE = {  # body colour, trim colour per manufacturer
@@ -223,10 +227,11 @@ class GunModels:
     """Builds and writes gun meshes into out_data (Meshes/..., Textures/...), one NIF per distinct look."""
 
     def __init__(self, method: str, out_data: Path, vanilla_nif: bytes | None, say=print, extra_sources=None,
-                 spin: float = 0.0, scale: float = 1.0, pitch: float = 0.0) -> None:
+                 spin: float = 0.0, scale: float = 1.0, pitch: float = 0.0, calibrate: bool = False) -> None:
         if method not in METHODS:
             raise ValueError(f"unknown gun model method {method!r}")
         self.method = method
+        self.calibrate = calibrate  # a different hold per rarity, for finding the right one by eye
         self.pitch = pitch  # extra nose-up angle in degrees on top of the built-in hold correction
         self.spin, self.scale = spin, scale  # extra turn about the up axis (degrees) and size multiplier, for correcting the fit by hand
         self.out = Path(out_data)
@@ -251,6 +256,8 @@ class GunModels:
             except (nifread.NifError, ValueError, struct.error) as e:
                 say(f"Gun models: could not read the vanilla crossbow's extra data ({e})")
         say(f"Gun models ({method}): {self.fit.note}")
+        if calibrate:
+            say(f"Gun models: CALIBRATION build, hold by rarity (pitch, yaw, roll): {CALIBRATION}")
         say(f"Gun models: hold correction pitch {HOLD_PITCH + pitch:g} deg (built in {HOLD_PITCH:g} + extra {pitch:g}), yaw {HOLD_YAW + spin:g} deg "
             f"(built in {HOLD_YAW:g} + extra {spin:g}), size x{scale:g}")
         self.written: dict[str, str] = {}  # look key -> mesh path under Meshes\
@@ -313,6 +320,9 @@ class GunModels:
                     part.texture = f"c_{body[0]:02x}{body[1]:02x}{body[2]:02x}"
                 part.normal_map = "flat_n"
             look = f"{method}|" + "|".join(f"{k}={v}" for k, v in sorted(built.get("parts", {}).items()))
+        calib_level = S.RARITIES[rarity_id].level if self.calibrate and rarity_id in S.RARITIES else 1
+        if self.calibrate:
+            look += f"|calibration {calib_level}"
         key = hashlib.sha1(look.encode()).hexdigest()[:10]
         if key in self.written:
             self.stats["shared"] += 1
@@ -331,11 +341,17 @@ class GunModels:
             placed = [M.transformed(p, None, 1.0, (-cx, -cy, -cz)) for p in placed]
         if method != "proxy":
             placed = [M.ensure_outward(p) for p in placed]
-        pitch = math.radians(HOLD_PITCH + self.pitch)
+        if self.calibrate:
+            hold_pitch, hold_yaw, hold_roll = CALIBRATION[calib_level]
+        else:
+            hold_pitch, hold_yaw, hold_roll = HOLD_PITCH + self.pitch, HOLD_YAW + self.spin, 0.0
+        roll = math.radians(hold_roll)  # about the barrel axis
+        placed = [M.transformed(p, ((math.cos(roll), 0.0, math.sin(roll)), (0.0, 1.0, 0.0), (-math.sin(roll), 0.0, math.cos(roll)))) for p in placed] if roll else placed
+        pitch = math.radians(hold_pitch)
         up_turn = ((1.0, 0.0, 0.0), (0.0, math.cos(pitch), -math.sin(pitch)), (0.0, math.sin(pitch), math.cos(pitch)))  # barrel +y towards +z
         placed = [M.transformed(p, up_turn) for p in placed]
-        if self.spin or HOLD_YAW:
-            a = math.radians(self.spin + HOLD_YAW)
+        if hold_yaw:
+            a = math.radians(hold_yaw)
             turn = ((math.cos(a), -math.sin(a), 0.0), (math.sin(a), math.cos(a), 0.0), (0.0, 0.0, 1.0))
             placed = [M.transformed(p, turn) for p in placed]
         placed = [fit_mesh(p, self.fit, 1.0) for p in placed]
