@@ -30,7 +30,7 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
 # length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
 # as a fraction of the crossbow came out far too big next to the player
-LENGTH = {"pistol": 9.4, "smg": 13.8, "assault_rifle": 19.3, "shotgun": 19.3, "sniper": 24.2, "launcher": 20.9}
+LENGTH = {"pistol": 10.2, "smg": 15.0, "assault_rifle": 21.0, "shotgun": 21.0, "sniper": 26.4, "launcher": 22.8}
 # the first in-hand test showed a gun aimed down and to the right: turn it up and to the left (degrees, about the grip)
 HOLD_PITCH, HOLD_YAW = 112.0, 18.0  # 22 from the first correction + 90 asked for after the second in-hand test
 
