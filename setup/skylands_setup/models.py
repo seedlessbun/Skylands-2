@@ -39,6 +39,7 @@ CALIBRATION = {1: (90.0, 0.0, 0.0), 2: (-90.0, 0.0, 0.0), 3: (0.0, 0.0, 90.0), 4
 # The calibration test: +90 pointed down, -90 straight up, and the plain fit (0) was upside down and backwards. Going round
 # from backwards: +90 is down, +180 is forwards and upright, -90 is up, so 180 is the hold.
 HOLD_PITCH, HOLD_YAW = 180.0, 0.0
+GRIP_DEPTH = 0.47  # how far down the gun's height (0 = top, 1 = bottom) the hand holds it; was 0.62: raising the hold point brings the gun down 15% of its height
 GRIP_AT = 0.38  # where along the gun (0 = rear, 1 = muzzle) the hand holds it; was 0.28, raised to move the gun back in the hand
 
 PALETTE = {  # body colour, trim colour per manufacturer
@@ -363,7 +364,7 @@ class GunModels:
         # the grip is the canonical origin for proxies; real meshes are re-centred on the body below the receiver
         if method != "proxy":
             plo, phi = _bounds_of(placed)
-            cx, cy, cz = (plo[0] + phi[0]) / 2, plo[1] + (phi[1] - plo[1]) * GRIP_AT, phi[2] - (phi[2] - plo[2]) * 0.62
+            cx, cy, cz = (plo[0] + phi[0]) / 2, plo[1] + (phi[1] - plo[1]) * GRIP_AT, phi[2] - (phi[2] - plo[2]) * GRIP_DEPTH
             placed = [M.transformed(p, None, 1.0, (-cx, -cy, -cz)) for p in placed]
         if method != "proxy":
             placed = [M.ensure_outward(p) for p in placed]
