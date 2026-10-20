@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.11.2"
+VERSION = "0.11.3"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -186,8 +186,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--done", required=True, help="marker file written when everything is installed")
     ap.add_argument("--gun-models", default="off", choices=["off", "proxy", "native", "umodel", "auto"],
                     help="where the guns get their own meshes from (default: off, every gun looks like the crossbow)")
-    ap.add_argument("--gun-shooting", default="off", choices=["off", "bullets", "blast", "both"],
-                    help="bullets: the steel bolt becomes a fast flat shot; blast: launchers and elemental guns explode where they hit; both")
+    ap.add_argument("--gun-shooting", default="off", choices=["off", "bullets", "bl2", "both"],
+                    help="bl2: Borderlands rounds per gun type and element (fast bullets, rockets and elemental guns explode); bullets: only the steel bolt becomes a fast flat shot; both")
     ap.add_argument("--gun-calibrate", action="store_true", help="give each rarity a different hold (for finding the right one by eye)")
     ap.add_argument("--gun-pitch", type=float, default=0.0, help="raise the barrel this many more degrees (negative lowers it)")
     ap.add_argument("--gun-spin", type=float, default=0.0, help="turn every gun model this many degrees about its up axis (fixes a gun facing the wrong way)")

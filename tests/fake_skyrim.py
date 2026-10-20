@@ -213,6 +213,12 @@ def build_full(root: Path) -> Path:
                                        sub("MODL", z("dlc01\\weapons\\crossbow\\crossbow.nif")), sub("ETYP", struct.pack("<I", 1)),
                                        sub("DESC", sid(2)), sub("DATA", struct.pack("<IfH", 120, 14.0, 19)),
                                        sub("DNAM", struct.pack("<BBHff", 9, 0, 0, 1.0, 1.0) + b"\0" * 92), sub("CRDT", b"\0" * 24)], compress=True)
-    ammo = record("AMMO", 0x02000801, [sub("EDID", z("DLC1BoltSteel")), sub("FULL", sid(1))])
-    (data / "Dawnguard.esm").write_bytes(tes_dg + group("WEAP", [weap]) + group("AMMO", [ammo]))
+    proj = record("PROJ", 0x02000802, [sub("EDID", z("DLC1BoltProjectile")), sub("OBND", b"\0" * 12),
+                                       sub("DATA", struct.pack("<HHfffIIfffIIfffIIIffffII", 0x40, 0x40, 0.2, 4000.0, 6000.0, 0, 0, 0.0, 0.0, 0.0, 0, 0,
+                                                               0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0))])
+    ammo = record("AMMO", 0x02000801, [sub("EDID", z("DLC1BoltSteel")), sub("FULL", sid(1)),
+                                       sub("DATA", struct.pack("<IIfI", 0x02000802, 0, 8.0, 1))])
+    expl = record("EXPL", 0x02000803, [sub("EDID", z("DLC1BoltExplosionFrost02")), sub("OBND", b"\0" * 12), sub("MODL", z("fx\\blast.nif")),
+                                       sub("DATA", b"\0" * 52)])
+    (data / "Dawnguard.esm").write_bytes(tes_dg + group("WEAP", [weap]) + group("AMMO", [ammo]) + group("PROJ", [proj]) + group("EXPL", [expl]))
     return root

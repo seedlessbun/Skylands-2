@@ -370,18 +370,29 @@ def test_calibration_build_holds_each_rarity_differently(tmp_path):
     assert cal and set(cal) != set(pla)  # the calibration holds change the mesh files (their names include the hold)
 
 
-def test_shooting_blasts_and_bolts_go_in_the_second_plugin(tmp_path):
+def test_shooting_rounds_go_in_the_second_plugin(tmp_path):
+    import struct as st
+
     fake_bl2.pandora_install(tmp_path / "bl2")
     bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
     bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
-    sky = fake_skyrim.build_full(tmp_path / "sky")
-    plain = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky0"), tmp_path / "out0")
-    rep = generate.generate(bl2, sky, tmp_path / "out", shooting="both")
+    generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky0"), tmp_path / "out0")
+    rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", shooting="bl2")
     assert (tmp_path / "out" / "Data" / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()
-    tes, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"EXPL", "MGEF", "ENCH"})
-    assert any("SkylandsBlast" in r.edid for r in recs["EXPL"]) and any(r.edid.startswith("SkylandsBlastFx") for r in recs["MGEF"])
-    assert recs["ENCH"] and rep["blasts"]["guns"] > 0
-    assert any(line.startswith("Shooting:") for line in rep["model_log"])
+    tes, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"AMMO", "PROJ", "EXPL", "KYWD", "WEAP"})
+    ammo = sorted(recs["AMMO"], key=lambda r: r.form_id)
+    assert len(ammo) == 30 and ammo[0].form_id & 0xFFFFFF == 0x800 and ammo[0].edid == "SkylandsRound_pistol_plain"
+    kw = {r.form_id & 0xFFFFFF: r.edid for r in recs["KYWD"]}
+    assert kw[0x81E] == "SkylandsShot_pistol" and kw[0x823] == "SkylandsShot_launcher" and kw[0x824] == "SkylandsShot_Fire" and kw[0x827] == "SkylandsShot_Slag"
+    proj = {r.edid: r for r in recs["PROJ"]}
+    pd = proj["SkylandsRound_launcher_Fire"].first("DATA")
+    assert st.unpack_from("<H", pd)[0] & 0x2 and st.unpack_from("<I", pd, 36)[0] != 0  # explodes
+    assert not st.unpack_from("<H", proj["SkylandsRound_pistol_plain"].first("DATA"))[0] & 0x2  # a plain bullet does not
+    assert abs(st.unpack_from("<f", pd, 8)[0] - 6000 / 3) < 1
+    for w in recs["WEAP"]:  # every gun says which rounds it uses
+        ids = st.unpack(f"<{len(w.first('KWDA')) // 4}I", w.first("KWDA"))
+        assert any(i & 0xFFFFFF in range(0x81E, 0x824) for i in ids)
+    assert rep["rounds"]["ammo"] == 30
 
 
 def test_gun_mesh_length_follows_the_size_table(tmp_path):

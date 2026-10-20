@@ -1,0 +1,22 @@
+{
+  "sheet": "shooting",
+  "description": "How Borderlands 2 guns shoot, read from the game by Run-ShootingSurvey.bat (GD_Weap_*.A_Weapons weapon types, FiringModes). Speeds are Borderlands units per second; the generator converts them. Per-manufacturer values differ (clip size 5-48, spread 1.0-8.0); these are the common defaults.",
+  "columns": {
+    "id": "gun type id (matches gun_types)",
+    "speed_bl2": "projectile speed in Borderlands units/s (FiringModeDefinition.Speed; the launcher's rocket speed was not in the survey, so 6000 is an estimate)",
+    "spread_deg": "WeaponTypeDefinition.Spread",
+    "fire_interval": "seconds between shots (WeaponTypeDefinition.FireRate)",
+    "clip": "WeaponTypeDefinition.ClipSize of the Bandit weapon type",
+    "reload": "WeaponTypeDefinition.ReloadTime in seconds",
+    "pellets": "projectiles per shot (ProjectilesPerShot; shotguns fire 6)",
+    "explosive": "yes when every shot explodes (launcher rockets); elemental guns of any type use Default_Elemental_Explosions"
+  },
+  "rows": [
+    {"id": "pistol", "speed_bl2": 21500, "spread_deg": 2.4, "fire_interval": 0.23, "clip": 30, "reload": 3.0, "pellets": 1, "explosive": "no"},
+    {"id": "smg", "speed_bl2": 20000, "spread_deg": 1.8, "fire_interval": 0.13, "clip": 48, "reload": 4.2, "pellets": 1, "explosive": "no"},
+    {"id": "assault_rifle", "speed_bl2": 25000, "spread_deg": 2.5, "fire_interval": 0.15, "clip": 40, "reload": 5.0, "pellets": 1, "explosive": "no"},
+    {"id": "shotgun", "speed_bl2": 20000, "spread_deg": 8.0, "fire_interval": 0.8, "clip": 9, "reload": 4.4, "pellets": 6, "explosive": "no"},
+    {"id": "sniper", "speed_bl2": 45000, "spread_deg": 1.0, "fire_interval": 0.15, "clip": 6, "reload": 4.0, "pellets": 1, "explosive": "no"},
+    {"id": "launcher", "speed_bl2": 6000, "spread_deg": 4.0, "fire_interval": 1.0, "clip": 5, "reload": 8.0, "pellets": 1, "explosive": "yes"}
+  ]
+}

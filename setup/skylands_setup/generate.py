@@ -238,34 +238,51 @@ MGEF_EXPLOSION_AT = 76
 BOLT_SPEED, BOLT_GRAVITY = 9000.0, 0.02  # PROJ DATA offsets 8 (speed) and 4 (gravity): a fast, nearly flat shot
 
 
-class Blasts:
-    """An explosion (EXPL) that carries the gun's element, delivered by an extra effect on the gun's own enchantment, so every
-    hit blows up where it lands. Donor explosions come from the player's Skyrim files (found by editor id); with none found the
-    blast is still written (damage and element, no art)."""
+KINDS = ["pistol", "smg", "assault_rifle", "shotgun", "sniper", "launcher"]  # index = kind keyword number
+ELEMENT_NAMES = ["Fire", "Shock", "Corrosive", "Slag"]  # element keyword number = index + 1 (0 = none)
+KIND_AT, ELEM_AT = 0x81E - 0x800, 0x824 - 0x800  # the script finds the kind/element keywords at these local ids (SkylandsGunModels.esp)
+ROUND_NAMES = {"pistol": "Pistol Rounds", "smg": "SMG Rounds", "assault_rifle": "Rifle Rounds", "shotgun": "Shells",
+               "sniper": "Sniper Rounds", "launcher": "Rockets"}
+PROJ_FLAGS_AT, PROJ_GRAVITY_AT, PROJ_SPEED_AT, PROJ_RANGE_AT, PROJ_EXPLOSION_AT = 0, 4, 8, 12, 36
+BL2_TO_SKYRIM_SPEED = 1 / 3.0  # Borderlands units per second to Skyrim's: a bullet at 21500 becomes ~7000, an arrow flies at ~4000
 
-    def __init__(self, view: esp.Plugin, m: Masters, template: Record, enchants: dict, log: list[str]) -> None:
-        self.view, self.m, self.template, self.enchants, self.log = view, m, template, enchants, log
-        self.expls: dict[tuple, int] = {}
-        self.carriers: dict[tuple, int] = {}
+
+class Rounds:
+    """Borderlands-style rounds: one AMMO (with its own projectile and, for launchers and elemental guns, its own explosion)
+    for every gun type x element. The numbers (projectile speed, splash) come from sheets/shooting.json, read from Borderlands 2.
+    Everything is in the optional second plugin. Ids are reserved first, in a fixed order, so the watcher script can find them
+    by number with Game.GetFormFromFile: ammo 0x800+kind*5+element, kind keywords 0x81E+kind, element keywords 0x824+element."""
+
+    def __init__(self, view: esp.Plugin, m: Masters, bolts: Record, base_enchant: dict, log: list[str]) -> None:
+        self.view, self.m, self.bolts, self.enchants, self.log = view, m, bolts, base_enchant, log
+        self.ammo_ids = [[view.new_id(f"AMMO:SkylandsRound_{t}_{e}") for e in range(5)] for t in KINDS]
+        self.kind_kw = [view.new_id(f"KYWD:SkylandsKind_{t}") for t in KINDS]
+        self.elem_kw = [view.new_id(f"KYWD:SkylandsElement_{e}") for e in ELEMENT_NAMES]
+        assert self.ammo_ids[0][0] & 0xFFFFFF == 0x800 and self.kind_kw[0] & 0xFFFFFF == 0x800 + KIND_AT
+        for kid, name in [*zip(self.kind_kw, KINDS), *zip(self.elem_kw, ELEMENT_NAMES)]:
+            view.override(esp.Rec("KYWD", kid, [("EDID", esp.zstr(f"SkylandsShot_{name}"))]))
+        data = bolts.first("DATA")
+        self.bolt_proj = self.m.by_type.get("PROJ", {}).get(struct.unpack_from("<I", data)[0]) if data and len(data) >= 4 else None
+        if self.bolt_proj is None or len(self.bolt_proj.first("DATA") or b"") < 40:
+            log.append("Shooting: the steel bolt's projectile was not found; Borderlands rounds need it")
+            self.bolt_proj = None
         self.donors: dict[object, Record | None] = {}
         self.made = 0
 
     def donor(self, element: str | None) -> Record | None:
         if element not in self.donors:
             rx = re.compile(EXPL_DONOR.get(element.lower() if element else None, EXPL_DONOR[None]), re.I)
-            found = [r for r in sorted(self.m.by_type.get("EXPL", {}).values(), key=lambda r: r.edid) if rx.search(r.edid) and (r.first("DATA") or b"") and len(r.first("DATA")) >= 52]
-            found.sort(key=lambda r: (0 if r.first("MODL") else 1))
+            found = [r for r in sorted(self.m.by_type.get("EXPL", {}).values(), key=lambda r: r.edid)
+                     if rx.search(r.edid) and len(r.first("DATA") or b"") >= 52]
+            found.sort(key=lambda r: (0 if r.first("MODL") else 1, 0 if "bolt" in r.edid.lower() else 1))
             self.donors[element] = found[0] if found else None
-            self.log.append(f"Shooting: blast art for {element or 'plain'}: " + (found[0].edid if found else "no vanilla explosion found (no art)"))
+            self.log.append(f"Shooting: explosion art for {element or 'plain'}: " + (found[0].edid if found else "no vanilla explosion found (no art)"))
         return self.donors[element]
 
-    def expl(self, gun_type: str, element: str | None, damage: float) -> int:
-        radius, frac = SPLASH.get(gun_type, (80.0, 0.3))
-        dmg = max(5, round(damage * frac / 5) * 5)
-        key = (gun_type, element, dmg)
-        if key in self.expls:
-            return self.expls[key]
-        edid = f"SkylandsBlast_{gun_type}_{element or 'plain'}_{dmg}"
+    def expl(self, kind: str, element: str | None, base_damage: float) -> int:
+        radius, frac = SPLASH.get(kind, (80.0, 0.3))
+        dmg = max(5, round(base_damage * frac / 5) * 5)
+        edid = f"SkylandsBlast_{kind}_{element or 'plain'}"
         donor = self.donor(element)
         r = esp.Rec("EXPL", self.view.new_id(f"EXPL:{edid}"), [])
         if donor is not None:
@@ -276,42 +293,44 @@ class Blasts:
             r.add("EDID", esp.zstr(edid)).add("OBND", struct.pack("<6h", 0, 0, 0, 0, 0, 0))
             data = bytearray(52)
             struct.pack_into("<I", data, 48, 1)
-        struct.pack_into("<fff", data, EXPL_FORCE_AT, 120.0 if gun_type == "launcher" else 30.0, float(dmg), radius)
+        struct.pack_into("<fff", data, EXPL_FORCE_AT, 120.0 if kind == "launcher" else 30.0, float(dmg), radius)
         r.set("DATA", bytes(data))
         if element is not None and self.enchants.get(element) is not None:
             insert_ordered(r, "EITM", esp.u32(self.enchants[element].form_id), EXPL_ORDER)
         self.view.override(r)
-        self.expls[key] = r.form_id
         return r.form_id
 
-    def carrier(self, key: tuple, expl_id: int) -> int:
-        """A magic effect that does nothing but spawn the explosion where the enchanted weapon hits."""
-        if key in self.carriers:
-            return self.carriers[key]
-        edid = "SkylandsBlastFx_" + "_".join(str(k) for k in key)
-        r = esp.Rec("MGEF", self.view.new_id(f"MGEF:{edid}"), [])
-        r.add("EDID", esp.zstr(edid)).add("FULL", esp.zstr("Blast"))
-        data = bytearray(self.template.first("DATA") or b"\0" * 152)
-        if len(data) >= MGEF_AV_AT + 4:
-            struct.pack_into("<i", data, MGEF_AV_AT, AV_VARIABLE10)
-            for at in MGEF_ART_AT:
-                if len(data) >= at + 4:
-                    struct.pack_into("<I", data, at, 0)
-        if len(data) >= MGEF_EXPLOSION_AT + 4:
-            struct.pack_into("<I", data, MGEF_EXPLOSION_AT, expl_id)
-        r.add("DATA", bytes(data))
-        self.view.override(r)
-        self.carriers[key] = r.form_id
-        return r.form_id
-
-    def add(self, ench: esp.Rec, gun_type: str, element: str | None, damage: float) -> None:
-        """Override the gun's enchantment (a record of Skylands.esp) with an extra blast effect."""
-        expl_id = self.expl(gun_type, element, damage)
-        mg = self.carrier((gun_type, element, expl_id & 0xFFFFFF), expl_id)
-        e2 = esp.Rec("ENCH", ench.form_id, list(ench.subs), flags=ench.flags)
-        e2.add("EFID", esp.u32(mg)).add("EFIT", struct.pack("<fII", 1.0, 0, 0))  # magnitude 1 on an unused actor value: a zero effect may be skipped
-        self.view.override(e2)
+    def build(self, kind: str, element: str | None, base_damage: float, shot) -> None:
+        """The projectile and ammo for one gun type x element (ids were reserved in __init__)."""
+        t, e = KINDS.index(kind), 0 if element not in ELEMENT_NAMES else ELEMENT_NAMES.index(element) + 1
+        explode = element is not None or kind == "launcher"
+        edid = f"SkylandsRound_{kind}_{element or 'plain'}"
+        proj_id = self.view.new_id(f"PROJ:{edid}")
+        if self.bolt_proj is not None:
+            pr = esp.Rec("PROJ", proj_id, [(sig, d) for sig, d in self.bolt_proj.subrecords])
+            pr.set("EDID", esp.zstr(edid))
+            pd = bytearray(self.bolt_proj.first("DATA"))
+            speed = float(shot.speed_bl2 if shot else 20000) * BL2_TO_SKYRIM_SPEED
+            struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0 if kind != "launcher" else 0.02, speed)
+            struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
+            if explode:
+                flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] | 0x2
+                struct.pack_into("<H", pd, PROJ_FLAGS_AT, flags)
+                struct.pack_into("<I", pd, PROJ_EXPLOSION_AT, self.expl(kind, element, base_damage))
+            pr.set("DATA", bytes(pd))
+            self.view.override(pr)
+        data = self.bolts.first("DATA")
+        am = esp.Rec("AMMO", self.ammo_ids[t][e], [(sig, d) for sig, d in self.bolts.subrecords])
+        am.set("EDID", esp.zstr(edid))
+        am.set("FULL", esp.zstr(ROUND_NAMES[kind] + (f" ({element})" if element else "")))
+        am.drop("DESC")
+        if data and len(data) >= 4 and self.bolt_proj is not None:
+            am.set("DATA", struct.pack("<I", proj_id) + data[4:])
+        self.view.override(am)
         self.made += 1
+
+    def keywords(self, kind: str, element: str | None) -> list[int]:
+        return [self.kind_kw[KINDS.index(kind)], *([self.elem_kw[ELEMENT_NAMES.index(element)]] if element in ELEMENT_NAMES else [])]
 
 
 def tune_bolts(view: esp.Plugin, m: Masters, bolts: Record, log: list[str]) -> bool:
@@ -516,7 +535,13 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     base_enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment) for e in S.ELEMENTS.values()}
     any_enchant = next(iter(base_enchant.values()))
     stats_mgef = stats_template(m, any_enchant)
-    blasts = Blasts(view, m, stats_mgef, base_enchant, report["model_log"]) if shooting in ("blast", "both") else None
+    rounds = Rounds(view, m, bolts, base_enchant, report["model_log"]) if shooting in ("bl2", "both") else None
+    if rounds is not None:
+        shots = S.SHOOTING
+        for kind in KINDS:
+            gtype = next(g for g in S.GUN_TYPES.values() if g.id == kind)
+            for element in (None, *ELEMENT_NAMES):
+                rounds.build(kind, element, float(gtype.base_damage), shots.get(kind))
     if shooting in ("bullets", "both"):
         tune_bolts(view, m, bolts, report["model_log"])
 
@@ -554,8 +579,6 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                                   g.get("clip", 0), assemble.parts_line(built["parts"]))
             ench = gun_enchant(p, edid, 0.0, text, st["element_mult"], base_enchant.get(element) or any_enchant,
                                element is not None, stats_mgef)
-            if blasts is not None and (element is not None or g["type"] == "launcher"):
-                blasts.add(next(r for r in reversed(p.records) if r.form_id == ench), g["type"], element, damage)
             insert_ordered(w, "EITM", esp.u32(ench), WEAP_ORDER)
             insert_ordered(w, "EAMT", u16(65535), WEAP_ORDER)
             d = w.get("DATA") or b"\0" * 10
@@ -566,12 +589,13 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             crit = w.get("CRDT")
             if crit and len(crit) >= 2:
                 w.set("CRDT", u16(st["crit_damage"]) + crit[2:])
-            if models is not None:
-                mesh = models.model_for(g, built, rr.id, rarity_color(bl2["rarities"], rr.level), edid)
+            mesh = models.model_for(g, built, rr.id, rarity_color(bl2["rarities"], rr.level), edid) if models is not None else None
+            if mesh or rounds is not None:
+                # What changes about a gun with models or Borderlands rounds goes in a second plugin, as an override of the
+                # whole record, so Skylands.esp never changes (it must stay light or every save made with it loses its
+                # powers and guns).
+                w2 = esp.Rec(w.type, w.form_id, list(w.subs), flags=w.flags)
                 if mesh:
-                    # The real model goes in a second plugin so Skylands.esp never changes (it must stay light
-                    # or every save made with it loses its powers and guns).
-                    w2 = esp.Rec(w.type, w.form_id, list(w.subs), flags=w.flags)
                     w2.set("MODL", esp.zstr(mesh))
                     w2.drop("MODT", "MODS", "MO2T", "MO2S")
                     if mesh not in first_person:  # the model Skyrim shows in first person (and, it seems, in the inventory)
@@ -580,7 +604,12 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                         fp.add("DNAM", struct.pack("<fI", 30.0, 0))
                         first_person[mesh] = fp.form_id
                     insert_ordered(w2, "WNAM", esp.u32(first_person[mesh]), WEAP_ORDER)
-                    view.override(w2)
+                if rounds is not None:  # keywords that tell the watcher script which rounds this gun uses
+                    kw2 = w2.get("KWDA") or b""
+                    ids = [*struct.unpack(f"<{len(kw2) // 4}I", kw2), *rounds.keywords(g["type"], element)]
+                    insert_ordered(w2, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
+                    insert_ordered(w2, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)
+                view.override(w2)
             p.override(w)
             by_rarity.setdefault(rr.level, []).append(w.form_id)
             if g["type"] == "pistol" and rr.level == 1 and element is None:
@@ -590,9 +619,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                                                    **{k2: v for k2, v in st.items() if v is not None}}
     if not by_rarity:
         raise GenerateError("no Borderlands guns were extracted")
-    if blasts is not None:
-        report["blasts"] = {"explosions": len(blasts.expls), "guns": blasts.made}
-        report["model_log"].append(f"Shooting: {blasts.made} guns got a blast effect ({len(blasts.expls)} explosions)")
+    if rounds is not None:
+        report["rounds"] = {"ammo": rounds.made}
+        report["model_log"].append(f"Shooting: {rounds.made} Borderlands round types built")
     if models is not None:
         models.flush_textures()
         report["gun_models"] = {"method": gun_models, **models.stats, "by_method": models.by_method, "textures": len(models.textures)}
