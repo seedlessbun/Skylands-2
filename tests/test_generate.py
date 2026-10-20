@@ -382,3 +382,20 @@ def test_shooting_blasts_and_bolts_go_in_the_second_plugin(tmp_path):
     assert any("SkylandsBlast" in r.edid for r in recs["EXPL"]) and any(r.edid.startswith("SkylandsBlastFx") for r in recs["MGEF"])
     assert recs["ENCH"] and rep["blasts"]["guns"] > 0
     assert any(line.startswith("Shooting:") for line in rep["model_log"])
+
+
+def test_gun_mesh_length_follows_the_size_table(tmp_path):
+    from skylands_setup import models as models_mod
+    from skylands_setup.skyrim import nifread
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    for scale in (1.0, 1.5):  # a bigger --gun-scale must give bigger meshes
+        out = tmp_path / f"out{scale}"
+        generate.generate(bl2, fake_skyrim.build_full(tmp_path / f"sky{scale}"), out, gun_models="proxy", model_scale=scale, model_pitch=-models_mod.HOLD_PITCH)
+        f = next((out / "Data" / "Meshes" / "Skylands" / "Guns").glob("proxy_*.nif"))
+        pts = nifread.world_points(f.read_bytes())
+        longest = max(max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3))
+        assert abs(longest - models_mod.LENGTH["pistol"] * scale) < 0.05 * models_mod.LENGTH["pistol"] * scale, (scale, longest)

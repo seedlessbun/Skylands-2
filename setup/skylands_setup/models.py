@@ -31,12 +31,14 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
 # length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
 # as a fraction of the crossbow came out far too big next to the player
-LENGTH = {"pistol": 12.75, "smg": 18.75, "assault_rifle": 26.25, "shotgun": 26.25, "sniper": 33.0, "launcher": 28.5}
+LENGTH = {"pistol": 15.3, "smg": 22.5, "assault_rifle": 31.5, "shotgun": 31.5, "sniper": 39.6, "launcher": 34.2}
 # the first in-hand test showed a gun aimed down and to the right: turn it up and to the left (degrees, about the grip)
 # calibration build: each rarity (level 1-6) gets a different turn from the plain fit, so one install shows six holds side by side
 # (pitch, yaw, roll about the barrel axis, degrees)
 CALIBRATION = {1: (90.0, 0.0, 0.0), 2: (-90.0, 0.0, 0.0), 3: (0.0, 0.0, 90.0), 4: (0.0, 0.0, -90.0), 5: (0.0, 90.0, 0.0), 6: (0.0, -90.0, 0.0)}
-HOLD_PITCH, HOLD_YAW = 0.0, 0.0  # the calibration test: +90 pointed down, -90 straight up, and halfway (the plain fit) is right
+# The calibration test: +90 pointed down, -90 straight up, and the plain fit (0) was upside down and backwards. Going round
+# from backwards: +90 is down, +180 is forwards and upright, -90 is up, so 180 is the hold.
+HOLD_PITCH, HOLD_YAW = 180.0, 0.0
 
 PALETTE = {  # body colour, trim colour per manufacturer
     "Bandit": ((120, 78, 52), (70, 56, 48)),
@@ -263,6 +265,7 @@ class GunModels:
         self.written: dict[str, str] = {}  # look key -> mesh path under Meshes\
         self.textures: dict[str, bytes] = {}
         self.raw: dict[str, bytes] = {}  # decoded Borderlands 2 textures as read, before they are tinted per manufacturer
+        self.sizes: dict[str, list[tuple[float, float]]] = {}  # gun type -> (barrel-axis length, longest side) of every mesh written, in Skyrim units
         self.shade_notes: dict[str, int] = {}
         self.prepared: dict[str, tuple] = {}  # texture key -> reduced RGB image (decoded once, tinted per manufacturer)
         self.stats = {"built": 0, "shared": 0, "failed": 0}
@@ -389,6 +392,7 @@ class GunModels:
         allp = M.merged([s[0] for s in shapes])
         lo2, hi2 = allp.bounds()
         half = tuple(max(0.02, (hi2[i] - lo2[i]) / 2 / HAVOK_SCALE) for i in range(3))
+        self.sizes.setdefault(gun_type, []).append((hi2[1] - lo2[1], max(hi2[i] - lo2[i] for i in range(3))))
         data = nif.gun(shapes, half, 2.0, "SkylandsGun", self.extra)  # type: ignore[arg-type]
         rel = f"{MESH_DIR}\\{method}_{key}.nif"
         path = self.out / "Meshes" / Path(*rel.split("\\"))
@@ -406,8 +410,10 @@ class GunModels:
         return len(self.textures)
 
     def summary(self) -> str:
+        sizes = ", ".join(f"{t} {sum(a for a, _ in v) / len(v):.1f}" for t, v in sorted(self.sizes.items()))
         return (f"Gun models: {self.stats['built']} meshes written, {self.stats['shared']} guns share one, "
-                f"{self.stats['failed']} kept the crossbow mesh; by method {self.by_method or 'none'}; {len(self.textures)} textures")
+                f"{self.stats['failed']} kept the crossbow mesh; by method {self.by_method or 'none'}; {len(self.textures)} textures; "
+                f"average length of the meshes written (Skyrim units, a hand is about 8): {sizes or 'none'}")
 
 
 def _sanity(parts: list[M.Mesh], lo: M.Vec, hi: M.Vec) -> None:
