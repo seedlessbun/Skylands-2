@@ -48,3 +48,14 @@ def test_part_name_dump_lists_where_each_mesh_name_lives(tmp_path):
     json.dumps(dump, default=str)
     assert {r["part"] for r in dump["parts"]} == {p for ps in by_slot.values() for p in ps}
     assert any(h.get("class") in ("StaticMesh", "SkeletalMesh") for hs in dump["where_found"].values() for h in hs)
+
+
+def test_shooting_survey_follows_references_between_objects(tmp_path):
+    from skylands_setup import shootingsurvey
+
+    test_gunparts.build_install(tmp_path / "bl2")
+    ix = Index(tmp_path / "bl2")
+    rep = shootingsurvey.crawl(ix, ["GD_Weap_Pistol.Barrel.Pistol_Barrel_A"], lambda m: None)
+    json.dumps(rep, default=str)
+    assert "GD_Weap_Pistol.Barrel.Pistol_Barrel_A" in rep["objects"]
+    assert rep["class_counts"].get("WeaponPartDefinition", 0) >= 1

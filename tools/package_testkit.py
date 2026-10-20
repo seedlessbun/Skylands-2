@@ -38,6 +38,15 @@ MODEL_BATS = {
     "Auto": ("auto", "native, then UModel, then proxy, for each gun"),
 }
 MODEL_BAT = INSTALL.replace("%*", "--gun-models %METHOD% %*").replace("%METHOD%", "{method}")
+SHOOTING_SURVEY = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+echo Reading how Borderlands 2 guns shoot: fire modes, projectiles, explosions, elements (changes nothing; several minutes) ...
+"%~dp0python\python.exe" -X utf8 -m skylands_setup shootingsurvey --out "%~dp0work\shooting-survey.json" %*
+echo.
+echo Send work\shooting-survey.json back to Claude.
+"""
 SURVEY = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -96,7 +105,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-52.zip"
+    out = dist / "Skylands-TestBuild-53.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -112,6 +121,7 @@ def main() -> int:
         for name, (method, _why) in MODEL_BATS.items():
             z.writestr(f"Install-Skylands-GunModels-{name}.bat", MODEL_BAT.format(method=method).replace("\n", "\r\n"))
         z.writestr("Run-GunModelSurvey.bat", SURVEY.replace("\n", "\r\n"))
+        z.writestr("Run-ShootingSurvey.bat", SHOOTING_SURVEY.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))
     print(f"{out.relative_to(ROOT)} {out.stat().st_size} bytes")
