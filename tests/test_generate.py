@@ -331,7 +331,10 @@ def test_gun_models_follow_the_vanilla_crossbow_axes(tmp_path):
     loose = sky / "Data" / "Meshes" / "dlc01" / "weapons" / "crossbow"
     loose.mkdir(parents=True)
     (loose / "crossbow.nif").write_bytes(vanilla)
-    rep = generate.generate(bl2, sky, tmp_path / "out", gun_models="proxy")
+    from skylands_setup import models as models_mod
+
+    # cancel the built-in hold correction so the barrel axis can be compared with the vanilla one directly
+    rep = generate.generate(bl2, sky, tmp_path / "out", gun_models="proxy", model_pitch=-models_mod.HOLD_PITCH, model_spin=-models_mod.HOLD_YAW)
     assert any("vanilla length 60.0 along axis x+" in line for line in rep["model_log"]), rep["model_log"]
     f = next((tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Guns").glob("proxy_*.nif"))
     pts = nifread.world_points(f.read_bytes())

@@ -30,9 +30,9 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
 # length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
 # as a fraction of the crossbow came out far too big next to the player
-LENGTH = {"pistol": 8.5, "smg": 12.5, "assault_rifle": 17.5, "shotgun": 17.5, "sniper": 22.0, "launcher": 19.0}
+LENGTH = {"pistol": 9.4, "smg": 13.8, "assault_rifle": 19.3, "shotgun": 19.3, "sniper": 24.2, "launcher": 20.9}
 # the first in-hand test showed a gun aimed down and to the right: turn it up and to the left (degrees, about the grip)
-HOLD_PITCH, HOLD_YAW = 22.0, 18.0
+HOLD_PITCH, HOLD_YAW = 112.0, 18.0  # 22 from the first correction + 90 asked for after the second in-hand test
 
 PALETTE = {  # body colour, trim colour per manufacturer
     "Bandit": ((120, 78, 52), (70, 56, 48)),
@@ -251,6 +251,8 @@ class GunModels:
             except (nifread.NifError, ValueError, struct.error) as e:
                 say(f"Gun models: could not read the vanilla crossbow's extra data ({e})")
         say(f"Gun models ({method}): {self.fit.note}")
+        say(f"Gun models: hold correction pitch {HOLD_PITCH + pitch:g} deg (built in {HOLD_PITCH:g} + extra {pitch:g}), yaw {HOLD_YAW + spin:g} deg "
+            f"(built in {HOLD_YAW:g} + extra {spin:g}), size x{scale:g}")
         self.written: dict[str, str] = {}  # look key -> mesh path under Meshes\
         self.textures: dict[str, bytes] = {}
         self.stats = {"built": 0, "shared": 0, "failed": 0}
