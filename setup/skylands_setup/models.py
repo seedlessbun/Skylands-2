@@ -31,12 +31,12 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
 # length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
 # as a fraction of the crossbow came out far too big next to the player
-LENGTH = {"pistol": 10.2, "smg": 15.0, "assault_rifle": 21.0, "shotgun": 21.0, "sniper": 26.4, "launcher": 22.8}
+LENGTH = {"pistol": 12.75, "smg": 18.75, "assault_rifle": 26.25, "shotgun": 26.25, "sniper": 33.0, "launcher": 28.5}
 # the first in-hand test showed a gun aimed down and to the right: turn it up and to the left (degrees, about the grip)
 # calibration build: each rarity (level 1-6) gets a different turn from the plain fit, so one install shows six holds side by side
 # (pitch, yaw, roll about the barrel axis, degrees)
 CALIBRATION = {1: (90.0, 0.0, 0.0), 2: (-90.0, 0.0, 0.0), 3: (0.0, 0.0, 90.0), 4: (0.0, 0.0, -90.0), 5: (0.0, 90.0, 0.0), 6: (0.0, -90.0, 0.0)}
-HOLD_PITCH, HOLD_YAW = 112.0, 18.0  # 22 from the first correction + 90 asked for after the second in-hand test
+HOLD_PITCH, HOLD_YAW = 0.0, 0.0  # the calibration test: +90 pointed down, -90 straight up, and halfway (the plain fit) is right
 
 PALETTE = {  # body colour, trim colour per manufacturer
     "Bandit": ((120, 78, 52), (70, 56, 48)),
