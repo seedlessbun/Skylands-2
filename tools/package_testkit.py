@@ -34,6 +34,9 @@ MODEL_BATS = {
     "Proxy": ("proxy", "stylised guns made from boxes and cylinders in each manufacturer's colours (always works)"),
     "Native": ("native", "Borderlands 2 gun meshes read straight from the game's packages"),
     "Native-Calibrate": ("native --gun-calibrate", "like Native, but every rarity is held differently (Common to E-tech = six holds) so you can pick the right one by eye"),
+    "Shooting-Blast": ("native --gun-shooting blast", "native gun models, and launchers (and every elemental gun) explode where they hit: fire burns, shock zaps, corrosive poisons, slag weakens, in an area"),
+    "Shooting-Bullets": ("native --gun-shooting bullets", "native gun models, and the steel bolt becomes a fast, nearly flat shot (bullet-like)"),
+    "Shooting-Both": ("native --gun-shooting both", "both of the above together"),
     "UModel": ("umodel", "Borderlands 2 gun meshes exported with the free UModel tool (downloaded during setup; if that fails, put umodel.exe from gildor.org in the work folder)"),
     "Auto": ("auto", "native, then UModel, then proxy, for each gun"),
 }
@@ -105,7 +108,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-53.zip"
+    out = dist / "Skylands-TestBuild-54.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
