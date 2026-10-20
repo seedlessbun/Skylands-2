@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import meshes as M
 from . import sheet_data as S
-from .skyrim import nif, nifread
+from .skyrim import dxt, nif, nifread
 
 METHODS = ("off", "proxy", "native", "umodel", "auto")
 MESH_DIR = "Skylands\\Guns"  # under Meshes\
@@ -262,10 +262,30 @@ class GunModels:
             f"(built in {HOLD_YAW:g} + extra {spin:g}), size x{scale:g}")
         self.written: dict[str, str] = {}  # look key -> mesh path under Meshes\
         self.textures: dict[str, bytes] = {}
+        self.raw: dict[str, bytes] = {}  # decoded Borderlands 2 textures as read, before they are tinted per manufacturer
+        self.shade_notes: dict[str, int] = {}
+        self.prepared: dict[str, tuple] = {}  # texture key -> reduced RGB image (decoded once, tinted per manufacturer)
         self.stats = {"built": 0, "shared": 0, "failed": 0}
         self.by_method: dict[str, int] = {}
 
     # --- textures
+    def _shaded(self, key: str, tint: tuple[int, int, int]) -> str | None:
+        """The decoded Borderlands 2 texture `key` in the manufacturer's colour (see skyrim.dxt.shade)."""
+        out = f"{key}_{tint[0]:02x}{tint[1]:02x}{tint[2]:02x}"
+        if out not in self.textures:
+            try:
+                if key not in self.prepared:
+                    self.prepared[key] = dxt.prepare(self.raw[key])
+                data, note = dxt.shade(self.prepared[key], tint)
+            except Exception as e:  # noqa: BLE001 - a texture that cannot be read becomes a plain colour
+                self.say(f"Gun models: texture {key} could not be shaded ({type(e).__name__}: {e})")
+                return None
+            self.textures[out] = data
+            if not self.shade_notes.get(note.split(" (")[0]):
+                self.shade_notes[note.split(" (")[0]] = 1
+                self.say(f"Gun models: texture {key}: {note}")
+        return out
+
     def _texture_path(self, key: str, normal: bool = False) -> str:
         if key not in self.textures:
             rgb = _hex_rgb(key)
@@ -313,10 +333,12 @@ class GunModels:
             if not parts:
                 return None
             for tkey, dds in src.take_textures().items():
-                self.add_texture(tkey, dds)
+                self.raw[tkey] = dds
             body = PALETTE.get(mfr, ((120, 120, 124), (60, 60, 64)))[0]
             for part in parts:  # a part whose texture could not be read still gets the manufacturer's colour
-                if not part.texture or part.texture not in self.textures:
+                if part.texture in self.raw:
+                    part.texture = self._shaded(part.texture, body)
+                if not part.texture or (part.texture not in self.textures and not _hex_rgb(part.texture)):
                     part.texture = f"c_{body[0]:02x}{body[1]:02x}{body[2]:02x}"
                 part.normal_map = "flat_n"
             look = f"{method}|" + "|".join(f"{k}={v}" for k, v in sorted(built.get("parts", {}).items()))

@@ -278,9 +278,9 @@ def test_native_gun_models_with_a_source_and_fallbacks(tmp_path):
             return {"t_deadbeef": nif_dds()}
 
     def nif_dds():
-        from skylands_setup.skyrim import nif
+        from skylands_setup.skyrim import dxt
 
-        return nif.dds_solid((9, 9, 9))
+        return dxt.encode(16, 16, bytes([90, 90, 90] * 256))
 
     fake_bl2.pandora_install(tmp_path / "bl2")
     bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
@@ -290,7 +290,7 @@ def test_native_gun_models_with_a_source_and_fallbacks(tmp_path):
     tes, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP"})
     paths = {r.first("MODL").rstrip(b"\0").decode() for r in recs["WEAP"]}
     assert all(p.startswith("Skylands\\Guns\\native_") for p in paths), paths  # every fake gun is a pistol
-    assert (tmp_path / "out" / "Data" / "Textures" / "Skylands" / "Guns" / "t_deadbeef.dds").is_file()
+    assert list((tmp_path / "out" / "Data" / "Textures" / "Skylands" / "Guns").glob("t_deadbeef_*.dds"))  # tinted per manufacturer
     assert rep["gun_models"]["by_method"] == {"native": rep["guns"]}
 
 
