@@ -324,7 +324,7 @@ class Rounds:
         am = esp.Rec("AMMO", self.ammo_ids[t][e], [(sig, d) for sig, d in self.bolts.subrecords])
         am.set("EDID", esp.zstr(edid))
         am.set("FULL", esp.zstr(ROUND_NAMES[kind] + (f" ({element})" if element else "")))
-        am.drop("DESC")
+        am.drop("DESC", "ONAM")  # lstring ids of the vanilla record mean nothing in this plugin
         if data and len(data) >= 4 and self.bolt_proj is not None:
             am.set("DATA", struct.pack("<I", proj_id) + data[4:])
         self.view.override(am)
@@ -389,7 +389,7 @@ class Gunner:
 AIM_POINT_MESH = "Skylands\\AimPoint.nif"
 
 
-def make_gunner(view: esp.Plugin, m: Masters, rounds: "Rounds", gunner: Gunner) -> None:
+def make_gunner(view: esp.Plugin, m: Masters, rounds: "Rounds", gunner: Gunner, bolts_id: int) -> None:
     """The player's Borderlands shooting (script SkylandsGunner, see scripts.gunner): an ability with the rounds, keywords and
     the per-profile numbers as properties, and a start-game-enabled quest that gives the player that ability. All in the
     second plugin, so the forms it needs are properties (no Game.GetFormFromFile)."""
@@ -408,7 +408,7 @@ def make_gunner(view: esp.Plugin, m: Masters, rounds: "Rounds", gunner: Gunner) 
         ("Pellets", esp.P_INT_ARRAY, [r["pellets"] for r in rows]),
         ("Spread", esp.P_FLOAT_ARRAY, [r["spread"] for r in rows]),
         ("Interval", esp.P_FLOAT_ARRAY, [r["interval"] for r in rows]),
-        ("Marker", esp.P_OBJECT, aim.form_id), ("Verbose", esp.P_BOOL, True),
+        ("Marker", esp.P_OBJECT, aim.form_id), ("Verbose", esp.P_BOOL, True), ("Bolts", esp.P_OBJECT, bolts_id),
     ]
     template = m.need("MGEF", "AbWeaknessFireConstant")
     effect = script_effect(view, template, "SkylandsGunnerFx", "Skylands Gunner", "SkylandsGunner", props)
@@ -630,7 +630,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             for element in (None, *ELEMENT_NAMES):
                 rounds.build(kind, element, float(gtype.base_damage), shots.get(kind))
         gunner = Gunner(view, shots, bl2["weapons"]["guns"])
-        make_gunner(view, m, rounds, gunner)
+        make_gunner(view, m, rounds, gunner, bolts.form_id)
     if shooting in ("bullets", "both"):
         tune_bolts(view, m, bolts, report["model_log"])
 
