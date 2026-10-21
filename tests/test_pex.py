@@ -225,6 +225,7 @@ def test_gunner_scripts_decompile(tmp_path):
     (tmp_path / "q").mkdir()
     q = decompile(tmp_path / "q", scripts.gunner_quest(), "SkylandsGunnerQuest")
     assert "player.AddSpell(Ability, False)" in q and "Spell Property Ability Auto" in q
+    assert "player.HasSpell(Ability as Form)" in q or "Form f = Ability as Form" in q
     assert "Skylands quest started" in q and "Skylands: ability added" in q
 
 
@@ -232,7 +233,7 @@ def test_gunner_scripts_decompile(tmp_path):
 def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     psc = decompile(tmp_path, scripts.staff_gun(), "SkylandsStaffGun")
     assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc
-    for text in ("Reg = Self.RegisterForAnimationEvent(Me, \"MRh_SpellFire_Event\")", "Self.RegisterForAnimationEvent(Me, \"BeginCastRight\")",
+    for text in ("ObjectReference ref = Me as ObjectReference", "Reg = Self.RegisterForAnimationEvent(ref, \"MRh_SpellFire_Event\")", "Self.RegisterForAnimationEvent(ref, \"BeginCastRight\")",
                  "If asEventName == \"MRh_SpellFire_Event\"", "Staff gun event: ", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
                  "Event OnAnimationEvent(ObjectReference akSource, String asEventName)", "Fired += 1", "Mag -= 1", "Self.Reload()",
                  "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize", "Me.EquipItem(f, False, True)",

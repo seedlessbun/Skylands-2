@@ -1016,15 +1016,17 @@ def watcher() -> Script:
     give = Function(
         "Give",
         params=[("sp", "Spell"), ("title", "String")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String"), ("f", "Form")],
         code=[
             # the player's copy of this script has this build's own forms, so the powers are granted from here
-            ("callmethod", ("id", "HasSpell"), ("id", "Me"), ("id", "::temp0"), ("id", "sp")),
+            # (HasSpell takes a Form: the Spell passed as it is fails with "Type mismatch for argument 1")
+            ("cast", ("id", "f"), ("id", "sp")),
+            ("callmethod", ("id", "HasSpell"), ("id", "Me"), ("id", "::temp0"), ("id", "f")),
             ("jmpf", ("id", "::temp0"), ("lbl", "add")),
             ("return", None),
             ("label", "add"),
             ("callmethod", ("id", "AddSpell"), ("id", "Me"), NONE, ("id", "sp"), ("bool", False)),
-            ("callmethod", ("id", "HasSpell"), ("id", "Me"), ("id", "::temp0"), ("id", "sp")),
+            ("callmethod", ("id", "HasSpell"), ("id", "Me"), ("id", "::temp0"), ("id", "f")),
             ("jmpf", ("id", "::temp0"), ("lbl", "failed")),
             *notify(("str", "Skylands: you learned "), ("id", "title")),
             ("return", None),
@@ -2004,10 +2006,12 @@ def gunner_quest() -> Script:
                              ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)])
     on_update = Function(
         "OnUpdate",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("msg", "String"), ("f", "Form")],
         code=[
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::Ability_var")),
+            # HasSpell takes a Form: the Spell property passed as it is fails ("Type mismatch for argument 1")
+            ("cast", ("id", "f"), ("id", "::Ability_var")),
+            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "f")),
             ("not", ("id", "::temp0"), ("id", "::temp0")),
             ("jmpf", ("id", "::temp0"), ("lbl", "has")),
             ("callmethod", ("id", "AddSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::Ability_var"), ("bool", False)),
@@ -2044,12 +2048,14 @@ def staff_gun() -> Script:
     )
     start = Function(
         "Start",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("ref", "ObjectReference")],
         code=[
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, ("id", "Reg"), ("id", "Me"), ("str", "MRh_SpellFire_Event")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "Me"), ("str", "BeginCastRight")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "Me"), ("str", "MRh_SpellRelease_Event")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "Me"), ("str", "attackStart")),
+            # the game wants an ObjectReference here: an Actor variable passed as it is makes the call fail ("Type mismatch for argument 1")
+            ("cast", ("id", "ref"), ("id", "Me")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, ("id", "Reg"), ("id", "ref"), ("str", "MRh_SpellFire_Event")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "BeginCastRight")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "MRh_SpellRelease_Event")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "attackStart")),
             ("cast", ("id", "f"), ("id", "::StaffGun_var")),
             ("not", T0, ("id", "Given")),
             ("jmpf", T0, ("lbl", "had")),
