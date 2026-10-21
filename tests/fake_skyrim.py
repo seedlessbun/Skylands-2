@@ -216,7 +216,8 @@ def build_full(root: Path) -> Path:
                                                         sub("MODL", z("weapons\\staff\\staff.nif")), sub("EITM", struct.pack("<I", 0x6100)),
                                                         sub("EAMT", struct.pack("<H", 1000)), sub("ETYP", struct.pack("<I", 1)),
                                                         sub("DESC", sid(2)), sub("DATA", struct.pack("<IfH", 100, 8.0, 8)),
-                                                        sub("DNAM", struct.pack("<BBHff", 8, 0, 0, 1.0, 1.0) + b"\0" * 92), sub("CRDT", b"\0" * 24)])]))
+                                                        sub("DNAM", struct.pack("<BBHff", 8, 0, 0, 1.0, 1.0) + b"\0" * 92), sub("CRDT", b"\0" * 24),
+                                                        sub("CNAM", struct.pack("<I", 0x7401))])]))
     art_md = bytearray(bolt_md)
     struct.pack_into("<I", art_md, 64, 3)  # a script-archetype effect, like the Wabbajack's
     extra.append(group("MGEF", [record("MGEF", 0x5101, [sub("EDID", z("AAWabbajackFF")), sub("VMAD", b"\x05\x00\x02\x00\x00\x00"), sub("DATA", bytes(art_md))])]))

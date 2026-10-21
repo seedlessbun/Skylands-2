@@ -445,6 +445,7 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST"})
     w = next(r for r in recs["WEAP"] if r.edid == "SkylandsStaffSMG")
     assert w.first("DNAM")[0] == 8  # animation type: staff
+    assert w.first("CNAM") is None  # no template weapon: it would give the staff gun the vanilla staff's model
     assert w.first("EAMT") and w.first("MODL").rstrip(b"\0").endswith(b".nif") and b"Skylands" in w.first("MODL")
     en = next(r for r in recs["ENCH"] if r.edid == "SkylandsStaffSMG_Ench")
     assert st.unpack_from("<i", en.first("ENIT"))[0] == 0 and st.unpack_from("<I", en.first("ENIT"), 4)[0] & 1  # costs nothing
@@ -454,9 +455,9 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert st.unpack_from("<I", mg.first("DATA"), 72)[0] == proj.form_id and st.unpack_from("<f", mg.first("DATA"), 4)[0] == 0.0
     pd = proj.first("DATA")
     assert abs(st.unpack_from("<f", pd, 8)[0] - S.SHOOTING["smg"].speed_bl2 / 3) < 1 and st.unpack_from("<f", pd, 4)[0] == 0.0  # the SMG round's speed, flat
-    assert any(r.edid.startswith("SkylandsStaffGunQuest_") for r in recs["QUST"]) and any(r.edid.startswith("SkylandsStaffGunAbility_") for r in recs["SPEL"])
+    assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
-    vm = next(r for r in fx if r.edid.startswith("SkylandsStaffGunFx_")).first("VMAD")
+    vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
     assert b"SkylandsStaffGun" in vm and b"BulletSpell" in vm and b"MagSize" in vm and b"SpeedMult" in vm
     assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun.pex").is_file()
 
