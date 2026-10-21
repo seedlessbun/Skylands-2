@@ -238,6 +238,12 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
                  "Event OnAnimationEvent(ObjectReference akSource, String asEventName)", "Fired += 1", "Mag -= 1", "Self.Reload()",
                  "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize", "Me.EquipItem(f, False, True)",
                  "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
-                 "If w as Bool && w == StaffGun", "Staff gun script started: weapon ", "Equipped: ", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)"):
+                 "If w as Bool && w == StaffGun", "Staff gun script started: weapon ", "Equipped: id ", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)"):
         assert text in psc, text
     assert "Input." not in psc and "GetWeaponType" not in psc  # nothing that needs SKSE
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_retired_script_is_empty(tmp_path):
+    psc = decompile(tmp_path, scripts.retired("SkylandsStaffGun"), "SkylandsStaffGun")
+    assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc and "Function" not in psc and "Event" not in psc

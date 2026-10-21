@@ -2025,7 +2025,7 @@ def gunner_quest() -> Script:
                   functions=[on_init, on_update])
 
 
-def staff_gun() -> Script:
+def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     """SkylandsStaffGun extends ActiveMagicEffect: the staff-type automatic gun prototype (SkylandsGunModels.esp).
 
     The gun is a staff whose enchantment casts a spell that fires a Borderlands bullet (no ammo, no magicka, no charge cost).
@@ -2112,13 +2112,12 @@ def staff_gun() -> Script:
         code=[
             # every thing put on is named on screen with its id and the id of this script's staff gun; the staff gun arms the script
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
-            ("callmethod", ("id", "GetName"), ("id", "f"), ("id", "a")),
             ("callmethod", ("id", "GetFormID"), ("id", "f"), ("id", "i")),
             ("cast", ("id", "g"), ("id", "::StaffGun_var")),
             ("callmethod", ("id", "GetFormID"), ("id", "g"), ("id", "j")),
             ("cast", ("id", "b"), ("id", "i")),
             ("cast", ("id", "c"), ("id", "j")),
-            *notify(("str", "Equipped: "), ("id", "a"), ("str", " (id "), ("id", "b"), ("str", "), the staff gun is id "), ("id", "c")),
+            *notify(("str", "Equipped: id "), ("id", "b"), ("str", ", the staff gun is id "), ("id", "c")),
             ("label", "quiet"),
             ("cast", ("id", "w"), ("id", "f")),
             ("cast", T0, ("id", "w")),
@@ -2293,7 +2292,7 @@ def staff_gun() -> Script:
         ],
     )
     return Script(
-        name="SkylandsStaffGun",
+        name=name,
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
@@ -2302,3 +2301,9 @@ def staff_gun() -> Script:
                          ("SpeedMult", "Float"), ("Info", "String"), ("Verbose", "Bool")],
         functions=[on_start, on_load, start, report, on_equipped, equipped, on_unequipped, on_anim, shot, on_cast, arm, on_update, speed, count, reload_],
     )
+
+
+def retired(name: str) -> Script:
+    """A script with nothing in it, written over an earlier revision's file: a saved game keeps running the old script
+    objects of that name as ghosts, and with this they do nothing."""
+    return Script(name=name, parent="ActiveMagicEffect", functions=[])

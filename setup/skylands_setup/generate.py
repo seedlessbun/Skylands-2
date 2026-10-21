@@ -461,8 +461,9 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
-STAFF_REV = "0.13.10"
-STAFF_ID_SHIFT = 48  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_REV = "0.13.11"
+STAFF_SCRIPT = "SkylandsStaffGun11"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
+STAFF_ID_SHIFT = 72  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
 
 
@@ -604,7 +605,7 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     props = [("StaffGun", esp.P_OBJECT, w.form_id), ("BulletSpell", esp.P_OBJECT, bullet.form_id), ("MagSize", esp.P_INT, clip),
              ("ReloadTime", esp.P_FLOAT, reload_time), ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("Info", esp.P_STRING, info),
              ("Verbose", esp.P_BOOL, True)]
-    fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", "SkylandsStaffGun", props)
+    fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", STAFF_SCRIPT, props)
     ability = spell(view, "SkylandsStaffGunAbility", "", "",
                     struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0), [(fx, 0.0, 0, 0)])
     q = view.new("QUST", "SkylandsStaffGunQuest")
@@ -1055,6 +1056,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         (out_data / "Scripts" / "SkylandsGunner.pex").write_bytes(pex.write(scripts.gunner()))
         (out_data / "Scripts" / "SkylandsGunnerQuest.pex").write_bytes(pex.write(scripts.gunner_quest()))
         if shooting == "staff":
-            (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.staff_gun()))
+            (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
+            (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
     report["records"] = len(p.records)
     return report
