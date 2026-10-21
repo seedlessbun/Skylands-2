@@ -461,12 +461,15 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
-STAFF_REV = "0.13.13"
-STAFF_SCRIPT = "SkylandsStaffGun13"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
-STAFF_ID_SHIFT = 120  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_REV = "0.13.14"
+STAFF_SCRIPT = "SkylandsStaffGun14"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
+STAFF_ID_SHIFT = 144  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 STAFF_TRACER_MESH = "Skylands\\Tracer_StaffSMG.nif"
 PROJ_FLAG_MUZZLE_FLASH = 0x8
+PROJ_LIGHT_AT, PROJ_SOUND_AT = 16, 40
+MGEF_HOSTILE, MGEF_DETRIMENTAL, MGEF_HIT_SHADER_AT = 0x1, 0x4, 32
+STAFF_SCALE, STAFF_FORWARD, STAFF_LIFT = 1.25, 0.10, 0.10  # the model in the hand: size, and how far (of its length) it is moved forward and up
 ENIT_CAST_AT, ENIT_CHARGE_AT, MGEF_CASTING_AT = 8, 24, 80
 STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
 
@@ -507,6 +510,34 @@ def staff_donor(m: "Masters", element: str | None, log: list[str]):
     log.append(f"Staff gun: donor staff {w.edid} (animation type {w.first('DNAM')[0]}), enchantment {ench.edid}, effect {mg.edid}, projectile {pj.edid}"
                f" (of {len(found)} plain staffs)")
     return w, ench, mg, pj
+
+
+def trigger_donor(m: "Masters", element: str | None, log: list[str]):
+    """A vanilla CONCENTRATION effect (Flames, Frostbite, Sparks: value modifier, continuous, aimed, with a projectile of its own
+    and no script): (effect record, projectile record). The staff's trigger is a copy of one, because the game builds an aimed
+    concentration cast around its projectile; one with none crashed the game on the first shot (0.13.13). None when the game
+    has no such effect."""
+    rx = re.compile({"fire": r"fire", "shock": r"shock|spark|lightning", "corrosive": r"poison|acid", "slag": r"frost|ice"}.get(
+        element.lower() if element else "", r"fire|frost|shock"), re.I)
+    found = []
+    for mg in m.by_type["MGEF"].values():
+        md = mg.first("DATA")
+        if not md or len(md) < 88 or mg.first("VMAD") or not re.search(r"ConcAimed", mg.edid or "", re.I):
+            continue
+        archetype, casting, delivery = struct.unpack_from("<I", md, 64)[0], struct.unpack_from("<I", md, 80)[0], struct.unpack_from("<I", md, 84)[0]
+        if archetype != 0 or casting != 2 or delivery != 2:
+            continue
+        pj = m.by_type["PROJ"].get(struct.unpack_from("<I", md, MGEF_PROJECTILE_AT)[0])
+        if pj is None or len(pj.first("DATA") or b"") < 44 or pj.first("VMAD"):
+            continue
+        found.append((0 if rx.search(mg.edid) else 1, mg.edid, mg, pj))
+    if not found:
+        log.append("Staff gun: no plain vanilla concentration effect with a projectile was found; the staff gun is not built")
+        return None
+    found.sort(key=lambda t: t[:2])
+    _, _, mg, pj = found[0]
+    log.append(f"Staff gun: trigger donor effect {mg.edid}, projectile {pj.edid} (of {len(found)} concentration effects)")
+    return mg, pj
 
 
 def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, data_dir: Path, guns: list[dict], parts: dict, rarity_colors,
@@ -574,13 +605,31 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     # the staff's enchantment: the trigger effect, no cost, a huge charge
     # the trigger: an aimed concentration effect with no projectile and no damage. It is only there so the staff starts casting
     # the moment the button goes down and goes on for as long as it is held; the script fires the bullets meanwhile
-    tg = esp.Rec("MGEF", view.new_id(f"MGEF:{edid}_Trigger"), [(sig, d) for sig, d in d_mgef.subrecords if sig not in ("DNAM", "VMAD")])
+    trig = trigger_donor(m, element, log)
+    if trig is None:
+        return
+    c_mgef, c_proj = trig
+    # its projectile: the donor's flame with our tracer for a model, and no light, sound or explosion
+    tp = esp.Rec("PROJ", view.new_id(f"PROJ:{edid}_Trigger"), [(sig, d) for sig, d in c_proj.subrecords if sig not in ("VMAD", "MODT", "NAM1", "NAM2")])
+    tp.set("EDID", esp.zstr(f"{edid}_Trigger"))
+    tp.set("MODL", esp.zstr(STAFF_TRACER_MESH))
+    tpd = bytearray(c_proj.first("DATA"))
+    struct.pack_into("<II", tpd, PROJ_LIGHT_AT, 0, 0)  # light, muzzle flash light
+    struct.pack_into("<I", tpd, PROJ_EXPLOSION_AT, 0)
+    struct.pack_into("<I", tpd, PROJ_SOUND_AT, 0)
+    struct.pack_into("<H", tpd, PROJ_FLAGS_AT, struct.unpack_from("<H", tpd, PROJ_FLAGS_AT)[0] & ~(0x2 | PROJ_FLAG_MUZZLE_FLASH))
+    tp.set("DATA", bytes(tpd))
+    view.override(tp)
+    # the effect: the donor's concentration cast, doing nothing (no cost, not hostile, no hit art)
+    tg = esp.Rec("MGEF", view.new_id(f"MGEF:{edid}_Trigger"), [(sig, d) for sig, d in c_mgef.subrecords if sig not in ("DNAM", "VMAD")])
     tg.set("EDID", esp.zstr(f"{edid}_Trigger"))
     if tg.get("FULL") is not None:
         tg.set("FULL", esp.zstr("Skylands trigger"))
-    td = bytearray(d_mgef.first("DATA"))
+    td = bytearray(c_mgef.first("DATA"))
     struct.pack_into("<f", td, MGEF_COST_AT, 0.0)
-    struct.pack_into("<II", td, MGEF_PROJECTILE_AT, 0, 0)
+    struct.pack_into("<I", td, 0, struct.unpack_from("<I", td, 0)[0] & ~(MGEF_HOSTILE | MGEF_DETRIMENTAL))
+    struct.pack_into("<II", td, MGEF_HIT_SHADER_AT, 0, 0)  # hit shader, enchant shader
+    struct.pack_into("<II", td, MGEF_PROJECTILE_AT, tp.form_id, 0)
     struct.pack_into("<I", td, MGEF_CASTING_AT, 2)  # concentration
     tg.set("DATA", bytes(td))
     view.override(tg)
@@ -607,7 +656,8 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     insert_ordered(w, "DATA", struct.pack("<IfH", 600, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
     mesh = None
     if models is not None:
-        hold = models_mod.staff_hold(models_mod.find_vanilla_mesh(data_dir, staff.first("MODL"), log.append, "staff"), hold_turn, log.append)
+        hold = models_mod.staff_hold(models_mod.find_vanilla_mesh(data_dir, staff.first("MODL"), log.append, "staff"), hold_turn, log.append,
+                                     STAFF_SCALE, STAFF_FORWARD, STAFF_LIFT)
         log.append(f"Staff gun: fit {hold.note}; turn {hold_turn}; extra data {hold.extra}")
         mesh = models.model_for(gun, built, rr.id, rarity_colors(rr.level), edid, hold)
     if mesh:
@@ -1081,7 +1131,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         if shooting == "staff":
             (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
             (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
-            for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12"):
+            for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13"):
                 (out_data / "Scripts" / f"{old_name}.pex").write_bytes(pex.write(scripts.retired(old_name)))
     tracer_file = report.pop("staff_tracer", None)  # the mesh bytes are not part of the report
     if tracer_file:

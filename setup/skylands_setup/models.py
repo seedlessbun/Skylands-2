@@ -103,9 +103,13 @@ class Hold:
     roll: float = 0.0
     tag: str = "hold"
     note: str = ""
+    scale: float = 1.0  # size multiplier on the gun's length
+    forward: float = 0.0  # how far (of the gun's length) it is moved along its barrel, after the turn
+    lift: float = 0.0  # and along its own up
 
 
-def staff_hold(vanilla_nif: bytes | None, turn: tuple[float, float, float] = (0.0, 0.0, 0.0), say=None) -> Hold:
+def staff_hold(vanilla_nif: bytes | None, turn: tuple[float, float, float] = (0.0, 0.0, 0.0), say=None,
+               scale: float = 1.0, forward: float = 0.0, lift: float = 0.0) -> Hold:
     """Fit for a vanilla staff. A staff is long and thin, held near the middle with a head at one end; the gun's barrel goes
     towards the head (the end that is thicker). Where the axes cannot be measured the crossbow's assumption is used."""
     log = say or (lambda _m: None)
@@ -119,7 +123,7 @@ def staff_hold(vanilla_nif: bytes | None, turn: tuple[float, float, float] = (0.
             log(f"Staff gun: could not read the vanilla staff mesh ({e})")
     if len(pts) < 4:
         fit = Fit(IDENTITY, 100.0, "no vanilla staff mesh: assuming barrel +y, up +z")
-        return Hold(fit, extra, *turn, tag="staff", note=fit.note)
+        return Hold(fit, extra, *turn, tag="staff", note=fit.note, scale=scale, forward=forward, lift=lift)
     ext = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
     fwd = max(range(3), key=lambda i: ext[i])
     others = [i for i in range(3) if i != fwd]
@@ -139,7 +143,7 @@ def staff_hold(vanilla_nif: bytes | None, turn: tuple[float, float, float] = (0.
     rows = tuple(tuple((r, f, u)[c][i] for c in range(3)) for i in range(3))
     note = (f"vanilla staff {span:.0f} long along axis {'xyz'[fwd]}, head at {'+' if sign > 0 else '-'} (end spread {top:.0f} vs {bottom:.0f}), "
             f"mesh runs {lo:.0f}..{hi:.0f}")
-    return Hold(Fit(rows, span, note), extra, *turn, tag="staff", note=note)  # type: ignore[arg-type]
+    return Hold(Fit(rows, span, note), extra, *turn, tag="staff", note=note, scale=scale, forward=forward, lift=lift)  # type: ignore[arg-type]
 
 
 def find_vanilla_mesh(data_dir: Path, modl: bytes | None, say=None, what: str = "crossbow") -> bytes | None:
@@ -404,12 +408,12 @@ class GunModels:
         if self.calibrate:
             look += f"|calibration {calib_level}"
         if hold is not None:
-            look += f"|{hold.tag}|{hold.pitch:g},{hold.yaw:g},{hold.roll:g}"
+            look += f"|{hold.tag}|{hold.pitch:g},{hold.yaw:g},{hold.roll:g}|{hold.scale:g},{hold.forward:g},{hold.lift:g}"
         key = hashlib.sha1(look.encode()).hexdigest()[:10]
         if key in self.written:
             self.stats["shared"] += 1
             return self.written[key]
-        length = LENGTH.get(gun_type, 24.0) * self.scale
+        length = LENGTH.get(gun_type, 24.0) * self.scale * (hold.scale if hold is not None else 1.0)
         lo, hi = _bounds_of(parts)
         if method != "proxy":
             _sanity(parts, lo, hi)
@@ -439,6 +443,18 @@ class GunModels:
             a = math.radians(hold_yaw)
             turn = ((math.cos(a), -math.sin(a), 0.0), (math.sin(a), math.cos(a), 0.0), (0.0, 0.0, 1.0))
             placed = [M.transformed(p, turn) for p in placed]
+        if hold is not None and (hold.forward or hold.lift):
+            # moved along the barrel and the gun's own up, as they are after the turn (the turn is applied to the basis the same way)
+            probe = [M.Mesh(positions=[(0.0, 1.0, 0.0), (0.0, 0.0, 1.0)], normals=[(0.0, 1.0, 0.0), (0.0, 0.0, 1.0)], tris=[]) ]
+            basis = probe[0]
+            if roll:
+                basis = M.transformed(basis, ((math.cos(roll), 0.0, math.sin(roll)), (0.0, 1.0, 0.0), (-math.sin(roll), 0.0, math.cos(roll))))
+            basis = M.transformed(basis, up_turn)
+            if hold_yaw:
+                basis = M.transformed(basis, turn)
+            (bx, by, bz), (ux, uy, uz) = basis.positions
+            off = tuple((bx, by, bz)[i] * hold.forward * length + (ux, uy, uz)[i] * hold.lift * length for i in range(3))
+            placed = [M.transformed(p, None, 1.0, off) for p in placed]
         placed = [fit_mesh(p, fit, 1.0) for p in placed]
         groups: dict[tuple[str | None, str | None], list[M.Mesh]] = {}
         for p in placed:

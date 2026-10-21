@@ -38,7 +38,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 103 passed at 0.13.13.
+Tests that need a tool skip when its variable is unset; with all three set, 104 passed at 0.13.14.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -80,7 +80,7 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.13.13**, TestBuild-76 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.13.14**, TestBuild-77 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -96,6 +96,17 @@ Other commands:
   concentration cast; the box names every event received). Ids skip 120. Model turn default `45,0,180` (a guess; `-135,0,180`
   is the other way). Unconfirmed in game: that a concentration cast with no projectile starts at all, the release event, the
   wind-up being gone, the tracer's look and speed.
+- 0.13.13 in game: the game CRASHED on firing (hold: a few tracer bullets, then crash; a single click after a reload: crash).
+  Tracers did show (the fireball is gone). The model faced properly at turn `45,0,180`. No crash log was available, and the
+  Papyrus log cannot show a native crash. Suspected cause (unconfirmed): the trigger effect was an aimed concentration cast with
+  NO projectile (`MGEF` projectile 0); the game builds such a cast around its projectile. Evidence for it: 0.13.12 (same
+  bullet, same tracer-less path, fire-and-forget staff cast) did not crash; the only changes were the concentration trigger,
+  the tracer and the loop; the tracer itself did spawn.
+- 0.13.14 (TestBuild-77): the trigger is a copy of a vanilla concentration effect (`trigger_donor`: `*ConcAimed`, e.g.
+  `FireDamageConcAimed`) with a copy of its projectile (our tracer model, no light, sound or explosion), made harmless (cost 0, not
+  hostile or detrimental, no hit or enchant shader). If the game has none the staff gun is not built (logged). The model is
+  25% bigger (`STAFF_SCALE`) and moved 10% of its length forward along the barrel and 10% up (`STAFF_FORWARD`, `STAFF_LIFT`;
+  the directions are computed from the turn, unconfirmed in game). Script `SkylandsStaffGun14`, ids skip 144.
 - Placeholders: tracer/projectile art (donor fireball), per-element ammo on the crossbow guns, explosion radii and
   rocket speeds (`sheets/shooting.json`, `SPLASH`).
 - The user's Stage 2 instruction: after the Stage 1 report they say which animation type suits each gun type; convert

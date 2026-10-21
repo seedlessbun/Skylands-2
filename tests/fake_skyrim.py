@@ -218,6 +218,18 @@ def build_full(root: Path) -> Path:
                                                         sub("DESC", sid(2)), sub("DATA", struct.pack("<IfH", 100, 8.0, 8)),
                                                         sub("DNAM", struct.pack("<BBHff", 8, 0, 0, 1.0, 1.0) + b"\0" * 92), sub("CRDT", b"\0" * 24),
                                                         sub("CNAM", struct.pack("<I", 0x7401))])]))
+    # a vanilla-style concentration effect (Flames): an aimed continuous cast whose projectile is a flame
+    conc_md = bytearray(bolt_md)
+    struct.pack_into("<I", conc_md, 0, 0x5)  # hostile, detrimental
+    struct.pack_into("<II", conc_md, 72, 0x7201, 0)
+    struct.pack_into("<II", conc_md, 80, 2, 2)  # concentration, aimed
+    struct.pack_into("<II", conc_md, 32, 0x7777, 0x7778)  # hit shader, enchant shader
+    extra.append(group("MGEF", [record("MGEF", 0x5102, [sub("EDID", z("FireDamageConcAimed")), sub("FULL", sid(1)),
+                                                        sub("DNAM", sid(2)), sub("DATA", bytes(conc_md))])]))
+    extra.append(group("PROJ", [record("PROJ", 0x7201, [sub("EDID", z("FlamesProjectile")), sub("OBND", b"\0" * 12),
+                                                        sub("MODL", z("effects\\flames.nif")), sub("MODT", b"\0" * 12), sub("NAM1", z("effects\\flash.nif")),
+                                                        sub("DATA", struct.pack("<HHfffIIfffIIfffIIIffffII", 0x8, 0x2, 0.0, 800.0, 1000.0, 0x7779, 0x777A, 0.0, 0.0, 0.0, 0, 0x777B,
+                                                                                0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0))])]))
     art_md = bytearray(bolt_md)
     struct.pack_into("<I", art_md, 64, 3)  # a script-archetype effect, like the Wabbajack's
     extra.append(group("MGEF", [record("MGEF", 0x5101, [sub("EDID", z("AAWabbajackFF")), sub("VMAD", b"\x05\x00\x02\x00\x00\x00"), sub("DATA", bytes(art_md))])]))

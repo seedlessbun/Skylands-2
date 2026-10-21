@@ -454,7 +454,14 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     tg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Trigger")
     assert st.unpack_from("<I", en.first("EFID"))[0] == tg.form_id  # the staff casts the trigger, not the bullet
     td = tg.first("DATA")
-    assert st.unpack_from("<I", td, 80)[0] == 2 and st.unpack_from("<I", td, 72)[0] == 0 and st.unpack_from("<f", td, 4)[0] == 0.0  # concentration, no projectile, no cost
+    tproj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Trigger")
+    # a concentration cast needs a projectile of its own (none crashed the game in 0.13.13): the donor's flame with our tracer, quiet
+    assert st.unpack_from("<I", td, 80)[0] == 2 and st.unpack_from("<I", td, 72)[0] == tproj.form_id and st.unpack_from("<f", td, 4)[0] == 0.0
+    assert not st.unpack_from("<I", td, 0)[0] & 0x5 and st.unpack_from("<II", td, 32) == (0, 0)  # not hostile or detrimental, no hit art
+    tpd = tproj.first("DATA")
+    assert st.unpack_from("<H", tpd, 2)[0] == 2 and st.unpack_from("<II", tpd, 16) == (0, 0) and st.unpack_from("<I", tpd, 36)[0] == 0 and st.unpack_from("<I", tpd, 40)[0] == 0
+    assert tproj.first("MODL").rstrip(b"\0") == b"Skylands\\Tracer_StaffSMG.nif" and tproj.first("NAM1") is None
+    assert any("trigger donor effect FireDamageConcAimed" in l for l in rep["model_log"]), rep["model_log"]
     mg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Bullet")
     proj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Bullet")
     assert st.unpack_from("<I", mg.first("DATA"), 72)[0] == proj.form_id and st.unpack_from("<f", mg.first("DATA"), 4)[0] == 0.0
@@ -466,8 +473,8 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun13" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"MagSize" in vm and b"SpeedMult" in vm
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun13.pex").is_file()
+    assert b"SkylandsStaffGun14" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"MagSize" in vm and b"SpeedMult" in vm
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun14.pex").is_file()
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():
@@ -483,3 +490,33 @@ def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():
         assert hold.roll == 15.0 and f"head at {'+' if sign > 0 else '-'} (" in hold.note
         barrel = tuple(hold.fit.matrix[i][1] for i in range(3))  # where the gun's +y (barrel) goes in the staff's frame
         assert abs(abs(barrel[2]) - 1.0) < 1e-6 and barrel[2] * sign > 0, (sign, barrel)
+
+
+def test_staff_model_is_scaled_and_moved_in_the_hand(tmp_path, monkeypatch):
+    from skylands_setup.skyrim import nifread
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    bl2["weapons"]["guns"].append({**bl2["weapons"]["guns"][0], "type": "smg", "elements": ["Fire"]})
+
+    def points(tag, scale, forward, lift):
+        monkeypatch.setattr(generate, "STAFF_SCALE", scale)
+        monkeypatch.setattr(generate, "STAFF_FORWARD", forward)
+        monkeypatch.setattr(generate, "STAFF_LIFT", lift)
+        rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / f"sky{tag}"), tmp_path / f"out{tag}", gun_models="proxy", shooting="staff",
+                                staff_turn=(45.0, 0.0, 180.0))
+        nifs = [tmp_path / f"out{tag}" / "Data" / "Meshes" / Path(*rep["staff_gun"]["mesh"].split("\\"))]
+        return nifread.world_points(nifs[0].read_bytes())
+
+    def size_and_centre(pts):
+        lo = [min(p[i] for p in pts) for i in range(3)]
+        hi = [max(p[i] for p in pts) for i in range(3)]
+        return [h - l for h, l in zip(hi, lo)], [(h + l) / 2 for h, l in zip(hi, lo)]
+
+    base_size, base_centre = size_and_centre(points("a", 1.0, 0.0, 0.0))
+    big_size, _ = size_and_centre(points("b", 1.25, 0.0, 0.0))
+    _, moved_centre = size_and_centre(points("c", 1.0, 0.10, 0.10))
+    assert all(abs(b / a - 1.25) < 0.02 for a, b in zip(base_size, big_size) if a > 1e-3), (base_size, big_size)
+    shift = sum((m - c) ** 2 for m, c in zip(moved_centre, base_centre)) ** 0.5
+    assert abs(shift - 0.1 * 2 ** 0.5 * 33.8) < 0.5, shift  # 10% of the SMG's length forward and 10% up (at right angles)
