@@ -458,8 +458,8 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun11" in vm and b"BulletSpell" in vm and b"MagSize" in vm and b"SpeedMult" in vm
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun11.pex").is_file()
+    assert b"SkylandsStaffGun12" in vm and b"BulletSpell" in vm and b"BurstCount" in vm and b"Interval" in vm and b"MagSize" in vm and b"SpeedMult" in vm
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun12.pex").is_file()
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():

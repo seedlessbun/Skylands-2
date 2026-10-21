@@ -2177,8 +2177,80 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             *ret_unless(("id", "Armed"), "armed", tmp=T1),
             *ret_if(("id", "Reloading"), "loaded"),
             ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
-            call("Count"),
+            call("Round"),
             ("return", None),
+        ],
+    )
+    round_ = Function(
+        "Round",
+        locals=[("::nonevar", "None"), ("more", "Bool")],
+        code=[
+            # a burst follows only when this shot did not empty the magazine (Count reloads and refills it)
+            ("cmp_gt", ("id", "more"), ("id", "Mag"), ("int", 1)),
+            call("Count"),
+            ("jmpf", ("id", "more"), ("lbl", "single")),
+            call("Burst"),
+            ("label", "single"),
+            ("return", None),
+        ],
+    )
+    ready = Function(
+        "Ready",
+        return_type="Bool",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            # the staff is in the hand and not being reloaded
+            ("assign", T0, ("id", "Armed")),
+            ("jmpf", T0, ("lbl", "end")),
+            ("not", T0, ("id", "Reloading")),
+            ("label", "end"),
+            ("return", T0),
+        ],
+    )
+    burst = Function(
+        "Burst",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("go", "Bool")],
+        code=[
+            # the staff's own cast is the first bullet; the rest of the burst is cast from here, one every Interval seconds
+            *ret_if(("id", "Bursting"), "idle"),
+            ("assign", ("id", "Bursting"), ("bool", True)),
+            ("assign", ("id", "i"), ("int", 1)),
+            ("assign", ("id", "go"), ("bool", True)),
+            ("label", "bloop"),
+            ("cmp_lt", T0, ("id", "i"), ("id", "::BurstCount_var")),
+            ("jmpf", T0, ("lbl", "band")),
+            ("assign", T0, ("id", "go")),
+            ("label", "band"),
+            ("jmpf", T0, ("lbl", "bdone")),
+            call("Extra", dest=("id", "go")),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "bloop")),
+            ("label", "bdone"),
+            ("assign", ("id", "Bursting"), ("bool", False)),
+            ("return", None),
+        ],
+    )
+    extra = Function(
+        "Extra",
+        return_type="Bool",
+        locals=[("::nonevar", "None"), ("ok", "Bool"), ("more", "Bool"), ("ref", "ObjectReference")],
+        code=[
+            # one more bullet, if the staff is still in the hand and not reloading before and after the wait
+            call("Ready", dest=("id", "ok")),
+            ("jmpf", ("id", "ok"), ("lbl", "waited")),
+            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "::Interval_var")),
+            call("Ready", dest=("id", "ok")),
+            ("label", "waited"),
+            ("jmpf", ("id", "ok"), ("lbl", "done")),
+            # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1")
+            ("cast", ("id", "ref"), ("id", "Me")),
+            ("callmethod", ("id", "Cast"), ("id", "::BulletSpell_var"), NONE, ("id", "ref"), NONE),
+            ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
+            ("cmp_gt", ("id", "more"), ("id", "Mag"), ("int", 1)),
+            call("Count"),
+            ("assign", ("id", "ok"), ("id", "more")),
+            ("label", "done"),
+            ("return", ("id", "ok")),
         ],
     )
     on_cast = Function(
@@ -2296,10 +2368,10 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
-                   ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)), ("Reg", "Bool", ("bool", False))],
+                   ("Bursting", "Bool", ("bool", False)), ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)), ("Reg", "Bool", ("bool", False))],
         auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
-                         ("SpeedMult", "Float"), ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, report, on_equipped, equipped, on_unequipped, on_anim, shot, on_cast, arm, on_update, speed, count, reload_],
+                         ("SpeedMult", "Float"), ("BurstCount", "Int"), ("Interval", "Float"), ("Info", "String"), ("Verbose", "Bool")],
+        functions=[on_start, on_load, start, report, on_equipped, equipped, on_unequipped, on_anim, shot, round_, ready, burst, extra, on_cast, arm, on_update, speed, count, reload_],
     )
 
 

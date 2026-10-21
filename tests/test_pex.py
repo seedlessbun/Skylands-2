@@ -238,7 +238,9 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
                  "Event OnAnimationEvent(ObjectReference akSource, String asEventName)", "Fired += 1", "Mag -= 1", "Self.Reload()",
                  "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize", "Me.EquipItem(f, False, True)",
                  "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
-                 "If w as Bool && w == StaffGun", "Staff gun script started: weapon ", "Equipped: id ", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)"):
+                 "If w as Bool && w == StaffGun", "Staff gun script started: weapon ", "Equipped: id ", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)",
+                 "Self.Burst()", "While i < BurstCount && go", "go = Self.Extra()", "Utility.Wait(Interval)", "BulletSpell.Cast(ref, ::nonevar)", "Bool Function Ready()", "Return Armed && !Reloading", "Bool more = Mag > 1",
+                 "Int Property BurstCount Auto", "Float Property Interval Auto", "Bool Function Extra()"):
         assert text in psc, text
     assert "Input." not in psc and "GetWeaponType" not in psc  # nothing that needs SKSE
 

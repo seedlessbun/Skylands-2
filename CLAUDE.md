@@ -38,7 +38,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 102 passed at 0.13.11.
+Tests that need a tool skip when its variable is unset; with all three set, 100 passed, 2 skipped (nifcheck not built) at 0.13.12.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -80,16 +80,21 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.13.11**, TestBuild-74 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
-- Built and seen in game: the staff weapon, its ability, effect and quest records; the native SMG model on the staff
-  (after the CNAM fix); animation events ("BeginCastRight", "mrh_spellfire_event") arriving.
-- Last Papyrus log: a ghost copy of the staff script (no native object). 0.13.11 works around it by renaming the class
-  to `SkylandsStaffGun11`. **Needs an in-game result:** staff given, box on equip, shots counted from the cast event,
-  hold-to-fire behaviour, whether weapon speed 3.0 does anything, model turn (`--staff-turn` default `-45,0,180`, unconfirmed).
+  **0.13.12**, TestBuild-75 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+- Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
+  script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
+  error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
+- Seen wrong in 0.13.11: the projectile looked like the vanilla staff's (art is the donor fireball, placeholder; whether the
+  6667 speed applied is unconfirmed), holding the button did NOT repeat, the model pointed up or down (turn `-45,0,180`).
+- 0.13.12: burst fire. The staff's own cast is bullet 1; `Burst`/`Extra` in `scripts.staff_gun` cast `BulletSpell` from the
+  player `burst - 1` more times, `Interval` apart (SMG: 6 at 0.13 s), each counted against the magazine. Class
+  `SkylandsStaffGun12`, ids skip 96. `Spell.Cast` on the player is unconfirmed in game.
 - Placeholders: tracer/projectile art (donor fireball), per-element ammo on the crossbow guns, explosion radii and
   rocket speeds (`sheets/shooting.json`, `SPLASH`).
 - The user's Stage 2 instruction: after the Stage 1 report they say which animation type suits each gun type; convert
   nothing else before that.
+- Test tools in a fresh container: `apt-get update`, then `liblzo2-dev libboost-program-options-dev libfmt-dev`, `pip install python-lzo`;
+  Champollion needs `#include <cstring>` in `Pex/FileReader.cpp` and `<strings.h>` in `Champollion/CaselessCompare.h` on Ubuntu.
 
 ## 7. Open questions for the user
 - SKSE: yes or no?
