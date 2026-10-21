@@ -279,8 +279,9 @@ class Rounds:
             self.log.append(f"Shooting: explosion art for {element or 'plain'}: " + (found[0].edid if found else "no vanilla explosion found (no art)"))
         return self.donors[element]
 
-    def expl(self, kind: str, element: str | None, base_damage: float) -> int:
-        radius, frac = SPLASH.get(kind, (80.0, 0.3))
+    def expl(self, kind: str, element: str | None, base_damage: float, radius: float | None = None) -> int:
+        default_radius, frac = SPLASH.get(kind, (80.0, 0.3))
+        radius = float(radius or default_radius)
         dmg = max(5, round(base_damage * frac / 5) * 5)
         edid = f"SkylandsBlast_{kind}_{element or 'plain'}"
         donor = self.donor(element)
@@ -316,7 +317,7 @@ class Rounds:
             if explode:
                 flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] | 0x2
                 struct.pack_into("<H", pd, PROJ_FLAGS_AT, flags)
-                struct.pack_into("<I", pd, PROJ_EXPLOSION_AT, self.expl(kind, element, base_damage))
+                struct.pack_into("<I", pd, PROJ_EXPLOSION_AT, self.expl(kind, element, base_damage, shot.explosion_radius if shot else None))
             pr.set("DATA", bytes(pd))
             self.view.override(pr)
         data = self.bolts.first("DATA")
@@ -331,6 +332,94 @@ class Rounds:
 
     def keywords(self, kind: str, element: str | None) -> list[int]:
         return [self.kind_kw[KINDS.index(kind)], *([self.elem_kw[ELEMENT_NAMES.index(element)]] if element in ELEMENT_NAMES else [])]
+
+
+class Gunner:
+    """Per-gun shooting numbers for the SkylandsGunner script. A profile is one Borderlands weapon type (gun type x
+    manufacturer: its own fire rate, spread, reload, pellets and burst, read from the game by extract.shooting_of); profiles
+    0-5 are the gun types' defaults from sheets/shooting.json. A gun carries its profile's keyword and two keywords for its
+    own magazine size (tens and units)."""
+
+    def __init__(self, view: esp.Plugin, shots: dict, guns: list[dict]) -> None:
+        self.rows: list[dict] = []
+        self.keywords: list[int] = []
+        self.index: dict[tuple, int] = {}
+        for kind in KINDS:
+            row = shots.get(kind)
+            self._add(view, f"SkylandsProfile_{kind}", {
+                "clip": int(row.clip) if row else 20, "reload": float(row.reload) if row else 3.0,
+                "burst": int(row.burst) if row else 1, "pellets": int(row.pellets) if row else 1,
+                "spread": float(row.spread_deg) if row else 2.0, "interval": float(row.fire_interval) if row else 0.2})
+        for g in sorted(guns, key=lambda g: (g["type"], g.get("manufacturer", ""))):
+            key = (g["type"], g.get("manufacturer", ""))
+            if key in self.index or g["type"] not in KINDS:
+                continue
+            base = self.rows[KINDS.index(g["type"])]
+            sh = g.get("shooting") or {}
+            burst = base["burst"]
+            if int(sh.get("auto_burst", 0) or 0) > 1:
+                burst = int(sh["auto_burst"])  # Dahl's burst fire
+            elif key[1] == "Jakobs":
+                burst = 1  # Jakobs: semi-automatic, as fast as you pull
+            self.index[key] = len(self.rows)
+            self._add(view, f"SkylandsProfile_{key[0]}_{key[1]}", {
+                "clip": int(g.get("clip") or base["clip"]), "reload": float(sh.get("reload", base["reload"])),
+                "burst": burst, "pellets": int(g.get("pellets") or base["pellets"]),
+                "spread": float(sh.get("spread", base["spread"])), "interval": float(sh.get("fire_interval", base["interval"]))})
+        self.tens = [self._kw(view, f"SkylandsClipTens_{i}") for i in range(10)]
+        self.units = [self._kw(view, f"SkylandsClipUnits_{i}") for i in range(10)]
+
+    @staticmethod
+    def _kw(view: esp.Plugin, edid: str) -> int:
+        return view.new("KYWD", edid).form_id
+
+    def _add(self, view: esp.Plugin, edid: str, row: dict) -> None:
+        self.rows.append(row)
+        self.keywords.append(self._kw(view, edid))
+
+    def for_gun(self, g: dict, clip: int | None) -> list[int]:
+        out = []
+        key = (g["type"], g.get("manufacturer", ""))
+        if key in self.index:
+            out.append(self.keywords[self.index[key]])
+        if clip:
+            clip = max(1, min(99, clip))
+            out += [self.tens[clip // 10], self.units[clip % 10]]
+        return out
+
+
+AIM_POINT_MESH = "Skylands\\AimPoint.nif"
+
+
+def make_gunner(view: esp.Plugin, m: Masters, rounds: "Rounds", gunner: Gunner) -> None:
+    """The player's Borderlands shooting (script SkylandsGunner, see scripts.gunner): an ability with the rounds, keywords and
+    the per-profile numbers as properties, and a start-game-enabled quest that gives the player that ability. All in the
+    second plugin, so the forms it needs are properties (no Game.GetFormFromFile)."""
+    # an invisible object with 3D, placed once in front of the player and turned for every extra round (Weapon.Fire source)
+    aim = view.new("ACTI", "SkylandsAimPoint")
+    aim.add("OBND", struct.pack("<6h", 0, 0, 0, 0, 0, 0)).add("MODL", esp.zstr(AIM_POINT_MESH))
+    rows = gunner.rows
+    props = [
+        ("Rounds", esp.P_OBJECT_ARRAY, [i for per_kind in rounds.ammo_ids for i in per_kind]),
+        ("KindKeywords", esp.P_OBJECT_ARRAY, rounds.kind_kw), ("ElementKeywords", esp.P_OBJECT_ARRAY, rounds.elem_kw),
+        ("ProfileKeywords", esp.P_OBJECT_ARRAY, gunner.keywords),
+        ("ClipTens", esp.P_OBJECT_ARRAY, gunner.tens), ("ClipUnits", esp.P_OBJECT_ARRAY, gunner.units),
+        ("Clip", esp.P_INT_ARRAY, [r["clip"] for r in rows]),
+        ("ReloadTime", esp.P_FLOAT_ARRAY, [r["reload"] for r in rows]),
+        ("Burst", esp.P_INT_ARRAY, [r["burst"] for r in rows]),
+        ("Pellets", esp.P_INT_ARRAY, [r["pellets"] for r in rows]),
+        ("Spread", esp.P_FLOAT_ARRAY, [r["spread"] for r in rows]),
+        ("Interval", esp.P_FLOAT_ARRAY, [r["interval"] for r in rows]),
+        ("Marker", esp.P_OBJECT, aim.form_id), ("Verbose", esp.P_BOOL, True),
+    ]
+    template = m.need("MGEF", "AbWeaknessFireConstant")
+    effect = script_effect(view, template, "SkylandsGunnerFx", "Skylands Gunner", "SkylandsGunner", props)
+    ability = spell(view, "SkylandsGunnerAbility", "", "",
+                    struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0), [(effect, 0.0, 0, 0)])
+    quest = view.new("QUST", "SkylandsGunnerQuest")
+    quest.add("VMAD", esp.vmad([("SkylandsGunnerQuest", [("Ability", esp.P_OBJECT, ability.form_id)])], quest=True))
+    quest.add("FULL", esp.zstr("Skylands Gunner")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
+    quest.add("ANAM", esp.u32(0))
 
 
 def tune_bolts(view: esp.Plugin, m: Masters, bolts: Record, log: list[str]) -> bool:
@@ -542,6 +631,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             gtype = next(g for g in S.GUN_TYPES.values() if g.id == kind)
             for element in (None, *ELEMENT_NAMES):
                 rounds.build(kind, element, float(gtype.base_damage), shots.get(kind))
+        gunner = Gunner(view, shots, bl2["weapons"]["guns"])
+        make_gunner(view, m, rounds, gunner)
     if shooting in ("bullets", "both"):
         tune_bolts(view, m, bolts, report["model_log"])
 
@@ -604,9 +695,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                         fp.add("DNAM", struct.pack("<fI", 30.0, 0))
                         first_person[mesh] = fp.form_id
                     insert_ordered(w2, "WNAM", esp.u32(first_person[mesh]), WEAP_ORDER)
-                if rounds is not None:  # keywords that tell the watcher script which rounds this gun uses
+                if rounds is not None:  # keywords that tell the gunner script which rounds and numbers this gun uses
                     kw2 = w2.get("KWDA") or b""
-                    ids = [*struct.unpack(f"<{len(kw2) // 4}I", kw2), *rounds.keywords(g["type"], element)]
+                    clip = max(1, round(g["clip"] * st.get("clip_mult", 1.0))) if g.get("clip") else None
+                    ids = [*struct.unpack(f"<{len(kw2) // 4}I", kw2), *rounds.keywords(g["type"], element), *gunner.for_gun(g, clip)]
                     insert_ordered(w2, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
                     insert_ordered(w2, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)
                 view.override(w2)
@@ -773,5 +865,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     (out_data / "Scripts" / "SkylandsHunterQuest.pex").write_bytes(pex.write(scripts.class_choice_quest()))
     (out_data / "Scripts" / "SkylandsHunterPower.pex").write_bytes(pex.write(scripts.respawn_power()))
     (out_data / "Scripts" / "SkylandsHunter.pex").write_bytes(pex.write(scripts.watcher()))
+    if rounds is not None:
+        (out_data / "Meshes" / "Skylands" / "AimPoint.nif").write_bytes(nif.empty())
+        (out_data / "Scripts" / "SkylandsGunner.pex").write_bytes(pex.write(scripts.gunner()))
+        (out_data / "Scripts" / "SkylandsGunnerQuest.pex").write_bytes(pex.write(scripts.gunner_quest()))
     report["records"] = len(p.records)
     return report

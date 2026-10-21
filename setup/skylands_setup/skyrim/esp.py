@@ -140,6 +140,7 @@ class Plugin:
 # ---- script attachments (VMAD) ------------------------------------------------------------------
 P_OBJECT, P_STRING, P_INT, P_FLOAT, P_BOOL = 1, 2, 3, 4, 5
 P_OBJECT_ARRAY = 11
+P_INT_ARRAY, P_FLOAT_ARRAY = 13, 14
 
 
 def _obj(form_id: int) -> bytes:
@@ -157,6 +158,10 @@ def vmad(scripts: list[tuple[str, list[tuple[str, int, object]]]], quest: bool =
                 out += _obj(value)
             elif ptype == P_OBJECT_ARRAY:
                 out += struct.pack("<I", len(value)) + b"".join(_obj(v) for v in value)
+            elif ptype == P_INT_ARRAY:
+                out += struct.pack(f"<I{len(value)}i", len(value), *value)
+            elif ptype == P_FLOAT_ARRAY:
+                out += struct.pack(f"<I{len(value)}f", len(value), *value)
             elif ptype == P_STRING:
                 out += wstr(value)
             elif ptype == P_INT:

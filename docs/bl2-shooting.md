@@ -18,16 +18,35 @@ Elemental guns carry `ExplosionOverrideDefinition = GD_Weap_Shared_Effects.Defau
 spawns an elemental explosion where it lands. Launchers fire a `ProjectileDefinition` (`Projectile_Rocket_*`) that explodes.
 The numbers are in `sheets/shooting.json`. The survey did not reach the rocket projectile or explosion radius definitions.
 
-## Built: `--gun-shooting bl2` (kit: `Install-Skylands-GunModels-Shooting-BL2.bat`)
+## Built: `--gun-shooting bl2` (kit: `Install-Skylands-GunModels-Shooting-BL2.bat`), 0.12
 All in the optional second plugin `SkylandsGunModels.esp`; Skylands.esp is unchanged and stays light.
-- One AMMO per gun type x element (6 x 5 = 30) with its own projectile (`PROJ`) cloned from the steel bolt: speed = Borderlands
-  speed / 3, flat flight. Launchers and elemental guns get an explosion (`EXPL`, art from a vanilla explosion found by name;
-  element = the vanilla weapon enchantment of that element, radius 420 for launchers, 60-90 otherwise).
-- Fixed ids so the script can find things: ammo `0x800 + kind*5 + element`, kind keywords `0x81E+kind`, element keywords `0x824+element`.
-  Every gun's record carries its kind (and element) keyword.
-- The watcher script's `GiveRounds` (on `OnObjectEquipped`) finds the keywords with `Game.GetFormFromFile`, tops up the matching
-  rounds (to 60 when fewer than 20) and equips them, so a gun always shoots its own rounds.
-- Not enemies: bandits' guns still fire steel bolts.
+
+**Data.** `extract.shooting_of` now reads every gun balance's own weapon type (FireRate, Spread, ReloadTime,
+AutomaticBurstCount, ProjectilesPerShot, ClipSize) and default firing mode (Speed, rockets, elemental explosion). A *profile* is one
+gun type x manufacturer; profiles 0-5 are the gun-type defaults from `sheets/shooting.json`. Every gun's magazine is its weapon
+type's ClipSize times its parts' clip bonus (the "Mag" number on the gun).
+
+**Records.**
+- 30 rounds (AMMO + PROJ, + EXPL for launchers and elemental guns): gun type x element, speed from Borderlands (/3), flat.
+- Keywords on every gun (in its override): kind, element, profile, magazine tens and units.
+- `SkylandsGunnerQuest` (start game enabled) gives the player `SkylandsGunnerAbility`, whose effect runs the script
+  `SkylandsGunner` with every form and number as properties. (0.11.3 looked its forms up with `Game.GetFormFromFile` from the
+  old watcher; in game it did nothing, so that was removed.)
+- `SkylandsAimPoint`: an invisible object with 3D (an empty NIF) that extra rounds are fired from.
+
+**Script `SkylandsGunner`** (on the player):
+- Equip a gun: its rounds are topped up (90 when fewer than 30) and equipped; the magazine is filled.
+- Every shot (the game's `OnPlayerBowShot`; until that event has been seen, a drop in the rounds count every 0.25 s stands in):
+  the magazine counts down; shotguns fire `pellets - 1` more rounds at once; automatic guns fire `burst - 1` more rounds one
+  every `fire interval` while the magazine lasts (Skyrim cannot see a held trigger without the script extender, so automatic fire
+  is a burst per pull: SMG 6, assault rifle 4, Dahl uses its own burst count, Jakobs is semi-automatic). Extra rounds come from the
+  aim point in front of the player's eyes, turned like the view plus a random angle within the spread, with `Weapon.Fire`.
+- Empty magazine: the rounds are taken off for the reload time ("Reloading (3 s)"), then put back with a full magazine.
+- Messages (Verbose on for now): "Skylands gunner ready", "Skylands gun: N-round magazine", "shots are seen", "Reloading".
+
+**Placeholders** (not yet read from the game): burst size per pull, explosion radius (launcher 420, others 60-90), rocket speed
+(6000 Borderlands units/s), the projectile speed scale (/3). `Run-ShootingSurvey.bat` (survey 2) now follows the projectile and
+explosion definitions first.
 
 ## Also
 - `--gun-shooting bullets`: only the steel bolt becomes a fast flat shot (backup version).

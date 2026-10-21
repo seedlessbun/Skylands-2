@@ -19,15 +19,17 @@ from . import steam
 from .bl2 import extract
 from .bl2.index import Index
 
-SEEDS_PER_TYPE = 2
-MAX_OBJECTS = 500
-BUDGET_S = 420
+SEEDS_PER_TYPE = 6
+MAX_OBJECTS = 1200
+BUDGET_S = 600
 DEPTH = 3
 PATH = re.compile(r"^[A-Za-z_]\w*(\.\w+)+(:\w+)?$")
 # classes that cost time and say nothing about shooting
 SKIP = re.compile(r"(Texture|Material|SoundCue|SoundNode|ParticleSystem|SkeletalMesh|StaticMesh|AnimSet|AnimTree|PhysicsAsset|"
                   r"Font|Sequence|SwfMovie|Cascade|Distribution|Module|Behavior|Skel|Light|Surface)", re.I)
 INTEREST = re.compile(r"(explos|projectile|impact|bullet|damagetype|weapontype|ammo|firetype|firemode|muzzle|recoil)", re.I)
+# followed before anything else, so the object cap is spent on what says how guns shoot
+FIRST = re.compile(r"(projectile|explo|firingmode|weapontype|\.wt_|damagetype|behavior_explode|elemental)", re.I)
 
 
 def _short(v, limit: int = 240):
@@ -79,7 +81,10 @@ def crawl(ix: Index, seeds: list[str], say=print) -> dict:
                 refs += [r for r in found_here if r != path]
             for r in dict.fromkeys(refs):
                 if r not in seen and not r.lower().startswith(("fx_", "ake_", "common_gunmaterials")):
-                    queue.append((r, depth + 1, f"{path}"))
+                    if FIRST.search(r):
+                        queue.insert(0, (r, depth + 1, f"{path}"))
+                    else:
+                        queue.append((r, depth + 1, f"{path}"))
     return {"objects": seen, "class_counts": classes, "seconds": round(time.time() - t0)}
 
 
@@ -92,7 +97,7 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out = Path(a.out)
-    report: dict = {"tool": "skylands shootingsurvey 1", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    report: dict = {"tool": "skylands shootingsurvey 2", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
 
     def say(msg: str) -> None:
         print(msg, flush=True)
@@ -112,9 +117,15 @@ def main(argv: list[str]) -> int:
         for g in weapons["guns"]:
             by_type.setdefault(g["type"], []).append(g["balance"])
         for t, balances in sorted(by_type.items()):
-            picked = balances[:1] + balances[len(balances) // 2:len(balances) // 2 + SEEDS_PER_TYPE - 1]
+            picked = []  # one balance per manufacturer: their weapon types carry their own clip, spread, fire rate
+            for mfr in ("Bandit", "Dahl", "Hyperion", "Jakobs", "Maliwan", "Tediore", "Torgue", "Vladof"):
+                hit = next((b for b in balances if mfr.lower() in b.rsplit(".", 1)[-1].lower()), None)
+                if hit and hit not in picked:
+                    picked.append(hit)
+            picked = picked or balances[:SEEDS_PER_TYPE]
             seeds += picked
             say(f"  {t}: {len(balances)} balances; following {picked}")
+        seeds += ["GD_Weap_Shared_Effects.Default_Elemental_Explosions", "GD_Weap_Launchers.Projectiles.Projectile_Rocket_Bandit"]
         report["seeds"] = seeds
         report["package_names"] = sorted(k for k in ix.top if INTEREST.search(k))[:300]
         report["group_names"] = sorted(k for k in ix.groups if INTEREST.search(k) and k.startswith(("gd_", "d_")))[:300]

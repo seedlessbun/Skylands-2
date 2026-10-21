@@ -262,6 +262,16 @@ def gun(parts: list, box_half: tuple[float, float, float] = (0.1, 0.4, 0.05), ma
     return b.encode()
 
 
+def empty(name: str = "SkylandsAimPoint") -> bytes:
+    """A NIF with a root node and nothing to draw: gives a placed object 3D (so it can be a projectile source) while
+    staying invisible."""
+    b = NifBuilder()
+    root = b.add("BSFadeNode", b"")
+    bsx = b.add("BSXFlags", struct.pack("<iI", b.s("BSX"), 0))
+    b.set(root, _extra_net(b, name, [bsx]) + _av_c(14, -1) + struct.pack("<I", 0) + struct.pack("<I", 0))
+    return b.encode()
+
+
 def dds_solid(rgb: tuple[int, int, int], size: int = 4, alpha: int = 255) -> bytes:
     """A tiny uncompressed BGRA texture of one colour (the diffuse of a proxy gun part)."""
     return _dds_bgra(size, size, bytes([rgb[2], rgb[1], rgb[0], alpha]) * (size * size))

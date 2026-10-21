@@ -393,6 +393,21 @@ def test_shooting_rounds_go_in_the_second_plugin(tmp_path):
         ids = st.unpack(f"<{len(w.first('KWDA')) // 4}I", w.first("KWDA"))
         assert any(i & 0xFFFFFF in range(0x81E, 0x824) for i in ids)
     assert rep["rounds"]["ammo"] == 30
+    # the player's gunner: quest -> ability -> script effect, all in the second plugin, with the numbers as properties
+    tes, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"QUST", "SPEL", "MGEF"})
+    assert any(r.edid == "SkylandsGunnerQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsGunnerAbility" for r in recs["SPEL"])
+    fx = next(r for r in recs["MGEF"] if r.edid == "SkylandsGunnerFx")
+    vm = fx.first("VMAD")
+    assert b"SkylandsGunner" in vm and b"Pellets" in vm and b"ReloadTime" in vm
+    assert b"ProfileKeywords" in vm and b"ClipTens" in vm
+    tes, kw = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"KYWD", "WEAP"})
+    names = {r.form_id: r.edid for r in kw["KYWD"]}
+    assert "SkylandsProfile_pistol" in names.values() and "SkylandsClipUnits_9" in names.values()
+    for w in kw["WEAP"]:  # each gun: a profile keyword and its magazine size
+        mine = [names.get(i) for i in st.unpack(f"<{len(w.first('KWDA')) // 4}I", w.first("KWDA"))]
+        assert any(n and n.startswith("SkylandsProfile_") for n in mine)
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsGunner.pex").is_file()
+    assert not (tmp_path / "out0" / "Data" / "Scripts" / "SkylandsGunner.pex").exists()
 
 
 def test_gun_mesh_length_follows_the_size_table(tmp_path):

@@ -24,6 +24,38 @@ def clean_text(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+def _num(v, default=0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def shooting_of(ix, wtp: dict) -> dict:
+    """How this weapon type shoots, from its WeaponTypeDefinition and default FiringModeDefinition (seen in the shooting
+    survey): seconds between shots, spread (degrees), reload seconds, burst count, projectiles per shot, bullet speed,
+    whether it fires rockets. Missing values are left out (the generator then uses sheets/shooting.json)."""
+    out = {}
+    for key, prop in (("fire_interval", "FireRate"), ("spread", "Spread"), ("reload", "ReloadTime"),
+                      ("auto_burst", "AutomaticBurstCount"), ("burst_interval", "BurstInterval")):
+        v = _num(wtp.get(prop), -1.0)
+        if v >= 0:
+            out[key] = round(v, 4)
+    fm = wtp.get("DefaultFiringModeDefinition")
+    fmp = ix.props(fm) if isinstance(fm, str) else None
+    if fmp:
+        speed = _num(fmp.get("Speed"), -1.0)
+        if speed > 0:
+            out["speed"] = speed
+        if "Rocket" in str(fmp.get("FireType", "")) or fmp.get("ProjectileDefinition"):
+            out["rocket"] = True
+        if fmp.get("ExplosionOverrideDefinition"):
+            out["elemental_explosion"] = True
+        if fmp.get("OnAnyImpact"):
+            out["explodes"] = True
+    return out
+
+
 def _first(v):
     if isinstance(v, dict) and v.get("type") == "Array":
         items = v.get("items") or []
@@ -298,6 +330,7 @@ def _guns_into(ix: Index, errors: list[str], say, out: dict) -> None:
                     "damage_scale": round(float(dmg.get("BaseValueScaleConstant", 1.0)), 4) if isinstance(dmg, dict) else 1.0,
                     "pellets": int(wtp.get("ProjectilesPerShot", 1) or 1),
                     "clip": int(wtp.get("ClipSize", 0) or 0),
+                    "shooting": shooting_of(ix, wtp),
                 })
         if not any(g["type"] == gt.id for g in out["guns"]):
             errors.append(f"no {gt.id} balances found in {gt.package}")

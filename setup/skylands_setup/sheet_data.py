@@ -262,15 +262,17 @@ class ShootingRow:
     reload: float
     pellets: int
     explosive: str
+    burst: int
+    explosion_radius: int
 
 
 SHOOTING: dict[str, ShootingRow] = {
-    'pistol': ShootingRow(id='pistol', speed_bl2=21500, spread_deg=2.4, fire_interval=0.23, clip=30, reload=3.0, pellets=1, explosive='no'),
-    'smg': ShootingRow(id='smg', speed_bl2=20000, spread_deg=1.8, fire_interval=0.13, clip=48, reload=4.2, pellets=1, explosive='no'),
-    'assault_rifle': ShootingRow(id='assault_rifle', speed_bl2=25000, spread_deg=2.5, fire_interval=0.15, clip=40, reload=5.0, pellets=1, explosive='no'),
-    'shotgun': ShootingRow(id='shotgun', speed_bl2=20000, spread_deg=8.0, fire_interval=0.8, clip=9, reload=4.4, pellets=6, explosive='no'),
-    'sniper': ShootingRow(id='sniper', speed_bl2=45000, spread_deg=1.0, fire_interval=0.15, clip=6, reload=4.0, pellets=1, explosive='no'),
-    'launcher': ShootingRow(id='launcher', speed_bl2=6000, spread_deg=4.0, fire_interval=1.0, clip=5, reload=8.0, pellets=1, explosive='yes'),
+    'pistol': ShootingRow(id='pistol', speed_bl2=21500, spread_deg=2.4, fire_interval=0.23, clip=30, reload=3.0, pellets=1, explosive='no', burst=1, explosion_radius=90),
+    'smg': ShootingRow(id='smg', speed_bl2=20000, spread_deg=1.8, fire_interval=0.13, clip=48, reload=4.2, pellets=1, explosive='no', burst=6, explosion_radius=80),
+    'assault_rifle': ShootingRow(id='assault_rifle', speed_bl2=25000, spread_deg=2.5, fire_interval=0.15, clip=40, reload=5.0, pellets=1, explosive='no', burst=4, explosion_radius=80),
+    'shotgun': ShootingRow(id='shotgun', speed_bl2=20000, spread_deg=8.0, fire_interval=0.8, clip=9, reload=4.4, pellets=6, explosive='no', burst=1, explosion_radius=70),
+    'sniper': ShootingRow(id='sniper', speed_bl2=45000, spread_deg=1.0, fire_interval=0.15, clip=6, reload=4.0, pellets=1, explosive='no', burst=1, explosion_radius=60),
+    'launcher': ShootingRow(id='launcher', speed_bl2=6000, spread_deg=4.0, fire_interval=1.0, clip=5, reload=8.0, pellets=1, explosive='yes', burst=1, explosion_radius=420),
 }
 
 @dataclass(frozen=True)

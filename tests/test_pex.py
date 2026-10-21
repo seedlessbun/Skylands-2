@@ -212,3 +212,16 @@ def test_respawn_power_decompiles_to_intended_papyrus(tmp_path):
     psc = decompile(tmp_path, scripts.respawn_power(), "SkylandsHunterPower")
     assert "ScriptName SkylandsHunterPower Extends ActiveMagicEffect" in psc and "Owner.Settings()" in psc
     assert "Owner.LogNow()" in psc and "Int Property Action Auto" in psc
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_gunner_scripts_decompile(tmp_path):
+    psc = decompile(tmp_path, scripts.gunner(), "SkylandsGunner")
+    assert "ScriptName SkylandsGunner Extends ActiveMagicEffect" in psc
+    for text in ("Event OnPlayerBowShot(Weapon akWeapon, Ammo akAmmo, Float afPower, Bool abSunGazing)", "Gun.Fire(Aim, Rnd)",
+                 "Aim.SetAngle(x, 0.0, h)", "Aim.MoveTo(Me, ox, oy, oz, False)", "Me.UnequipItem(Rnd, False, True)", "Utility.Wait(t)", "Mag = MagSize",
+                 "Rnd = f as Ammo", "Me.EquipItem(Rnd, False, True)", "Int[] Property Pellets Auto", "Float[] Property Spread Auto"):
+        assert text in psc, text
+    (tmp_path / "q").mkdir()
+    q = decompile(tmp_path / "q", scripts.gunner_quest(), "SkylandsGunnerQuest")
+    assert "player.AddSpell(Ability, False)" in q and "Spell Property Ability Auto" in q
