@@ -461,6 +461,7 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
+STAFF_REV = "0.13.3"  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
 
 
@@ -593,17 +594,17 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     view.override(w)
     log.append(f"Staff gun: {edid}: {element or 'no element'}, damage {damage}, bullet speed {speed:.0f}, interval {interval:g} s, "
                f"magazine {clip}, reload {reload_time:g} s, explosion radius {radius:g}, model {mesh or 'the vanilla staff'}")
-    info = (f"Built: animation type {staff.first('DNAM')[0]} (8 = staff) from {staff.edid}; spell {edid}_Spell "
+    info = (f"Build {STAFF_REV}. Built: animation type {staff.first('DNAM')[0]} (8 = staff) from {staff.edid}; spell {edid}_Spell "
             f"(effect {d_mgef.edid}); bullet speed {speed:.0f}, damage {damage}, element {element or 'none'}, explosion radius {radius:g}; "
             f"model {mesh or 'NOT BUILT: the vanilla staff model is kept'}; weapon speed set to {STAFF_SPEED_MULT:g} while it is in the hand. "
             f"Costs no magicka and no charge.")
     props = [("StaffGun", esp.P_OBJECT, w.form_id), ("BulletSpell", esp.P_OBJECT, bullet.form_id), ("MagSize", esp.P_INT, clip),
              ("ReloadTime", esp.P_FLOAT, reload_time), ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("Info", esp.P_STRING, info),
              ("Verbose", esp.P_BOOL, True)]
-    fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", "SkylandsStaffGun", props)
-    ability = spell(view, "SkylandsStaffGunAbility", "", "",
+    fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), f"SkylandsStaffGunFx_{STAFF_REV}", "Skylands Staff Gun", "SkylandsStaffGun", props)
+    ability = spell(view, f"SkylandsStaffGunAbility_{STAFF_REV}", "", "",
                     struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0), [(fx, 0.0, 0, 0)])
-    q = view.new("QUST", "SkylandsStaffGunQuest")
+    q = view.new("QUST", f"SkylandsStaffGunQuest_{STAFF_REV}")
     q.add("VMAD", esp.vmad([("SkylandsGunnerQuest", [("Ability", esp.P_OBJECT, ability.form_id)])], quest=True))
     q.add("FULL", esp.zstr("Skylands Staff Gun")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     q.add("ANAM", esp.u32(0))

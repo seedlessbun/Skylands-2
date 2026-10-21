@@ -454,9 +454,9 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert st.unpack_from("<I", mg.first("DATA"), 72)[0] == proj.form_id and st.unpack_from("<f", mg.first("DATA"), 4)[0] == 0.0
     pd = proj.first("DATA")
     assert abs(st.unpack_from("<f", pd, 8)[0] - S.SHOOTING["smg"].speed_bl2 / 3) < 1 and st.unpack_from("<f", pd, 4)[0] == 0.0  # the SMG round's speed, flat
-    assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
+    assert any(r.edid.startswith("SkylandsStaffGunQuest_") for r in recs["QUST"]) and any(r.edid.startswith("SkylandsStaffGunAbility_") for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
-    vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
+    vm = next(r for r in fx if r.edid.startswith("SkylandsStaffGunFx_")).first("VMAD")
     assert b"SkylandsStaffGun" in vm and b"BulletSpell" in vm and b"MagSize" in vm and b"SpeedMult" in vm
     assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun.pex").is_file()
 
