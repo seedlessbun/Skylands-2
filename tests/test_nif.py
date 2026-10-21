@@ -36,6 +36,15 @@ def test_beam_resaves_identically_in_nifly(tmp_path):
     assert src.read_bytes() == out.read_bytes()
 
 
+@pytest.mark.skipif(not NIFCHECK, reason="set NIFCHECK to the nifly checker")
+def test_tracer_resaves_identically_in_nifly(tmp_path):
+    src, out = tmp_path / "tracer.nif", tmp_path / "resaved.nif"
+    src.write_bytes(nif.tracer((120, 255, 80), "textures\\skylands\\beam.dds"))
+    r = subprocess.run([NIFCHECK, str(src), str(out)], capture_output=True, text=True, check=True)
+    assert "shape Tracer0 verts=4 tris=2" in r.stdout and "shape Tracer1 verts=4 tris=2" in r.stdout and "emissive 0.47 1.00 0.31" in r.stdout, r.stdout
+    assert src.read_bytes() == out.read_bytes()
+
+
 def _gun_parts():
     from skylands_setup import meshes as M
 

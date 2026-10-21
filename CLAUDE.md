@@ -38,13 +38,13 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 100 passed, 2 skipped (nifcheck not built) at 0.13.12.
+Tests that need a tool skip when its variable is unset; with all three set, 103 passed at 0.13.13.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
   binary `build/Champollion/Champollion`.
 - espcheck: `cd tools/espcheck && cargo build --release` (`target/release/espcheck`).
-- nifcheck: see `tools/nifcheck/README.md` (nifly + `g++`; binary `check`).
+- nifcheck: see `tools/nifcheck/README.md` (nifly + `g++`; binary `check`; in a fresh container also `apt-get install catch2` and build only `--target nifly`).
 
 Other commands:
 - `python tools/gen.py` regenerates `sheet_data.py` from `sheets/*.json` (`--check` tests it is current).
@@ -80,15 +80,22 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.13.12**, TestBuild-75 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.13.13**, TestBuild-76 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
 - Seen wrong in 0.13.11: the projectile looked like the vanilla staff's (art is the donor fireball, placeholder; whether the
   6667 speed applied is unconfirmed), holding the button did NOT repeat, the model pointed up or down (turn `-45,0,180`).
-- 0.13.12: burst fire. The staff's own cast is bullet 1; `Burst`/`Extra` in `scripts.staff_gun` cast `BulletSpell` from the
-  player `burst - 1` more times, `Interval` apart (SMG: 6 at 0.13 s), each counted against the magazine. Class
-  `SkylandsStaffGun12`, ids skip 96. `Spell.Cast` on the player is unconfirmed in game.
+- 0.13.12 (burst): confirmed in game, reload and burst worked; hold did not repeat; the cast has a wind-up; the model pointed
+  straight up at turn `-45,0,180`.
+- 0.13.13 (TestBuild-76): the staff's enchantment is now an aimed concentration cast of `SkylandsStaffSMG_Trigger` (no projectile,
+  no damage, no cost, no charge time); `SkylandsStaffSMG_Bullet` (fire and forget, our tracer `Meshes\Skylands\Tracer_StaffSMG.nif`
+  from `nif.tracer`, element colour, no muzzle flash) is cast by the script. Script `SkylandsStaffGun13`: `BeginCastRight`
+  (or `MRh_SpellAimedConcentrationStart`) = trigger pulled, `Press` -> `Hold` fires `Pull` at once and every `Interval` while
+  `Holding`; `MRh_SpellFire_Event` or `MRh_SpellRelease_Event` = let go (UNCONFIRMED: web notes say the spell-fire event ends a
+  concentration cast; the box names every event received). Ids skip 120. Model turn default `45,0,180` (a guess; `-135,0,180`
+  is the other way). Unconfirmed in game: that a concentration cast with no projectile starts at all, the release event, the
+  wind-up being gone, the tracer's look and speed.
 - Placeholders: tracer/projectile art (donor fireball), per-element ammo on the crossbow guns, explosion radii and
   rocket speeds (`sheets/shooting.json`, `SPLASH`).
 - The user's Stage 2 instruction: after the Stage 1 report they say which animation type suits each gun type; convert

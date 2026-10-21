@@ -461,9 +461,13 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
-STAFF_REV = "0.13.12"
-STAFF_SCRIPT = "SkylandsStaffGun12"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
-STAFF_ID_SHIFT = 96  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_REV = "0.13.13"
+STAFF_SCRIPT = "SkylandsStaffGun13"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
+STAFF_ID_SHIFT = 120  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
+STAFF_TRACER_MESH = "Skylands\\Tracer_StaffSMG.nif"
+PROJ_FLAG_MUZZLE_FLASH = 0x8
+ENIT_CAST_AT, ENIT_CHARGE_AT, MGEF_CASTING_AT = 8, 24, 80
 STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
 
 
@@ -533,14 +537,16 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     interval = max(0.06, float(shot.fire_interval if shot else 0.1))
     clip = int(shot.clip) if shot else 30
     reload_time = float(shot.reload) if shot else 2.0
-    burst = max(1, int(shot.burst)) if shot else 1
     # the bullet: the staff spell's projectile, retuned to the Borderlands speed, flat, with the round's explosion
-    pr = esp.Rec("PROJ", view.new_id(f"PROJ:{edid}_Bullet"), [(sig, d) for sig, d in d_proj.subrecords if sig != "VMAD"])
+    pr = esp.Rec("PROJ", view.new_id(f"PROJ:{edid}_Bullet"), [(sig, d) for sig, d in d_proj.subrecords if sig not in ("VMAD", "MODT", "NAM1", "NAM2")])
     pr.set("EDID", esp.zstr(f"{edid}_Bullet"))
+    pr.set("MODL", esp.zstr(STAFF_TRACER_MESH))  # the glowing tracer (nif.tracer) instead of the donor's fireball
+    tracer = nif.tracer(STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None]), BEAM_TEXTURE)
+    report["staff_tracer"] = (STAFF_TRACER_MESH, tracer)
     pd = bytearray(d_proj.first("DATA"))
     struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0, speed)
     struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
-    flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0]
+    flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] & ~PROJ_FLAG_MUZZLE_FLASH
     explosion, radius = 0, 0.0
     if element is not None:
         radius = float(shot.explosion_radius) if shot and getattr(shot, "explosion_radius", None) else SPLASH["smg"][0]
@@ -565,7 +571,19 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     effect = (mg.form_id, float(damage), 0, 0)
     bullet = spell(view, f"{edid}_Spell", "Skylands bullet", "",
                    struct.pack("<IIIfIIffI", 0, 1, 0, 0, d_ench_cast(d_ench), DELIVERY["aimed"], 0, 0, 0), [effect])
-    # the staff's enchantment: the same effect, no cost, a huge charge
+    # the staff's enchantment: the trigger effect, no cost, a huge charge
+    # the trigger: an aimed concentration effect with no projectile and no damage. It is only there so the staff starts casting
+    # the moment the button goes down and goes on for as long as it is held; the script fires the bullets meanwhile
+    tg = esp.Rec("MGEF", view.new_id(f"MGEF:{edid}_Trigger"), [(sig, d) for sig, d in d_mgef.subrecords if sig not in ("DNAM", "VMAD")])
+    tg.set("EDID", esp.zstr(f"{edid}_Trigger"))
+    if tg.get("FULL") is not None:
+        tg.set("FULL", esp.zstr("Skylands trigger"))
+    td = bytearray(d_mgef.first("DATA"))
+    struct.pack_into("<f", td, MGEF_COST_AT, 0.0)
+    struct.pack_into("<II", td, MGEF_PROJECTILE_AT, 0, 0)
+    struct.pack_into("<I", td, MGEF_CASTING_AT, 2)  # concentration
+    tg.set("DATA", bytes(td))
+    view.override(tg)
     en = esp.Rec("ENCH", view.new_id(f"ENCH:{edid}"), [(sig, d) for sig, d in d_ench.subrecords if sig not in ("EFID", "EFIT", "CTDA", "VMAD")])
     en.set("EDID", esp.zstr(f"{edid}_Ench"))
     if en.get("FULL") is not None:
@@ -573,8 +591,10 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     enit = bytearray(d_ench.first("ENIT"))
     struct.pack_into("<i", enit, ENIT_COST_AT, 0)
     struct.pack_into("<I", enit, ENIT_FLAGS_AT, struct.unpack_from("<I", enit, ENIT_FLAGS_AT)[0] | 1)  # not auto-calculated: cost stays 0
+    struct.pack_into("<I", enit, ENIT_CAST_AT, 2)  # concentration: cast from the press until the release
+    struct.pack_into("<f", enit, ENIT_CHARGE_AT, 0.0)  # no charge time
     en.set("ENIT", bytes(enit))
-    en.add("EFID", esp.u32(mg.form_id)).add("EFIT", struct.pack("<fII", float(damage), 0, 0))
+    en.add("EFID", esp.u32(tg.form_id)).add("EFIT", struct.pack("<fII", 0.0, 0, 0))
     view.override(en)
     # the weapon: a copy of the staff
     w = esp.Rec("WEAP", view.new_id(f"WEAP:{edid}"), [(sig, d) for sig, d in staff.subrecords if sig not in ("VMAD", "DESC", "EITM", "EAMT", "CNAM")],  # CNAM: the template weapon (its model and stats win over this record's)
@@ -598,14 +618,15 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
         insert_ordered(w, "WNAM", esp.u32(fp.form_id), WEAP_ORDER)
     view.override(w)
     log.append(f"Staff gun: {edid}: {element or 'no element'}, damage {damage}, bullet speed {speed:.0f}, interval {interval:g} s, "
-               f"burst {burst}, magazine {clip}, reload {reload_time:g} s, explosion radius {radius:g}, model {mesh or 'the vanilla staff'}")
+               f"magazine {clip}, reload {reload_time:g} s, explosion radius {radius:g}, model {mesh or 'the vanilla staff'}")
     info = (f"Build {STAFF_REV}. Built: animation type {staff.first('DNAM')[0]} (8 = staff) from {staff.edid}; spell {edid}_Spell "
             f"(effect {d_mgef.edid}); bullet speed {speed:.0f}, damage {damage}, element {element or 'none'}, explosion radius {radius:g}; "
-            f"burst of {burst} (the staff's own cast, then {burst - 1} cast by the script, one every {interval:g} s); "
+            f"fired by the script from a concentration cast: one bullet at once, then one every {interval:g} s while the button is held; "
+            f"tracer {STAFF_TRACER_MESH}; "
             f"model {mesh or 'NOT BUILT: the vanilla staff model is kept'}; weapon speed set to {STAFF_SPEED_MULT:g} while it is in the hand. "
             f"Costs no magicka and no charge.")
     props = [("StaffGun", esp.P_OBJECT, w.form_id), ("BulletSpell", esp.P_OBJECT, bullet.form_id), ("MagSize", esp.P_INT, clip),
-             ("ReloadTime", esp.P_FLOAT, reload_time), ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("BurstCount", esp.P_INT, burst), ("Interval", esp.P_FLOAT, interval), ("Info", esp.P_STRING, info),
+             ("ReloadTime", esp.P_FLOAT, reload_time), ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("Interval", esp.P_FLOAT, interval), ("Info", esp.P_STRING, info),
              ("Verbose", esp.P_BOOL, True)]
     fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", STAFF_SCRIPT, props)
     ability = spell(view, "SkylandsStaffGunAbility", "", "",
@@ -1060,6 +1081,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         if shooting == "staff":
             (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
             (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
-            (out_data / "Scripts" / "SkylandsStaffGun11.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun11")))
+            for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12"):
+                (out_data / "Scripts" / f"{old_name}.pex").write_bytes(pex.write(scripts.retired(old_name)))
+    tracer_file = report.pop("staff_tracer", None)  # the mesh bytes are not part of the report
+    if tracer_file:
+        (out_data / "Meshes" / Path(*tracer_file[0].split("\\"))).write_bytes(tracer_file[1])
     report["records"] = len(p.records)
     return report

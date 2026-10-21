@@ -239,10 +239,14 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
                  "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize", "Me.EquipItem(f, False, True)",
                  "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
                  "If w as Bool && w == StaffGun", "Staff gun script started: weapon ", "Equipped: id ", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)",
-                 "Self.Burst()", "While i < BurstCount && go", "go = Self.Extra()", "Utility.Wait(Interval)", "BulletSpell.Cast(ref, ::nonevar)", "Bool Function Ready()", "Return Armed && !Reloading", "Bool more = Mag > 1",
-                 "Int Property BurstCount Auto", "Float Property Interval Auto", "Bool Function Extra()"):
+                 # the hold loop: a pull of the trigger (the cast starting) fires at once and every Interval until the release
+                 "If asEventName == \"BeginCastRight\"", "If asEventName == \"MRh_SpellFire_Event\"", "Gen += 1", "Holding = True", "Self.Hold(Gen)",
+                 "Holding = False", "While go", "Utility.Wait(Interval)", "go = Self.Pull(g)", "Bool ok = g == Gen && Holding && Self.Ready()",
+                 "BulletSpell.Cast(ref, ::nonevar)", "Bool more = Mag > 1", "Bool Function Ready()", "Return Armed && !Reloading",
+                 "Float Property Interval Auto"):
         assert text in psc, text
     assert "Input." not in psc and "GetWeaponType" not in psc  # nothing that needs SKSE
+    assert "Burst" not in psc and "Skipped inoperative" not in psc
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")

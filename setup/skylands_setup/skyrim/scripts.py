@@ -2028,10 +2028,13 @@ def gunner_quest() -> Script:
 def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     """SkylandsStaffGun extends ActiveMagicEffect: the staff-type automatic gun prototype (SkylandsGunModels.esp).
 
-    The gun is a staff whose enchantment casts a spell that fires a Borderlands bullet (no ammo, no magicka, no charge cost).
-    The script (plain Papyrus: no SKSE) gives the staff once, counts a magazine from the game's own spell-fire animation event
-    of the right hand, raises the weapon speed while the staff is in the hand, and reloads by taking the staff out of the hand
-    for the reload time and putting it back. A box on the first equip says what the build made and what the game reports.
+    The gun is a staff whose enchantment is an aimed CONCENTRATION cast of an effect that does nothing (no projectile, no
+    damage, no cost): it only makes the staff start casting at once on the press and go on for as long as the button is held.
+    The script (plain Papyrus: no SKSE) gives the staff once, takes the cast's start event as the trigger pulled and the
+    game's spell-fire event as it let go (the latter is a guess: the box names every event), casts the bullet spell from the
+    player at once and then every Interval seconds while it is held, counts the magazine, raises the weapon speed while the
+    staff is in the hand, and reloads by taking the staff out of the hand for the reload time and putting it back. A box on
+    the first equip says what the build made and what the game reports.
 
       Event OnEffectStart / OnPlayerLoadGame / OnObjectEquipped / OnObjectUnequipped / OnAnimationEvent / OnSpellCast / OnUpdate
     """
@@ -2056,6 +2059,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, ("id", "Reg"), ("id", "ref"), ("str", "MRh_SpellFire_Event")),
             ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "BeginCastRight")),
             ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "MRh_SpellRelease_Event")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "MRh_SpellAimedConcentrationStart")),
             ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "attackStart")),
             ("cast", ("id", "f"), ("id", "::StaffGun_var")),
             ("not", T0, ("id", "Given")),
@@ -2157,41 +2161,89 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         params=[("akSource", "ObjectReference"), ("asEventName", "String")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
         code=[
-            # every event the game sends is named on screen (which one a cast sends is what this test wants to know);
-            # only the right hand's spell-fire event is a shot of the magazine
+            # every event the game sends is named on screen (the concentration cast's names are what this test wants to know);
+            # the cast starting is the trigger being pulled, the cast ending (the game's spell-fire event) is it being let go
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
             *notify(("str", "Staff gun event: "), ("id", "asEventName")),
             ("label", "quiet"),
+            ("cmp_eq", T0, ("id", "asEventName"), ("str", "BeginCastRight")),
+            ("jmpf", T0, ("lbl", "second")),
+            call("Press"),
+            ("label", "second"),
+            ("cmp_eq", T0, ("id", "asEventName"), ("str", "MRh_SpellAimedConcentrationStart")),
+            ("jmpf", T0, ("lbl", "third")),
+            call("Press"),
+            ("label", "third"),
             ("cmp_eq", T0, ("id", "asEventName"), ("str", "MRh_SpellFire_Event")),
+            ("jmpf", T0, ("lbl", "fourth")),
+            call("Release"),
+            ("label", "fourth"),
+            ("cmp_eq", T0, ("id", "asEventName"), ("str", "MRh_SpellRelease_Event")),
             ("jmpf", T0, ("lbl", "end")),
-            call("Shot"),
+            call("Release"),
             ("label", "end"),
             ("return", None),
         ],
     )
-    shot = Function(
-        "Shot",
+    press = Function(
+        "Press",
         locals=[("::nonevar", "None"), ("::temp1", "Bool")],
         code=[
-            # not with the staff away or while reloading
+            # not with the staff away or while reloading; every pull of the trigger is a new generation of the loop,
+            # so a loop left from an earlier pull ends by itself
             *ret_unless(("id", "Armed"), "armed", tmp=T1),
             *ret_if(("id", "Reloading"), "loaded"),
-            ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
-            call("Round"),
+            ("iadd", ("id", "Gen"), ("id", "Gen"), ("int", 1)),
+            ("assign", ("id", "Holding"), ("bool", True)),
+            call("Hold", ("id", "Gen")),
             ("return", None),
         ],
     )
-    round_ = Function(
-        "Round",
-        locals=[("::nonevar", "None"), ("more", "Bool")],
+    release = Function(
+        "Release", locals=[("::nonevar", "None")],
+        code=[("assign", ("id", "Holding"), ("bool", False)), ("return", None)],
+    )
+    hold = Function(
+        "Hold",
+        params=[("g", "Int")],
+        locals=[("::nonevar", "None"), ("go", "Bool")],
         code=[
-            # a burst follows only when this shot did not empty the magazine (Count reloads and refills it)
+            # the first bullet leaves at once; while the trigger is held one more every Interval seconds
+            call("Pull", ("id", "g"), dest=("id", "go")),
+            ("label", "hloop"),
+            ("jmpf", ("id", "go"), ("lbl", "hdone")),
+            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "::Interval_var")),
+            call("Pull", ("id", "g"), dest=("id", "go")),
+            ("jmp", ("lbl", "hloop")),
+            ("label", "hdone"),
+            ("return", None),
+        ],
+    )
+    pull = Function(
+        "Pull",
+        return_type="Bool",
+        params=[("g", "Int")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ok", "Bool"), ("more", "Bool"), ("ref", "ObjectReference")],
+        code=[
+            # one bullet: the trigger still held in this generation and the staff in the hand, not reloading
+            ("cmp_eq", ("id", "ok"), ("id", "g"), ("id", "Gen")),
+            ("jmpf", ("id", "ok"), ("lbl", "held")),
+            ("assign", ("id", "ok"), ("id", "Holding")),
+            ("label", "held"),
+            ("jmpf", ("id", "ok"), ("lbl", "ready")),
+            call("Ready", dest=("id", "ok")),
+            ("label", "ready"),
+            ("jmpf", ("id", "ok"), ("lbl", "done")),
+            # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1")
+            ("cast", ("id", "ref"), ("id", "Me")),
+            ("callmethod", ("id", "Cast"), ("id", "::BulletSpell_var"), NONE, ("id", "ref"), NONE),
+            ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
+            # the shot that empties the magazine reloads, and then the loop ends
             ("cmp_gt", ("id", "more"), ("id", "Mag"), ("int", 1)),
             call("Count"),
-            ("jmpf", ("id", "more"), ("lbl", "single")),
-            call("Burst"),
-            ("label", "single"),
-            ("return", None),
+            ("assign", ("id", "ok"), ("id", "more")),
+            ("label", "done"),
+            ("return", ("id", "ok")),
         ],
     )
     ready = Function(
@@ -2205,52 +2257,6 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("not", T0, ("id", "Reloading")),
             ("label", "end"),
             ("return", T0),
-        ],
-    )
-    burst = Function(
-        "Burst",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("go", "Bool")],
-        code=[
-            # the staff's own cast is the first bullet; the rest of the burst is cast from here, one every Interval seconds
-            *ret_if(("id", "Bursting"), "idle"),
-            ("assign", ("id", "Bursting"), ("bool", True)),
-            ("assign", ("id", "i"), ("int", 1)),
-            ("assign", ("id", "go"), ("bool", True)),
-            ("label", "bloop"),
-            ("cmp_lt", T0, ("id", "i"), ("id", "::BurstCount_var")),
-            ("jmpf", T0, ("lbl", "band")),
-            ("assign", T0, ("id", "go")),
-            ("label", "band"),
-            ("jmpf", T0, ("lbl", "bdone")),
-            call("Extra", dest=("id", "go")),
-            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
-            ("jmp", ("lbl", "bloop")),
-            ("label", "bdone"),
-            ("assign", ("id", "Bursting"), ("bool", False)),
-            ("return", None),
-        ],
-    )
-    extra = Function(
-        "Extra",
-        return_type="Bool",
-        locals=[("::nonevar", "None"), ("ok", "Bool"), ("more", "Bool"), ("ref", "ObjectReference")],
-        code=[
-            # one more bullet, if the staff is still in the hand and not reloading before and after the wait
-            call("Ready", dest=("id", "ok")),
-            ("jmpf", ("id", "ok"), ("lbl", "waited")),
-            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "::Interval_var")),
-            call("Ready", dest=("id", "ok")),
-            ("label", "waited"),
-            ("jmpf", ("id", "ok"), ("lbl", "done")),
-            # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1")
-            ("cast", ("id", "ref"), ("id", "Me")),
-            ("callmethod", ("id", "Cast"), ("id", "::BulletSpell_var"), NONE, ("id", "ref"), NONE),
-            ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
-            ("cmp_gt", ("id", "more"), ("id", "Mag"), ("int", 1)),
-            call("Count"),
-            ("assign", ("id", "ok"), ("id", "more")),
-            ("label", "done"),
-            ("return", ("id", "ok")),
         ],
     )
     on_cast = Function(
@@ -2368,10 +2374,10 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
-                   ("Bursting", "Bool", ("bool", False)), ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)), ("Reg", "Bool", ("bool", False))],
+                   ("Holding", "Bool", ("bool", False)), ("Gen", "Int", ("int", 0)), ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)), ("Reg", "Bool", ("bool", False))],
         auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
-                         ("SpeedMult", "Float"), ("BurstCount", "Int"), ("Interval", "Float"), ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, report, on_equipped, equipped, on_unequipped, on_anim, shot, round_, ready, burst, extra, on_cast, arm, on_update, speed, count, reload_],
+                         ("SpeedMult", "Float"), ("Interval", "Float"), ("Info", "String"), ("Verbose", "Bool")],
+        functions=[on_start, on_load, start, report, on_equipped, equipped, on_unequipped, on_anim, press, release, hold, pull, ready, on_cast, arm, on_update, speed, count, reload_],
     )
 
 

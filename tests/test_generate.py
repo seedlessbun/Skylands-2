@@ -450,16 +450,24 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     en = next(r for r in recs["ENCH"] if r.edid == "SkylandsStaffSMG_Ench")
     assert st.unpack_from("<i", en.first("ENIT"))[0] == 0 and st.unpack_from("<I", en.first("ENIT"), 4)[0] & 1  # costs nothing
     assert len([s for s, _ in en.subrecords if s == "EFID"]) == 1
+    assert st.unpack_from("<I", en.first("ENIT"), 8)[0] == 2 and st.unpack_from("<f", en.first("ENIT"), 24)[0] == 0.0  # concentration, no charge time
+    tg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Trigger")
+    assert st.unpack_from("<I", en.first("EFID"))[0] == tg.form_id  # the staff casts the trigger, not the bullet
+    td = tg.first("DATA")
+    assert st.unpack_from("<I", td, 80)[0] == 2 and st.unpack_from("<I", td, 72)[0] == 0 and st.unpack_from("<f", td, 4)[0] == 0.0  # concentration, no projectile, no cost
     mg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Bullet")
     proj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Bullet")
     assert st.unpack_from("<I", mg.first("DATA"), 72)[0] == proj.form_id and st.unpack_from("<f", mg.first("DATA"), 4)[0] == 0.0
+    assert proj.first("MODL").rstrip(b"\0") == b"Skylands\\Tracer_StaffSMG.nif" and proj.first("NAM1") is None  # our tracer, no fireball or muzzle flash
+    assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Tracer_StaffSMG.nif").read_bytes().startswith(b"Gamebryo File Format")
     pd = proj.first("DATA")
+    assert not st.unpack_from("<H", pd, 0)[0] & 0x8  # no muzzle flash
     assert abs(st.unpack_from("<f", pd, 8)[0] - S.SHOOTING["smg"].speed_bl2 / 3) < 1 and st.unpack_from("<f", pd, 4)[0] == 0.0  # the SMG round's speed, flat
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun12" in vm and b"BulletSpell" in vm and b"BurstCount" in vm and b"Interval" in vm and b"MagSize" in vm and b"SpeedMult" in vm
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun12.pex").is_file()
+    assert b"SkylandsStaffGun13" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"MagSize" in vm and b"SpeedMult" in vm
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun13.pex").is_file()
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():

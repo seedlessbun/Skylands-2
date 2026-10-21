@@ -134,6 +134,55 @@ def beam(color: tuple[int, int, int], texture: str, height: float = 140.0, width
     return b.encode()
 
 
+def tracer(color: tuple[int, int, int], texture: str, length: float = 90.0, width: float = 1.6) -> bytes:
+    """A bullet tracer for a projectile: two crossed quads along +y (the way a projectile flies), the bright head at the
+    origin and the tail `length` behind it fading out, glowing (additive, emissive) in the given colour."""
+    b = NifBuilder()
+    root = b.add("BSFadeNode", b"")
+    b.s("SkylandsTracer")
+    shapes = []
+    flags = VF_VERTEX | VF_UV | VF_NORMAL | VF_COLORS | VF_FULLPREC
+    desc = vertex_desc(flags, 7, 4, 5, 6)
+    for k, (dx, dz) in enumerate(((1.0, 0.0), (0.0, 1.0))):
+        corners = [(-dx, 0.0, -dz, 0.0, 1.0), (dx, 0.0, dz, 1.0, 1.0), (dx, -length, dz, 1.0, 0.0), (-dx, -length, -dz, 0.0, 0.0)]
+        verts = b""
+        for x, y, z, u, v in corners:
+            verts += struct.pack("<3fI", x * width, y, z * width, 0)
+            verts += _half(u) + _half(v)
+            verts += bytes([128, 255, 128, 128])  # normal (packed) + bitangent y
+            verts += bytes([255, 255, 255, 255 if y == 0 else 0])  # vertex alpha fades towards the tail
+        tris = struct.pack("<6H", 0, 1, 2, 0, 2, 3)
+        data_size = len(verts) + len(tris)
+        idx = b.add("BSTriShape", b"")
+        shader = b.add("BSEffectShaderProperty", b"")
+        alpha = b.add("NiAlphaProperty", b"")
+        shape = _net(b, f"Tracer{k}") + _av()
+        shape += struct.pack("<3ff", 0, -length / 2, 0, ((length / 2) ** 2 + width**2) ** 0.5)  # bounding sphere
+        shape += struct.pack("<iii", -1, shader, alpha)
+        shape += struct.pack("<Q", desc)
+        shape += struct.pack("<HHI", 2, 4, data_size) + verts + tris
+        shape += struct.pack("<I", 0)
+        b.set(idx, shape)
+        shapes.append(idx)
+        r, g, bl = (c / 255.0 for c in color)
+        eff = _net(b, "")
+        eff += struct.pack("<II", SLSF1_ZBUFFER_TEST, SLSF2_DOUBLE_SIDED | SLSF2_VERTEX_COLORS)
+        eff += struct.pack("<4f", 0, 0, 1, 1)
+        eff += _sized(texture)
+        eff += bytes([3, 255, 0, 0])
+        eff += struct.pack("<4f", 1.0, 0.0, 1.0, 1.0)
+        eff += struct.pack("<4f", r, g, bl, 1.0)  # emissive colour
+        eff += struct.pack("<ff", 3.0, 0.0)  # emissive multiple, soft falloff depth
+        eff += _sized("")
+        b.set(shader, eff)
+        b.set(alpha, _net(b, "") + struct.pack("<HB", 0x1 | (6 << 1) | (0 << 5), 0))
+    node = _net(b, "SkylandsTracer") + _av(14)
+    node += struct.pack("<I", len(shapes)) + b"".join(struct.pack("<i", i) for i in shapes)
+    node += struct.pack("<I", 0)
+    b.set(root, node)
+    return b.encode()
+
+
 def dds_gradient(height: int = 64) -> bytes:
     """1 x height uncompressed RGBA texture: white, alpha 255 at the bottom fading to 0 at the top."""
     width = 4
