@@ -380,7 +380,7 @@ def test_shooting_rounds_go_in_the_second_plugin(tmp_path):
     rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", shooting="bl2")
     assert (tmp_path / "out" / "Data" / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()
     tes, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"AMMO", "PROJ", "EXPL", "KYWD", "WEAP"})
-    ammo = sorted(recs["AMMO"], key=lambda r: r.form_id)
+    ammo = sorted((r for r in recs["AMMO"] if r.edid.startswith("SkylandsRound_")), key=lambda r: r.form_id)
     assert len(ammo) == 30 and ammo[0].form_id & 0xFFFFFF == 0x800 and ammo[0].edid == "SkylandsRound_pistol_plain"
     kw = {r.form_id & 0xFFFFFF: r.edid for r in recs["KYWD"]}
     assert kw[0x81E] == "SkylandsShot_pistol" and kw[0x823] == "SkylandsShot_launcher" and kw[0x824] == "SkylandsShot_Fire" and kw[0x827] == "SkylandsShot_Slag"

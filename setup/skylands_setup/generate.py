@@ -321,14 +321,32 @@ class Rounds:
             pr.set("DATA", bytes(pd))
             self.view.override(pr)
         data = self.bolts.first("DATA")
-        am = esp.Rec("AMMO", self.ammo_ids[t][e], [(sig, d) for sig, d in self.bolts.subrecords])
-        am.set("EDID", esp.zstr(edid))
-        am.set("FULL", esp.zstr(ROUND_NAMES[kind] + (f" ({element})" if element else "")))
-        am.drop("DESC", "ONAM")  # lstring ids of the vanilla record mean nothing in this plugin
-        if data and len(data) >= 4 and self.bolt_proj is not None:
-            am.set("DATA", struct.pack("<I", proj_id) + data[4:])
+        # built from scratch (a copy of the vanilla record, with its other subrecords, was never accepted into the player's pack)
+        keep = ("OBND", "MODL", "YNAM", "ZNAM")
+        am = esp.Rec("AMMO", self.ammo_ids[t][e], [("EDID", esp.zstr(edid))] + [(s, d) for s, d in self.bolts.subrecords if s in keep])
+        am.add("FULL", esp.zstr(ROUND_NAMES[kind] + (f" ({element})" if element else "")))
+        am.subs.sort(key=lambda sd: ["EDID", "OBND", "FULL", "MODL", "YNAM", "ZNAM"].index(sd[0]))
+        if data and len(data) >= 16 and self.bolt_proj is not None:
+            am.add("DATA", struct.pack("<I", proj_id) + data[4:16])
+        else:
+            am.add("DATA", struct.pack("<IIfI", 0, 0, 8.0, 1))
         self.view.override(am)
         self.made += 1
+
+    def lab_items(self) -> list[int]:
+        """Items for the in-game "item test" (what the game will hold): an old-style copy of the vanilla bolt, and a plain
+        miscellaneous item. Returned with the first round and the vanilla bolt by make_gunner."""
+        out = []
+        clone = esp.Rec("AMMO", self.view.new_id("AMMO:SkylandsLabClone"), [(s, d) for s, d in self.bolts.subrecords])
+        clone.set("EDID", esp.zstr("SkylandsLabClone")).set("FULL", esp.zstr("Lab bolt"))
+        clone.drop("DESC", "ONAM")
+        self.view.override(clone)
+        out.append(clone.form_id)
+        misc = esp.Rec("MISC", self.view.new_id("MISC:SkylandsLabMisc"), [("EDID", esp.zstr("SkylandsLabMisc")),
+                       ("OBND", struct.pack("<6h", 0, 0, 0, 0, 0, 0)), ("FULL", esp.zstr("Lab item")), ("DATA", struct.pack("<If", 1, 0.0))])
+        self.view.override(misc)
+        out.append(misc.form_id)
+        return out
 
     def keywords(self, kind: str, element: str | None) -> list[int]:
         return [self.kind_kw[KINDS.index(kind)], *([self.elem_kw[ELEMENT_NAMES.index(element)]] if element in ELEMENT_NAMES else [])]
@@ -409,6 +427,7 @@ def make_gunner(view: esp.Plugin, m: Masters, rounds: "Rounds", gunner: Gunner, 
         ("Spread", esp.P_FLOAT_ARRAY, [r["spread"] for r in rows]),
         ("Interval", esp.P_FLOAT_ARRAY, [r["interval"] for r in rows]),
         ("Marker", esp.P_OBJECT, aim.form_id), ("Verbose", esp.P_BOOL, True), ("Bolts", esp.P_OBJECT, bolts_id),
+        ("LabItems", esp.P_OBJECT_ARRAY, [rounds.ammo_ids[0][0], *rounds.lab_items(), bolts_id]),
     ]
     template = m.need("MGEF", "AbWeaknessFireConstant")
     effect = script_effect(view, template, "SkylandsGunnerFx", "Skylands Gunner", "SkylandsGunner", props)
