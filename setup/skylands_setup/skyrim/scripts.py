@@ -2048,7 +2048,8 @@ def staff_gun() -> Script:
     )
     start = Function(
         "Start",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("ref", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("ref", "ObjectReference"), ("a", "String"), ("b", "String"),
+                ("c", "String"), ("msg", "String")],
         code=[
             # the game wants an ObjectReference here: an Actor variable passed as it is makes the call fail ("Type mismatch for argument 1")
             ("cast", ("id", "ref"), ("id", "Me")),
@@ -2064,15 +2065,52 @@ def staff_gun() -> Script:
             ("assign", ("id", "Mag"), ("id", "::MagSize_var")),
             ("label", "had"),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            call("Report"),
+            ("return", None),
+        ],
+    )
+    report = Function(
+        "Report",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("c", "String"), ("msg", "String")],
+        code=[
+            # what this copy of the script was given (a saved game can keep an old copy with old values)
+            *ret_unless(("id", "::Verbose_var"), "talk"),
+            ("assign", ("id", "a"), ("str", "NOT SET")),
+            ("cast", T0, ("id", "::StaffGun_var")),
+            ("jmpf", T0, ("lbl", "nogun")),
+            ("assign", ("id", "a"), ("str", "set")),
+            ("label", "nogun"),
+            ("assign", ("id", "b"), ("str", "NOT SET")),
+            ("cast", T0, ("id", "::BulletSpell_var")),
+            ("jmpf", T0, ("lbl", "nospell")),
+            ("assign", ("id", "b"), ("str", "set")),
+            ("label", "nospell"),
+            ("assign", ("id", "c"), ("str", "no")),
+            ("jmpf", ("id", "Given"), ("lbl", "notgiven")),
+            ("assign", ("id", "c"), ("str", "yes")),
+            ("label", "notgiven"),
+            *notify(("str", "Staff gun script started: weapon "), ("id", "a"), ("str", ", spell "), ("id", "b"),
+                    ("str", ", staff given before: "), ("id", "c")),
             ("return", None),
         ],
     )
     on_equipped = Function(
         "OnObjectEquipped",
         params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
+        locals=[("::nonevar", "None")],
+        code=[call("Equipped", ("id", "akBaseObject")), ("return", None)],
+    )
+    equipped = Function(
+        "Equipped",
+        params=[("f", "Form")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon"), ("a", "String"), ("msg", "String")],
         code=[
-            ("cast", ("id", "w"), ("id", "akBaseObject")),
+            # every thing put on is named on screen; the staff gun arms the script
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
+            ("callmethod", ("id", "GetName"), ("id", "f"), ("id", "a")),
+            *notify(("str", "Equipped: "), ("id", "a")),
+            ("label", "quiet"),
+            ("cast", ("id", "w"), ("id", "f")),
             ("cast", T0, ("id", "w")),
             ("jmpf", T0, ("lbl", "both")),
             ("cmp_eq", T0, ("id", "w"), ("id", "::StaffGun_var")),
@@ -2252,5 +2290,5 @@ def staff_gun() -> Script:
                    ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)), ("Reg", "Bool", ("bool", False))],
         auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
                          ("SpeedMult", "Float"), ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, on_equipped, on_unequipped, on_anim, shot, on_cast, arm, on_update, speed, count, reload_],
+        functions=[on_start, on_load, start, report, on_equipped, equipped, on_unequipped, on_anim, shot, on_cast, arm, on_update, speed, count, reload_],
     )
