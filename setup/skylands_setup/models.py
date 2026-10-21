@@ -91,17 +91,68 @@ def fit_from_points(points: list[M.Vec]) -> Fit:
     return Fit(rows, ext[fwd], f"vanilla length {ext[fwd]:.1f} along axis {'xyz'[fwd]}{'+' if sign > 0 else '-'}, up axis {'xyz'[up]}")  # type: ignore[arg-type]
 
 
-def find_vanilla_mesh(data_dir: Path, modl: bytes | None, say=None) -> bytes | None:
+@dataclass
+class Hold:
+    """How to fit a gun to another vanilla weapon than the crossbow (the staff prototype): that weapon's axes (`fit`), its
+    extra data (the attach point), the turn (degrees) applied to the gun before the fit, and a tag for the file name."""
+
+    fit: Fit
+    extra: list
+    pitch: float = 0.0
+    yaw: float = 0.0
+    roll: float = 0.0
+    tag: str = "hold"
+    note: str = ""
+
+
+def staff_hold(vanilla_nif: bytes | None, turn: tuple[float, float, float] = (0.0, 0.0, 0.0), say=None) -> Hold:
+    """Fit for a vanilla staff. A staff is long and thin, held near the middle with a head at one end; the gun's barrel goes
+    towards the head (the end that is thicker). Where the axes cannot be measured the crossbow's assumption is used."""
+    log = say or (lambda _m: None)
+    pts: list = []
+    extra: list = []
+    if vanilla_nif:
+        try:
+            pts = nifread.world_points(vanilla_nif)
+            extra = [e for e in nifread.extra_data(vanilla_nif) if e[0] == "NiStringExtraData"]
+        except (nifread.NifError, ValueError, struct.error) as e:
+            log(f"Staff gun: could not read the vanilla staff mesh ({e})")
+    if len(pts) < 4:
+        fit = Fit(IDENTITY, 100.0, "no vanilla staff mesh: assuming barrel +y, up +z")
+        return Hold(fit, extra, *turn, tag="staff", note=fit.note)
+    ext = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
+    fwd = max(range(3), key=lambda i: ext[i])
+    others = [i for i in range(3) if i != fwd]
+    up = min(others, key=lambda i: ext[i])
+    lo, hi = min(p[fwd] for p in pts), max(p[fwd] for p in pts)
+    span = hi - lo
+
+    def girth(a: float, b: float) -> float:  # how widely the points of one end of the staff are spread sideways
+        side = [p for p in pts if a <= p[fwd] <= b]
+        return sum(max(q[i] for q in side) - min(q[i] for q in side) for i in others) if side else 0.0
+
+    top, bottom = girth(hi - span * 0.25, hi), girth(lo, lo + span * 0.25)
+    sign = 1.0 if top >= bottom else -1.0
+    f, u = [0.0] * 3, [0.0] * 3
+    f[fwd], u[up] = sign, 1.0
+    r = M.cross(tuple(f), tuple(u))  # type: ignore[arg-type]
+    rows = tuple(tuple((r, f, u)[c][i] for c in range(3)) for i in range(3))
+    note = (f"vanilla staff {span:.0f} long along axis {'xyz'[fwd]}, head at {'+' if sign > 0 else '-'} (end spread {top:.0f} vs {bottom:.0f}), "
+            f"mesh runs {lo:.0f}..{hi:.0f}")
+    return Hold(Fit(rows, span, note), extra, *turn, tag="staff", note=note)  # type: ignore[arg-type]
+
+
+def find_vanilla_mesh(data_dir: Path, modl: bytes | None, say=None, what: str = "crossbow") -> bytes | None:
     """The vanilla crossbow's NIF: a loose file in Data\\Meshes, or inside one of Skyrim's archives (an exact path first, then
     the nearest thing named like a crossbow). Says what it did, because a miss means the fit falls back to guessed axes."""
     log = say or (lambda _m: None)
     if not modl:
-        log("vanilla crossbow mesh: the crossbow record has no model path")
+        log(f"vanilla {what} mesh: the record has no model path")
         return None
     rel = modl.split(b"\0")[0].decode("cp1252", "replace").replace("/", "\\").lstrip("\\")
     loose = Path(data_dir) / "Meshes" / Path(*rel.split("\\"))
     if loose.is_file():
-        log(f"vanilla crossbow mesh: {rel} (loose file)")
+        log(f"vanilla {what} mesh: {rel} (loose file)")
         return loose.read_bytes()
     from .skyrim import bsa
 
@@ -117,23 +168,23 @@ def find_vanilla_mesh(data_dir: Path, modl: bytes | None, say=None) -> bytes | N
         if inner in a.entries:
             try:
                 data = a.read(inner)
-                log(f"vanilla crossbow mesh: {rel} (in {archive.name})")
+                log(f"vanilla {what} mesh: {rel} (in {archive.name})")
                 return data
             except Exception as e:  # noqa: BLE001
                 failed.append(f"{archive.name} read: {type(e).__name__}: {e}")
         for name in a.entries:
-            if "crossbow" in name and name.endswith(".nif") and not any(k in name for k in ("1stperson", "firstperson", "bolt", "skin", "dlc02", "_fp")):
+            if what in name and name.endswith(".nif") and not any(k in name for k in ("1stperson", "firstperson", "bolt", "skin", "dlc02", "_fp")):
                 near.append((archive, name))
     if near:
         near.sort(key=lambda t: (0 if "weapons" in t[1] else 1, len(t[1])))
         archive, name = near[0]
         try:
             data = bsa.BSA(archive).read(name)
-            log(f"vanilla crossbow mesh: {rel} not found; using {name} from {archive.name}")
+            log(f"vanilla {what} mesh: {rel} not found; using {name} from {archive.name}")
             return data
         except Exception as e:  # noqa: BLE001
             failed.append(f"{archive.name} read {name}: {type(e).__name__}: {e}")
-    log(f"vanilla crossbow mesh: {rel} not found ({opened} archives searched, unreadable: {failed[:4] or 'none'})")
+    log(f"vanilla {what} mesh: {rel} not found ({opened} archives searched, unreadable: {failed[:4] or 'none'})")
     return None
 
 
@@ -307,14 +358,16 @@ class GunModels:
         return f"{TEX_DIR}\\{key}.dds"
 
     # --- one gun
-    def model_for(self, g: dict, built: dict, rarity_id: str, accent: tuple[int, int, int], edid: str) -> str | None:
-        """The path (under Meshes\\) of this gun's NIF, or None to keep the vanilla crossbow mesh."""
+    def model_for(self, g: dict, built: dict, rarity_id: str, accent: tuple[int, int, int], edid: str,
+                  hold: "Hold | None" = None) -> str | None:
+        """The path (under Meshes\\) of this gun's NIF, or None to keep the vanilla crossbow mesh. `hold` fits the gun to
+        another vanilla weapon instead (the staff prototype): its axes, attach point and turn."""
         if self.method == "off":
             return None
         order = ("native", "umodel", "proxy") if self.method == "auto" else (self.method,)
         for method in order:
             try:
-                result = self._build(method, g, built, rarity_id, accent, edid)
+                result = self._build(method, g, built, rarity_id, accent, edid, hold)
             except Exception as e:  # noqa: BLE001 - a bad mesh must never stop the install
                 self.say(f"Gun model {edid}: {method} failed ({type(e).__name__}: {e})")
                 continue
@@ -324,7 +377,7 @@ class GunModels:
         self.stats["failed"] += 1
         return None
 
-    def _build(self, method: str, g: dict, built: dict, rarity_id: str, accent, edid: str) -> str | None:
+    def _build(self, method: str, g: dict, built: dict, rarity_id: str, accent, edid: str, hold: "Hold | None" = None) -> str | None:
         gun_type = g["type"]
         mfr = g.get("manufacturer", "")
         if method == "proxy":
@@ -350,6 +403,8 @@ class GunModels:
         calib_level = S.RARITIES[rarity_id].level if self.calibrate and rarity_id in S.RARITIES else 1
         if self.calibrate:
             look += f"|calibration {calib_level}"
+        if hold is not None:
+            look += f"|{hold.tag}|{hold.pitch:g},{hold.yaw:g},{hold.roll:g}"
         key = hashlib.sha1(look.encode()).hexdigest()[:10]
         if key in self.written:
             self.stats["shared"] += 1
@@ -368,7 +423,10 @@ class GunModels:
             placed = [M.transformed(p, None, 1.0, (-cx, -cy, -cz)) for p in placed]
         if method != "proxy":
             placed = [M.ensure_outward(p) for p in placed]
-        if self.calibrate:
+        fit, extra = (hold.fit, hold.extra) if hold is not None else (self.fit, self.extra)
+        if hold is not None:
+            hold_pitch, hold_yaw, hold_roll = hold.pitch, hold.yaw, hold.roll
+        elif self.calibrate:
             hold_pitch, hold_yaw, hold_roll = CALIBRATION[calib_level]
         else:
             hold_pitch, hold_yaw, hold_roll = HOLD_PITCH + self.pitch, HOLD_YAW + self.spin, 0.0
@@ -381,7 +439,7 @@ class GunModels:
             a = math.radians(hold_yaw)
             turn = ((math.cos(a), -math.sin(a), 0.0), (math.sin(a), math.cos(a), 0.0), (0.0, 0.0, 1.0))
             placed = [M.transformed(p, turn) for p in placed]
-        placed = [fit_mesh(p, self.fit, 1.0) for p in placed]
+        placed = [fit_mesh(p, fit, 1.0) for p in placed]
         groups: dict[tuple[str | None, str | None], list[M.Mesh]] = {}
         for p in placed:
             groups.setdefault((p.texture, p.normal_map), []).append(p)
@@ -395,7 +453,7 @@ class GunModels:
         lo2, hi2 = allp.bounds()
         half = tuple(max(0.02, (hi2[i] - lo2[i]) / 2 / HAVOK_SCALE) for i in range(3))
         self.sizes.setdefault(gun_type, []).append((hi2[1] - lo2[1], max(hi2[i] - lo2[i] for i in range(3))))
-        data = nif.gun(shapes, half, 2.0, "SkylandsGun", self.extra)  # type: ignore[arg-type]
+        data = nif.gun(shapes, half, 2.0, "SkylandsGun", extra)  # type: ignore[arg-type]
         rel = f"{MESH_DIR}\\{method}_{key}.nif"
         path = self.out / "Meshes" / Path(*rel.split("\\"))
         path.parent.mkdir(parents=True, exist_ok=True)

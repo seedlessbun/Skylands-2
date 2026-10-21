@@ -425,3 +425,51 @@ def test_gun_mesh_length_follows_the_size_table(tmp_path):
         pts = nifread.world_points(f.read_bytes())
         longest = max(max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3))
         assert abs(longest - models_mod.LENGTH["pistol"] * scale) < 0.05 * models_mod.LENGTH["pistol"] * scale, (scale, longest)
+
+
+from skylands_setup import sheet_data as S  # noqa: E402
+
+
+def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
+    import struct as st
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
+    bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
+    bl2["weapons"]["guns"].append({**bl2["weapons"]["guns"][0], "type": "smg", "elements": ["Fire"]})  # the fake game has pistols only
+    generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky0"), tmp_path / "out0")
+    rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff")
+    assert (tmp_path / "out" / "Data" / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()
+    assert rep["staff_gun"]["edid"] == "SkylandsStaffSMG" and rep["staff_gun"]["mesh"]
+    _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST"})
+    w = next(r for r in recs["WEAP"] if r.edid == "SkylandsStaffSMG")
+    assert w.first("DNAM")[0] == 8  # animation type: staff
+    assert w.first("EAMT") and w.first("MODL").rstrip(b"\0").endswith(b".nif") and b"Skylands" in w.first("MODL")
+    en = next(r for r in recs["ENCH"] if r.edid == "SkylandsStaffSMG_Ench")
+    assert st.unpack_from("<i", en.first("ENIT"))[0] == 0 and st.unpack_from("<I", en.first("ENIT"), 4)[0] & 1  # costs nothing
+    assert len([s for s, _ in en.subrecords if s == "EFID"]) == 1
+    mg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Bullet")
+    proj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Bullet")
+    assert st.unpack_from("<I", mg.first("DATA"), 72)[0] == proj.form_id and st.unpack_from("<f", mg.first("DATA"), 4)[0] == 0.0
+    pd = proj.first("DATA")
+    assert abs(st.unpack_from("<f", pd, 8)[0] - S.SHOOTING["smg"].speed_bl2 / 3) < 1 and st.unpack_from("<f", pd, 4)[0] == 0.0  # the SMG round's speed, flat
+    assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
+    fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
+    vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
+    assert b"SkylandsStaffGun" in vm and b"BulletSpell" in vm and b"MagSize" in vm
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun.pex").is_file()
+
+
+def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():
+    from skylands_setup import meshes as M, models as models_mod
+    from skylands_setup.skyrim import nif
+
+    shaft = M.box(0, 0, 0, 0.02, 0.02, 1.0)  # a thin pole along z, centred on the grip
+    head = M.box(0, 0, 0.5, 0.2, 0.2, 0.2)  # a thick head at the +z end
+    for sign in (1, -1):
+        parts = [M.transformed(m, ((1, 0, 0), (0, sign, 0), (0, 0, sign)), 40.0) for m in (shaft, head)]
+        data = nif.gun([(M.merged(parts), None, None)], (0.1, 0.1, 0.5), 2.0, "Staff")
+        hold = models_mod.staff_hold(data, (0.0, 0.0, 15.0))
+        assert hold.roll == 15.0 and f"head at {'+' if sign > 0 else '-'} (" in hold.note
+        barrel = tuple(hold.fit.matrix[i][1] for i in range(3))  # where the gun's +y (barrel) goes in the staff's frame
+        assert abs(abs(barrel[2]) - 1.0) < 1e-6 and barrel[2] * sign > 0, (sign, barrel)

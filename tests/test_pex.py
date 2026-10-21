@@ -225,3 +225,16 @@ def test_gunner_scripts_decompile(tmp_path):
     (tmp_path / "q").mkdir()
     q = decompile(tmp_path / "q", scripts.gunner_quest(), "SkylandsGunnerQuest")
     assert "player.AddSpell(Ability, False)" in q and "Spell Property Ability Auto" in q
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
+    psc = decompile(tmp_path, scripts.staff_gun(), "SkylandsStaffGun")
+    assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc
+    for text in ("Key = Input.GetMappedKey(\"Right Attack/Block\", 255)", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
+                 "Bool held = Utility.IsInMenuMode()", "held = Me.IsWeaponDrawn()", "held = Input.IsKeyPressed(Key)",
+                 "Float gap = now - Stamp", "If gap < Interval", "BulletSpell.Cast(Me, None)",
+                 "Mag -= 1", "Self.Reload()", "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize",
+                 "Me.EquipItem(f, False, True)", "Int kind = StaffGun.GetWeaponType()", "Event OnSpellCast(Form akSpell)",
+                 "If w == StaffGun", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto"):
+        assert text in psc, text

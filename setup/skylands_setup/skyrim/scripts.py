@@ -2016,3 +2016,230 @@ def gunner_quest() -> Script:
     )
     return Script(name="SkylandsGunnerQuest", parent="Quest", auto_properties=[("Ability", "Spell")],
                   functions=[on_init, on_update])
+
+
+def staff_gun() -> Script:
+    """SkylandsStaffGun extends ActiveMagicEffect: the staff-type automatic gun prototype (SkylandsGunModels.esp).
+
+    The gun is a staff whose enchantment casts a spell that fires a Borderlands bullet (no ammo, no magicka, no charge cost).
+    The script gives the staff once, counts a magazine (a shot is a press of the attack button, then one more every Interval
+    seconds while it stays down: it casts the bullet spell itself), and reloads by taking the staff out of the hand for the
+    reload time and putting it back. A box on the first equip says the weapon type, the spell and the magazine.
+
+      Event OnEffectStart / OnPlayerLoadGame / OnObjectEquipped / OnObjectUnequipped / OnSpellCast / OnUpdate
+    """
+    T0, T1 = ("id", "::temp0"), ("id", "::temp1")
+    on_start = Function(
+        "OnEffectStart",
+        params=[("akTarget", "Actor"), ("akCaster", "Actor")],
+        locals=[("::nonevar", "None")],
+        code=[("assign", ("id", "Me"), ("id", "akTarget")), call("Start"), ("return", None)],
+    )
+    on_load = Function(
+        "OnPlayerLoadGame", locals=[("::nonevar", "None")],
+        code=[("assign", ("id", "Boxed"), ("bool", False)), call("Start"), ("return", None)],
+    )
+    start = Function(
+        "Start",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form")],
+        code=[
+            ("callstatic", ("id", "Input"), ("id", "GetMappedKey"), ("id", "Key"), ("str", "Right Attack/Block"), ("int", 255)),
+            ("cast", ("id", "f"), ("id", "::StaffGun_var")),
+            ("not", T0, ("id", "Given")),
+            ("jmpf", T0, ("lbl", "had")),
+            ("assign", ("id", "Given"), ("bool", True)),
+            ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "f"), ("int", 1), ("bool", False)),
+            ("assign", ("id", "Mag"), ("id", "::MagSize_var")),
+            ("label", "had"),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 0.5)),
+            ("return", None),
+        ],
+    )
+    on_equipped = Function(
+        "OnObjectEquipped",
+        params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
+        code=[
+            ("cast", ("id", "w"), ("id", "akBaseObject")),
+            ("cmp_eq", T0, ("id", "w"), ("id", "::StaffGun_var")),
+            ("jmpf", T0, ("lbl", "end")),
+            ("assign", ("id", "Armed"), ("bool", True)),
+            call("Arm"),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    on_unequipped = Function(
+        "OnObjectUnequipped",
+        params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
+        code=[
+            ("cast", ("id", "w"), ("id", "akBaseObject")),
+            ("cmp_eq", T0, ("id", "w"), ("id", "::StaffGun_var")),
+            ("jmpf", T0, ("lbl", "end")),
+            ("assign", ("id", "Armed"), ("id", "Reloading")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    on_cast = Function(
+        "OnSpellCast",
+        params=[("akSpell", "Form")],
+        locals=[("::nonevar", "None")],
+        code=[("iadd", ("id", "Casts"), ("id", "Casts"), ("int", 1)), ("return", None)],
+    )
+    arm = Function(
+        "Arm",
+        locals=[("::nonevar", "None"), ("kind", "Int"), ("name", "String"),
+                ("a", "String"), ("b", "String"), ("c", "String"), ("msg", "String")],
+        code=[
+            # the box says what the game made of the weapon: its type (8 = staff), the spell, the magazine, the events seen
+            *ret_if(("id", "Reloading"), "idle"),
+            *ret_if(("id", "Boxed"), "shown"),
+            ("assign", ("id", "Boxed"), ("bool", True)),
+            ("callmethod", ("id", "GetWeaponType"), ("id", "::StaffGun_var"), ("id", "kind"), ),
+            ("callmethod", ("id", "GetName"), ("id", "::BulletSpell_var"), ("id", "name")),
+            ("cast", ("id", "a"), ("id", "kind")),
+            ("cast", ("id", "b"), ("id", "Mag")),
+            ("cast", ("id", "c"), ("id", "::MagSize_var")),
+            ("assign", ("id", "msg"), ("str", "Skylands staff gun. Weapon type: ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "a")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " (8 = staff). Spell: ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "name")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". Magazine: ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "b")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " of ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "c")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "::Info_var")),
+            ("callstatic", ("id", "Debug"), ("id", "MessageBox"), NONE, ("id", "msg")),
+            ("return", None),
+        ],
+    )
+    on_update = Function(
+        "OnUpdate",
+        locals=[("::nonevar", "None")],
+        code=[call("Tick"), ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "Next")), ("return", None)],
+    )
+    tick = Function(
+        "Tick",
+        locals=[("::nonevar", "None"), ("::temp1", "Bool")],
+        code=[
+            ("assign", ("id", "Next"), ("float", 0.5)),
+            *ret_unless(("id", "Armed"), "armed", tmp=T1),
+            ("assign", ("id", "Next"), ("float", 0.05)),
+            call("Poll"),
+            ("return", None),
+        ],
+    )
+    poll = Function(
+        "Poll",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("held", "Bool")],
+        code=[
+            # a click in a menu, or with the weapon away, is not a shot
+            ("callstatic", ("id", "Utility"), ("id", "IsInMenuMode"), ("id", "held")),
+            ("jmpf", ("id", "held"), ("lbl", "nomenu")),
+            ("assign", ("id", "Held"), ("bool", False)),
+            ("return", None),
+            ("label", "nomenu"),
+            ("callmethod", ("id", "IsWeaponDrawn"), ("id", "Me"), ("id", "held")),
+            ("not", T0, ("id", "held")),
+            ("jmpf", T0, ("lbl", "drawn")),
+            ("assign", ("id", "Held"), ("bool", False)),
+            ("return", None),
+            ("label", "drawn"),
+            ("callstatic", ("id", "Input"), ("id", "IsKeyPressed"), ("id", "held"), ("id", "Key")),
+            ("jmpf", ("id", "held"), ("lbl", "up")),
+            call("Down"),
+            ("return", None),
+            ("label", "up"),
+            ("assign", ("id", "Held"), ("bool", False)),
+            ("return", None),
+        ],
+    )
+    down = Function(
+        "Down",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            # the attack button is down and the staff is armed: not while reloading or with an empty magazine
+            *ret_if(("id", "Reloading"), "idle"),
+            ("cmp_lte", T0, ("id", "Mag"), ("int", 0)),
+            ("jmpf", T0, ("lbl", "loaded")),
+            ("return", None),
+            ("label", "loaded"),
+            ("jmpf", ("id", "Held"), ("lbl", "press")),
+            call("Again"),
+            ("return", None),
+            ("label", "press"),
+            # the press itself: the staff cast its own spell
+            ("assign", ("id", "Held"), ("bool", True)),
+            ("callstatic", ("id", "Utility"), ("id", "GetCurrentRealTime"), ("id", "Stamp")),
+            ("iadd", ("id", "Pressed"), ("id", "Pressed"), ("int", 1)),
+            call("Count"),
+            ("return", None),
+        ],
+    )
+    again = Function(
+        "Again",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("now", "Float"), ("gap", "Float")],
+        code=[
+            # still down: one more shot every Interval seconds (real time), cast by this script
+            ("callstatic", ("id", "Utility"), ("id", "GetCurrentRealTime"), ("id", "now")),
+            ("fsub", ("id", "gap"), ("id", "now"), ("id", "Stamp")),
+            ("cmp_lt", T0, ("id", "gap"), ("id", "::Interval_var")),
+            *ret_if(T0, "wait"),
+            ("assign", ("id", "Stamp"), ("id", "now")),
+            ("callmethod", ("id", "Cast"), ("id", "::BulletSpell_var"), NONE, ("id", "Me"), None),
+            ("iadd", ("id", "Auto"), ("id", "Auto"), ("int", 1)),
+            call("Count"),
+            ("return", None),
+        ],
+    )
+    count = Function(
+        "Count",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("msg", "String")],
+        code=[
+            ("isub", ("id", "Mag"), ("id", "Mag"), ("int", 1)),
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
+            ("cast", ("id", "a"), ("id", "Mag")),
+            ("cast", ("id", "b"), ("id", "Casts")),
+            *notify(("str", "Staff gun: magazine "), ("id", "a"), ("str", ", cast events seen "), ("id", "b")),
+            ("label", "quiet"),
+            ("cmp_lte", T0, ("id", "Mag"), ("int", 0)),
+            ("jmpf", T0, ("lbl", "end")),
+            call("Reload"),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    reload_ = Function(
+        "Reload",
+        locals=[("::nonevar", "None"), ("f", "Form"), ("msg", "String")],
+        code=[
+            # the staff cannot be used while it is out of the hand
+            ("assign", ("id", "Reloading"), ("bool", True)),
+            ("cast", ("id", "f"), ("id", "::StaffGun_var")),
+            *notify(("str", "Staff gun: reloading")),
+            ("callmethod", ("id", "UnequipItem"), ("id", "Me"), NONE, ("id", "f"), ("bool", False), ("bool", True)),
+            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "::ReloadTime_var")),
+            ("assign", ("id", "Mag"), ("id", "::MagSize_var")),
+            ("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "f"), ("bool", False), ("bool", True)),
+            ("assign", ("id", "Reloading"), ("bool", False)),
+            ("assign", ("id", "Armed"), ("bool", True)),
+            ("assign", ("id", "Held"), ("bool", False)),
+            *notify(("str", "Staff gun: reloaded")),
+            ("return", None),
+        ],
+    )
+    return Script(
+        name="SkylandsStaffGun",
+        parent="ActiveMagicEffect",
+        variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
+                   ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
+                   ("Held", "Bool", ("bool", False)), ("Casts", "Int", ("int", 0)), ("Auto", "Int", ("int", 0)),
+                   ("Pressed", "Int", ("int", 0)), ("Key", "Int", ("int", 0)), ("Stamp", "Float", ("float", 0.0)),
+                   ("Next", "Float", ("float", 0.5))],
+        auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
+                         ("Interval", "Float"), ("Info", "String"), ("Verbose", "Bool")],
+        functions=[on_start, on_load, start, on_equipped, on_unequipped, on_cast, arm, on_update, tick, poll, down, again, count, reload_],
+    )

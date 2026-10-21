@@ -54,3 +54,21 @@ explosion definitions first.
 
 ## Not built yet
 Burst/automatic fire, shotgun pellets, spread, magazine and reload, rocket flight/explosion radius from the game, BL2 sounds.
+
+## Staged move away from the crossbow (0.13.0, Stage 1)
+
+Goal: every gun type gets its own base weapon records instead of a copy of the crossbow, so fire rate, automatic fire and
+feel are not limited by the crossbow's draw-and-reload animation. Stage 1 is one prototype, an SMG on the staff animation
+type (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`). Stage 2 (which animation type for which gun
+type) waits for the in-game report.
+
+* The weapon is a copy of a vanilla staff (animation type 8). Its enchantment is a new one with cost 0 (not auto-calculated)
+  whose effect is a copy of the staff's projectile effect pointing at a new projectile: Borderlands SMG bullet speed / 3,
+  gravity 0, the gun's element as the explosion (data from the rounds, `Rounds.expl`). The same effect is also a plain spell
+  (`SkylandsStaffSMG_Spell`) that the script casts for repeats.
+* Only the gun's own records; no ammo at all (the element is part of the spell, not of an ammo type).
+* `SkylandsStaffGun` (ActiveMagicEffect on the player, started by its own quest `SkylandsStaffGunQuest`): gives the staff once,
+  repeats the shot while the attack button is held (real-time interval), counts the magazine, reloads by taking the staff
+  out of the hand for the reload time, and shows a box on the first equip (weapon type, spell, magazine, what was built).
+* Native BL2 mesh fitted to the staff's own axes (barrel toward the thicker end of the staff, a guess) with `--staff-turn
+  pitch,yaw,roll` for correcting it by hand.

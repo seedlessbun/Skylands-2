@@ -456,6 +456,152 @@ def tune_bolts(view: esp.Plugin, m: Masters, bolts: Record, log: list[str]) -> b
     return True
 
 
+# ---- the staff-type automatic gun prototype -------------------------------------------------------------------------------
+STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow)
+STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
+MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
+ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
+
+
+def staff_donor(m: "Masters", element: str | None, log: list[str]):
+    """A vanilla staff whose spell flies a projectile: (weapon, enchantment, effect record, projectile record). Preferred by
+    the element's art (a fire staff for fire, ...), else any."""
+    rx = re.compile(STAFF_DONOR.get(element.lower() if element else None, STAFF_DONOR[None]), re.I)
+    found = []
+    for w in sorted(m.by_type["WEAP"].values(), key=lambda r: r.edid):
+        dn, eitm = w.first("DNAM"), w.first("EITM")
+        if not dn or dn[0] != STAFF_ANIMATION or not eitm or not w.first("MODL"):
+            continue
+        ench = m.by_type["ENCH"].get(struct.unpack_from("<I", eitm)[0])
+        efid = ench.first("EFID") if ench else None
+        mg = m.by_type["MGEF"].get(struct.unpack_from("<I", efid)[0]) if efid else None
+        md = mg.first("DATA") if mg else None
+        if not md or len(md) < 80:
+            continue
+        pj = m.by_type["PROJ"].get(struct.unpack_from("<I", md, MGEF_PROJECTILE_AT)[0])
+        if pj is None or len(pj.first("DATA") or b"") < 40:
+            continue
+        found.append((0 if rx.search(w.edid) or rx.search(mg.edid) else 1, w.edid, w, ench, mg, pj))
+    if not found:
+        log.append("Staff gun: no vanilla staff with a projectile spell was found")
+        return None
+    found.sort(key=lambda t: t[:2])
+    _, _, w, ench, mg, pj = found[0]
+    log.append(f"Staff gun: donor staff {w.edid} (animation type {w.first('DNAM')[0]}), enchantment {ench.edid}, effect {mg.edid}, projectile {pj.edid}")
+    return w, ench, mg, pj
+
+
+def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, data_dir: Path, guns: list[dict], parts: dict, rarity_colors,
+                   hold_turn: tuple[float, float, float], report: dict) -> None:
+    """ONE submachine gun built on a vanilla staff (animation type staff): its enchantment casts a spell whose projectile is a
+    Borderlands bullet (speed, element and explosion from the rounds data), at no magicka and no charge. The SkylandsStaffGun
+    script (scripts.staff_gun) keeps the magazine, repeats the shot while the attack button is held, and reloads."""
+    log = report["model_log"]
+    gun = next((g for g in guns if g["type"] == "smg" and g["elements"]), None) or next((g for g in guns if g["type"] == "smg"), None)
+    if gun is None:
+        log.append("Staff gun: no submachine gun was extracted")
+        return
+    gt = next(t for t in S.GUN_TYPES.values() if t.id == "smg")
+    rr = rarity_row(gun["rarity"])
+    built = assemble.pick(gun, {**parts}, 0, set())
+    element = built["element"] or (gun["elements"][0] if gun["elements"] else None)
+    edid = "SkylandsStaffSMG"
+    st = stats.roll(edid, gt, rr, element is not None, built["mods"])
+    damage = max(1, round(gt.base_damage * rr.damage_mult * st["damage_mult"]))
+    donor = staff_donor(m, element, log)
+    if donor is None:
+        return
+    staff, d_ench, d_mgef, d_proj = donor
+    shot = S.SHOOTING.get("smg")
+    speed = float(shot.speed_bl2 if shot else 20000) * BL2_TO_SKYRIM_SPEED
+    interval = max(0.06, float(shot.fire_interval if shot else 0.1))
+    clip = int(shot.clip) if shot else 30
+    reload_time = float(shot.reload) if shot else 2.0
+    # the bullet: the staff spell's projectile, retuned to the Borderlands speed, flat, with the round's explosion
+    pr = esp.Rec("PROJ", view.new_id(f"PROJ:{edid}_Bullet"), [(sig, d) for sig, d in d_proj.subrecords])
+    pr.set("EDID", esp.zstr(f"{edid}_Bullet"))
+    pd = bytearray(d_proj.first("DATA"))
+    struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0, speed)
+    struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
+    flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0]
+    explosion, radius = 0, 0.0
+    if element is not None:
+        radius = float(shot.explosion_radius) if shot and getattr(shot, "explosion_radius", None) else SPLASH["smg"][0]
+        explosion = rounds.expl("smg", element, float(damage), radius)
+        flags |= 0x2
+    else:
+        flags &= ~0x2
+    struct.pack_into("<H", pd, PROJ_FLAGS_AT, flags)
+    struct.pack_into("<I", pd, PROJ_EXPLOSION_AT, explosion)
+    pr.set("DATA", bytes(pd))
+    view.override(pr)
+    # the effect that flies it (damage as the donor's), costing nothing
+    mg = esp.Rec("MGEF", view.new_id(f"MGEF:{edid}_Bullet"), [(sig, d) for sig, d in d_mgef.subrecords if sig not in ("DNAM",)])
+    mg.set("EDID", esp.zstr(f"{edid}_Bullet"))
+    mg.set("FULL", esp.zstr("Skylands bullet"))
+    md = bytearray(d_mgef.first("DATA"))
+    struct.pack_into("<f", md, MGEF_COST_AT, 0.0)
+    struct.pack_into("<II", md, MGEF_PROJECTILE_AT, pr.form_id, 0)  # projectile, explosion (the projectile carries its own)
+    mg.set("DATA", bytes(md))
+    view.override(mg)
+    effect = (mg.form_id, float(damage), 0, 0)
+    bullet = spell(view, f"{edid}_Spell", "Skylands bullet", "",
+                   struct.pack("<IIIfIIffI", 0, 1, 0, 0, d_ench_cast(d_ench), DELIVERY["aimed"], 0, 0, 0), [effect])
+    # the staff's enchantment: the same effect, no cost, a huge charge
+    en = esp.Rec("ENCH", view.new_id(f"ENCH:{edid}"), [(sig, d) for sig, d in d_ench.subrecords if sig not in ("EFID", "EFIT", "CTDA")])
+    en.set("EDID", esp.zstr(f"{edid}_Ench"))
+    if en.get("FULL") is not None:
+        en.set("FULL", esp.zstr("Skylands bullet"))
+    enit = bytearray(d_ench.first("ENIT"))
+    struct.pack_into("<i", enit, ENIT_COST_AT, 0)
+    struct.pack_into("<I", enit, ENIT_FLAGS_AT, struct.unpack_from("<I", enit, ENIT_FLAGS_AT)[0] | 1)  # not auto-calculated: cost stays 0
+    en.set("ENIT", bytes(enit))
+    en.add("EFID", esp.u32(mg.form_id)).add("EFIT", struct.pack("<fII", float(damage), 0, 0))
+    view.override(en)
+    # the weapon: a copy of the staff
+    w = esp.Rec("WEAP", view.new_id(f"WEAP:{edid}"), [(sig, d) for sig, d in staff.subrecords if sig not in ("VMAD", "DESC", "EITM", "EAMT")],
+                flags=staff.flags & esp.REC_COMPRESSED)
+    w.set("EDID", esp.zstr(edid))
+    insert_ordered(w, "FULL", esp.zstr("Skylands SMG (staff)"), WEAP_ORDER)
+    insert_ordered(w, "EITM", esp.u32(en.form_id), WEAP_ORDER)
+    insert_ordered(w, "EAMT", u16(65535), WEAP_ORDER)
+    dd = w.get("DATA") or b"\0" * 10
+    insert_ordered(w, "DATA", struct.pack("<IfH", 600, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
+    mesh = None
+    if models is not None:
+        hold = models_mod.staff_hold(models_mod.find_vanilla_mesh(data_dir, staff.first("MODL"), log.append, "staff"), hold_turn, log.append)
+        log.append(f"Staff gun: fit {hold.note}; turn {hold_turn}; extra data {hold.extra}")
+        mesh = models.model_for(gun, built, rr.id, rarity_colors(rr.level), edid, hold)
+    if mesh:
+        w.set("MODL", esp.zstr(mesh))
+        w.drop("MODT", "MODS", "MO2T", "MO2S")
+        fp = view.new("STAT", "SkylandsGunView_StaffSMG")
+        fp.add("OBND", struct.pack("<6h", -40, -40, -40, 40, 40, 40)).add("MODL", esp.zstr(mesh)).add("DNAM", struct.pack("<fI", 30.0, 0))
+        insert_ordered(w, "WNAM", esp.u32(fp.form_id), WEAP_ORDER)
+    view.override(w)
+    log.append(f"Staff gun: {edid}: {element or 'no element'}, damage {damage}, bullet speed {speed:.0f}, interval {interval:g} s, "
+               f"magazine {clip}, reload {reload_time:g} s, explosion radius {radius:g}, model {mesh or 'the vanilla staff'}")
+    info = (f"Bullet speed {speed:.0f}, damage {damage}, element {element or 'none'}, explosion radius {radius:g}. Donor staff {staff.edid}. "
+            f"The spell and the staff cost no magicka and no charge (cost 0). Hold the attack button to keep firing.")
+    props = [("StaffGun", esp.P_OBJECT, w.form_id), ("BulletSpell", esp.P_OBJECT, bullet.form_id), ("MagSize", esp.P_INT, clip),
+             ("ReloadTime", esp.P_FLOAT, reload_time), ("Interval", esp.P_FLOAT, interval), ("Info", esp.P_STRING, info),
+             ("Verbose", esp.P_BOOL, True)]
+    fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", "SkylandsStaffGun", props)
+    ability = spell(view, "SkylandsStaffGunAbility", "", "",
+                    struct.pack("<IIIfIIffI", 0, 0, SPELL_ABILITY, 0, CAST_CONSTANT, DELIVERY_SELF, 0, 0, 0), [(fx, 0.0, 0, 0)])
+    q = view.new("QUST", "SkylandsStaffGunQuest")
+    q.add("VMAD", esp.vmad([("SkylandsGunnerQuest", [("Ability", esp.P_OBJECT, ability.form_id)])], quest=True))
+    q.add("FULL", esp.zstr("Skylands Staff Gun")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
+    q.add("ANAM", esp.u32(0))
+    report["staff_gun"] = {"edid": edid, "element": element, "damage": damage, "speed": speed, "mesh": mesh}
+
+
+def d_ench_cast(ench: Record) -> int:
+    """The cast type (1 fire and forget, 2 concentration) the donor staff's enchantment uses, from its ENIT."""
+    enit = ench.first("ENIT") or b""
+    return struct.unpack_from("<I", enit, 8)[0] if len(enit) >= 12 else 1
+
+
 LIGHT_BAD_FLAGS = 0x8 | 0x20 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800 | 0x1000 | 0x2000 | 0x4000  # flicker, off, pulse, spot, shadows
 LIGHT_KEEP = ("EDID", "OBND", "DATA", "FNAM")
 
@@ -597,7 +743,8 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
 
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
              gun_models: str = "off", model_sources: dict | None = None, model_spin: float = 0.0, model_pitch: float = 0.0, model_calibrate: bool = False,
-             model_scale: float = 1.0, shooting: str = "off") -> dict:
+             model_scale: float = 1.0, shooting: str = "off",
+             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> dict:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
@@ -641,7 +788,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     base_enchant = {e.bl2_part: m.need("ENCH", e.skyrim_enchantment) for e in S.ELEMENTS.values()}
     any_enchant = next(iter(base_enchant.values()))
     stats_mgef = stats_template(m, any_enchant)
-    rounds = Rounds(view, m, bolts, base_enchant, report["model_log"]) if shooting in ("bl2", "both") else None
+    rounds = Rounds(view, m, bolts, base_enchant, report["model_log"]) if shooting in ("bl2", "both", "staff") else None
     if rounds is not None:
         shots = S.SHOOTING
         for kind in KINDS:
@@ -650,6 +797,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                 rounds.build(kind, element, float(gtype.base_damage), shots.get(kind))
         gunner = Gunner(view, shots, bl2["weapons"]["guns"])
         make_gunner(view, m, rounds, gunner, bolts.form_id)
+        if shooting == "staff":  # one SMG on a vanilla staff, to compare with the crossbow SMGs
+            make_staff_smg(view, m, rounds, models, data_dir, bl2["weapons"]["guns"], bl2["weapons"].get("parts", {}),
+                           lambda level: rarity_color(bl2["rarities"], level), staff_turn, report)
     if shooting in ("bullets", "both"):
         tune_bolts(view, m, bolts, report["model_log"])
 
@@ -886,5 +1036,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         (out_data / "Meshes" / "Skylands" / "AimPoint.nif").write_bytes(nif.empty())
         (out_data / "Scripts" / "SkylandsGunner.pex").write_bytes(pex.write(scripts.gunner()))
         (out_data / "Scripts" / "SkylandsGunnerQuest.pex").write_bytes(pex.write(scripts.gunner_quest()))
+        if shooting == "staff":
+            (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.staff_gun()))
     report["records"] = len(p.records)
     return report

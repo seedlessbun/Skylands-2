@@ -199,6 +199,23 @@ def build_full(root: Path) -> Path:
     lv = struct.pack("<HHIHH", 1, 0, 0x1234, 1, 0)
     extra.append(group("LVLI", [record("LVLI", 0x8000, [sub("EDID", z("LootBanditChestBossBase")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"),
                                                         sub("LLCT", b"\x01"), sub("LVLO", lv)])]))
+    # a vanilla-style staff: animation type 8, an enchantment whose effect flies a projectile (the staff-type gun copies it)
+    bolt_md = bytearray(152)
+    struct.pack_into("<f", bolt_md, 4, 25.0)
+    struct.pack_into("<II", bolt_md, 72, 0x7200, 0x7300)
+    extra.append(group("MGEF", [record("MGEF", 0x5100, [sub("EDID", z("EnchStaffFireballFFAimed")), sub("FULL", sid(1)),
+                                                        sub("DNAM", sid(2)), sub("DATA", bytes(bolt_md))])]))
+    extra.append(group("PROJ", [record("PROJ", 0x7200, [sub("EDID", z("StaffFireballProjectile")), sub("OBND", b"\0" * 12),
+                                                        sub("DATA", struct.pack("<HHfffIIfffIIfffIIIffffII", 0x2, 0x1, 0.0, 1500.0, 3000.0, 0, 0, 0.0, 0.0, 0.0, 0, 0x7300,
+                                                                                0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0))])]))
+    staff_enit = struct.pack("<iIIfIIfII", 80, 0, 1, 0.0, 2, 12, 0.0, 0, 0)
+    extra.append(group("ENCH", [record("ENCH", 0x6100, [sub("EDID", z("EnchStaffFireball")), sub("FULL", sid(3)), sub("ENIT", staff_enit),
+                                                        sub("EFID", struct.pack("<I", 0x5100)), sub("EFIT", struct.pack("<fII", 40.0, 0, 0))])]))
+    extra.append(group("WEAP", [record("WEAP", 0x7400, [sub("EDID", z("StaffFireball")), sub("OBND", b"\0" * 12), sub("FULL", sid(1)),
+                                                        sub("MODL", z("weapons\\staff\\staff.nif")), sub("EITM", struct.pack("<I", 0x6100)),
+                                                        sub("EAMT", struct.pack("<H", 1000)), sub("ETYP", struct.pack("<I", 1)),
+                                                        sub("DESC", sid(2)), sub("DATA", struct.pack("<IfH", 100, 8.0, 8)),
+                                                        sub("DNAM", struct.pack("<BBHff", 8, 0, 0, 1.0, 1.0) + b"\0" * 92), sub("CRDT", b"\0" * 24)])]))
     (data / "Skyrim.esm").write_bytes(bytes(esm) + b"".join(extra))
     tes = record("TES4", 0, [sub("HEDR", struct.pack("<fII", 1.7, 0, 0)), sub("MAST", z("Skyrim.esm")), sub("DATA", b"\0" * 8)])
     tes = tes[:8] + struct.pack("<I", 0x81) + tes[12:]
