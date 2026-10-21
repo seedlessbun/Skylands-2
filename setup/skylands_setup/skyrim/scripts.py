@@ -2049,7 +2049,7 @@ def staff_gun() -> Script:
     start = Function(
         "Start",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("ref", "ObjectReference"), ("a", "String"), ("b", "String"),
-                ("c", "String"), ("msg", "String")],
+                ("c", "String"), ("msg", "String"), ("n", "Int")],
         code=[
             # the game wants an ObjectReference here: an Actor variable passed as it is makes the call fail ("Type mismatch for argument 1")
             ("cast", ("id", "ref"), ("id", "Me")),
@@ -2064,6 +2064,10 @@ def staff_gun() -> Script:
             ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "f"), ("int", 1), ("bool", False)),
             ("assign", ("id", "Mag"), ("id", "::MagSize_var")),
             ("label", "had"),
+            # how many staff guns the pack holds, whether or not this start gave one
+            ("callmethod", ("id", "GetItemCount"), ("id", "Me"), ("id", "n"), ("id", "f")),
+            ("cast", ("id", "a"), ("id", "n")),
+            *notify(("str", "Staff gun: staff guns in the pack: "), ("id", "a")),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
             call("Report"),
             ("return", None),
@@ -2090,7 +2094,7 @@ def staff_gun() -> Script:
             ("assign", ("id", "c"), ("str", "yes")),
             ("label", "notgiven"),
             *notify(("str", "Staff gun script started: weapon "), ("id", "a"), ("str", ", spell "), ("id", "b"),
-                    ("str", ", staff given before: "), ("id", "c")),
+                    ("str", ", staff given by now: "), ("id", "c")),
             ("return", None),
         ],
     )
@@ -2103,12 +2107,18 @@ def staff_gun() -> Script:
     equipped = Function(
         "Equipped",
         params=[("f", "Form")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon"), ("a", "String"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon"), ("a", "String"), ("b", "String"), ("c", "String"),
+                ("i", "Int"), ("j", "Int"), ("g", "Form"), ("msg", "String")],
         code=[
-            # every thing put on is named on screen; the staff gun arms the script
+            # every thing put on is named on screen with its id and the id of this script's staff gun; the staff gun arms the script
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
             ("callmethod", ("id", "GetName"), ("id", "f"), ("id", "a")),
-            *notify(("str", "Equipped: "), ("id", "a")),
+            ("callmethod", ("id", "GetFormID"), ("id", "f"), ("id", "i")),
+            ("cast", ("id", "g"), ("id", "::StaffGun_var")),
+            ("callmethod", ("id", "GetFormID"), ("id", "g"), ("id", "j")),
+            ("cast", ("id", "b"), ("id", "i")),
+            ("cast", ("id", "c"), ("id", "j")),
+            *notify(("str", "Equipped: "), ("id", "a"), ("str", " (id "), ("id", "b"), ("str", "), the staff gun is id "), ("id", "c")),
             ("label", "quiet"),
             ("cast", ("id", "w"), ("id", "f")),
             ("cast", T0, ("id", "w")),
