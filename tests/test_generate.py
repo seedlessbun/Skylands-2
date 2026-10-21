@@ -441,6 +441,7 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff")
     assert (tmp_path / "out" / "Data" / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()
     assert rep["staff_gun"]["edid"] == "SkylandsStaffSMG" and rep["staff_gun"]["mesh"]
+    assert any("donor staff StaffFireball " in l for l in rep["model_log"]), rep["model_log"]  # never the scripted artifact (AAWabbajack sorts first)
     _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST"})
     w = next(r for r in recs["WEAP"] if r.edid == "SkylandsStaffSMG")
     assert w.first("DNAM")[0] == 8  # animation type: staff

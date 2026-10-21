@@ -464,30 +464,40 @@ ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
 
 
 def staff_donor(m: "Masters", element: str | None, log: list[str]):
-    """A vanilla staff whose spell flies a projectile: (weapon, enchantment, effect record, projectile record). Preferred by
-    the element's art (a fire staff for fire, ...), else any."""
+    """A vanilla staff whose spell flies a projectile: (weapon, enchantment, effect record, projectile record). Only plain
+    ones: a damaging value-modifier effect that is fired and forgotten at an aim, with no script anywhere in the chain (the
+    quest artifacts such as the Wabbajack are scripted and are never copied). Preferred by the element's art, else any
+    fire, frost or lightning staff; none found means no staff gun (and says so)."""
     rx = re.compile(STAFF_DONOR.get(element.lower() if element else None, STAFF_DONOR[None]), re.I)
+    generic = re.compile(r"fire|frost|ice|lightning|spark", re.I)
     found = []
     for w in sorted(m.by_type["WEAP"].values(), key=lambda r: r.edid):
         dn, eitm = w.first("DNAM"), w.first("EITM")
-        if not dn or dn[0] != STAFF_ANIMATION or not eitm or not w.first("MODL"):
+        if not dn or dn[0] != STAFF_ANIMATION or not eitm or not w.first("MODL") or w.first("VMAD"):
             continue
         ench = m.by_type["ENCH"].get(struct.unpack_from("<I", eitm)[0])
         efid = ench.first("EFID") if ench else None
         mg = m.by_type["MGEF"].get(struct.unpack_from("<I", efid)[0]) if efid else None
         md = mg.first("DATA") if mg else None
-        if not md or len(md) < 80:
+        if not md or len(md) < 88 or mg.first("VMAD") or ench.first("VMAD"):
+            continue
+        archetype, casting, delivery = struct.unpack_from("<I", md, 64)[0], struct.unpack_from("<I", md, 80)[0], struct.unpack_from("<I", md, 84)[0]
+        if archetype != 0 or casting != 1 or delivery != 2:  # value modifier, fire and forget, aimed
             continue
         pj = m.by_type["PROJ"].get(struct.unpack_from("<I", md, MGEF_PROJECTILE_AT)[0])
-        if pj is None or len(pj.first("DATA") or b"") < 40:
+        if pj is None or len(pj.first("DATA") or b"") < 40 or pj.first("VMAD"):
             continue
-        found.append((0 if rx.search(w.edid) or rx.search(mg.edid) else 1, w.edid, w, ench, mg, pj))
+        name = w.edid + " " + mg.edid
+        rank = 0 if rx.search(name) else 1 if generic.search(name) else 9
+        if rank < 9:
+            found.append((rank, w.edid, w, ench, mg, pj))
     if not found:
-        log.append("Staff gun: no vanilla staff with a projectile spell was found")
+        log.append("Staff gun: no plain vanilla staff with a projectile spell was found; the staff gun is not built")
         return None
     found.sort(key=lambda t: t[:2])
     _, _, w, ench, mg, pj = found[0]
-    log.append(f"Staff gun: donor staff {w.edid} (animation type {w.first('DNAM')[0]}), enchantment {ench.edid}, effect {mg.edid}, projectile {pj.edid}")
+    log.append(f"Staff gun: donor staff {w.edid} (animation type {w.first('DNAM')[0]}), enchantment {ench.edid}, effect {mg.edid}, projectile {pj.edid}"
+               f" (of {len(found)} plain staffs)")
     return w, ench, mg, pj
 
 
@@ -518,7 +528,7 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     clip = int(shot.clip) if shot else 30
     reload_time = float(shot.reload) if shot else 2.0
     # the bullet: the staff spell's projectile, retuned to the Borderlands speed, flat, with the round's explosion
-    pr = esp.Rec("PROJ", view.new_id(f"PROJ:{edid}_Bullet"), [(sig, d) for sig, d in d_proj.subrecords])
+    pr = esp.Rec("PROJ", view.new_id(f"PROJ:{edid}_Bullet"), [(sig, d) for sig, d in d_proj.subrecords if sig != "VMAD"])
     pr.set("EDID", esp.zstr(f"{edid}_Bullet"))
     pd = bytearray(d_proj.first("DATA"))
     struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0, speed)
@@ -536,9 +546,10 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     pr.set("DATA", bytes(pd))
     view.override(pr)
     # the effect that flies it (damage as the donor's), costing nothing
-    mg = esp.Rec("MGEF", view.new_id(f"MGEF:{edid}_Bullet"), [(sig, d) for sig, d in d_mgef.subrecords if sig not in ("DNAM",)])
+    mg = esp.Rec("MGEF", view.new_id(f"MGEF:{edid}_Bullet"), [(sig, d) for sig, d in d_mgef.subrecords if sig not in ("DNAM", "VMAD")])
     mg.set("EDID", esp.zstr(f"{edid}_Bullet"))
-    mg.set("FULL", esp.zstr("Skylands bullet"))
+    if mg.get("FULL") is not None:
+        mg.set("FULL", esp.zstr("Skylands bullet"))
     md = bytearray(d_mgef.first("DATA"))
     struct.pack_into("<f", md, MGEF_COST_AT, 0.0)
     struct.pack_into("<II", md, MGEF_PROJECTILE_AT, pr.form_id, 0)  # projectile, explosion (the projectile carries its own)
@@ -548,7 +559,7 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     bullet = spell(view, f"{edid}_Spell", "Skylands bullet", "",
                    struct.pack("<IIIfIIffI", 0, 1, 0, 0, d_ench_cast(d_ench), DELIVERY["aimed"], 0, 0, 0), [effect])
     # the staff's enchantment: the same effect, no cost, a huge charge
-    en = esp.Rec("ENCH", view.new_id(f"ENCH:{edid}"), [(sig, d) for sig, d in d_ench.subrecords if sig not in ("EFID", "EFIT", "CTDA")])
+    en = esp.Rec("ENCH", view.new_id(f"ENCH:{edid}"), [(sig, d) for sig, d in d_ench.subrecords if sig not in ("EFID", "EFIT", "CTDA", "VMAD")])
     en.set("EDID", esp.zstr(f"{edid}_Ench"))
     if en.get("FULL") is not None:
         en.set("FULL", esp.zstr("Skylands bullet"))

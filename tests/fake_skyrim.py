@@ -203,6 +203,7 @@ def build_full(root: Path) -> Path:
     bolt_md = bytearray(152)
     struct.pack_into("<f", bolt_md, 4, 25.0)
     struct.pack_into("<II", bolt_md, 72, 0x7200, 0x7300)
+    struct.pack_into("<II", bolt_md, 80, 1, 2)  # fire and forget, aimed
     extra.append(group("MGEF", [record("MGEF", 0x5100, [sub("EDID", z("EnchStaffFireballFFAimed")), sub("FULL", sid(1)),
                                                         sub("DNAM", sid(2)), sub("DATA", bytes(bolt_md))])]))
     extra.append(group("PROJ", [record("PROJ", 0x7200, [sub("EDID", z("StaffFireballProjectile")), sub("OBND", b"\0" * 12),
@@ -216,6 +217,15 @@ def build_full(root: Path) -> Path:
                                                         sub("EAMT", struct.pack("<H", 1000)), sub("ETYP", struct.pack("<I", 1)),
                                                         sub("DESC", sid(2)), sub("DATA", struct.pack("<IfH", 100, 8.0, 8)),
                                                         sub("DNAM", struct.pack("<BBHff", 8, 0, 0, 1.0, 1.0) + b"\0" * 92), sub("CRDT", b"\0" * 24)])]))
+    art_md = bytearray(bolt_md)
+    struct.pack_into("<I", art_md, 64, 3)  # a script-archetype effect, like the Wabbajack's
+    extra.append(group("MGEF", [record("MGEF", 0x5101, [sub("EDID", z("AAWabbajackFF")), sub("VMAD", b"\x05\x00\x02\x00\x00\x00"), sub("DATA", bytes(art_md))])]))
+    extra.append(group("ENCH", [record("ENCH", 0x6101, [sub("EDID", z("AAStaffEnchWabbajack")), sub("ENIT", staff_enit),
+                                                        sub("EFID", struct.pack("<I", 0x5101)), sub("EFIT", struct.pack("<fII", 1.0, 0, 0))])]))
+    extra.append(group("WEAP", [record("WEAP", 0x7401, [sub("EDID", z("AAWabbajack")), sub("OBND", b"\0" * 12), sub("FULL", sid(1)),
+                                                        sub("MODL", z("weapons\\staff\\w.nif")), sub("EITM", struct.pack("<I", 0x6101)),
+                                                        sub("DATA", struct.pack("<IfH", 100, 8.0, 8)),
+                                                        sub("DNAM", struct.pack("<BBHff", 8, 0, 0, 1.0, 1.0) + b"\0" * 92)])]))
     (data / "Skyrim.esm").write_bytes(bytes(esm) + b"".join(extra))
     tes = record("TES4", 0, [sub("HEDR", struct.pack("<fII", 1.7, 0, 0)), sub("MAST", z("Skyrim.esm")), sub("DATA", b"\0" * 8)])
     tes = tes[:8] + struct.pack("<I", 0x81) + tes[12:]
