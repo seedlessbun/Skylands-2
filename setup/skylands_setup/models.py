@@ -31,7 +31,7 @@ HAVOK_SCALE = 69.99125  # skyrim units per havok unit
 
 # length of each gun type in Skyrim units (a hand is about 8, a dagger about 35): the in-game test showed a pistol sized
 # as a fraction of the crossbow came out far too big next to the player
-LENGTH = {"pistol": 18.4, "smg": 27.0, "assault_rifle": 37.8, "shotgun": 37.8, "sniper": 47.5, "launcher": 41.0}
+LENGTH = {"pistol": 23.0, "smg": 33.8, "assault_rifle": 47.3, "shotgun": 47.3, "sniper": 59.4, "launcher": 51.3}
 # the first in-hand test showed a gun aimed down and to the right: turn it up and to the left (degrees, about the grip)
 # calibration build: each rarity (level 1-6) gets a different turn from the plain fit, so one install shows six holds side by side
 # (pitch, yaw, roll about the barrel axis, degrees)
@@ -39,8 +39,8 @@ CALIBRATION = {1: (90.0, 0.0, 0.0), 2: (-90.0, 0.0, 0.0), 3: (0.0, 0.0, 90.0), 4
 # The calibration test: +90 pointed down, -90 straight up, and the plain fit (0) was upside down and backwards. Going round
 # from backwards: +90 is down, +180 is forwards and upright, -90 is up, so 180 is the hold.
 HOLD_PITCH, HOLD_YAW = 180.0, 0.0
-GRIP_DEPTH = 0.47  # how far down the gun's height (0 = top, 1 = bottom) the hand holds it; was 0.62: raising the hold point brings the gun down 15% of its height
-GRIP_AT = 0.38  # where along the gun (0 = rear, 1 = muzzle) the hand holds it; was 0.28, raised to move the gun back in the hand
+GRIP_DEPTH = 0.32  # how far down the gun's height (0 = top, 1 = bottom) the hand holds it; was 0.62: raising the hold point brings the gun down 15% of its height
+GRIP_AT = 0.53  # where along the gun (0 = rear, 1 = muzzle) the hand holds it; was 0.28, raised to move the gun back in the hand
 
 PALETTE = {  # body colour, trim colour per manufacturer
     "Bandit": ((120, 78, 52), (70, 56, 48)),

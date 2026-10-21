@@ -49,6 +49,12 @@ def shooting_of(ix, wtp: dict) -> dict:
             out["speed"] = speed
         if "Rocket" in str(fmp.get("FireType", "")) or fmp.get("ProjectileDefinition"):
             out["rocket"] = True
+            proj = ix.props(fmp["ProjectileDefinition"]) if isinstance(fmp.get("ProjectileDefinition"), str) else None
+            sf = (proj or {}).get("SpeedFormula")
+            if isinstance(sf, dict) and _num(sf.get("BaseValueConstant"), 0) > 0:
+                out["speed"] = _num(sf["BaseValueConstant"])
+            if proj and "GravityScaling" in proj:
+                out["gravity_scaling"] = _num(proj["GravityScaling"])
         if fmp.get("ExplosionOverrideDefinition"):
             out["elemental_explosion"] = True
         if fmp.get("OnAnyImpact"):

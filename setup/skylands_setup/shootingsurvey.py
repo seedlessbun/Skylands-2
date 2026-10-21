@@ -125,7 +125,9 @@ def main(argv: list[str]) -> int:
             picked = picked or balances[:SEEDS_PER_TYPE]
             seeds += picked
             say(f"  {t}: {len(balances)} balances; following {picked}")
-        seeds += ["GD_Weap_Shared_Effects.Default_Elemental_Explosions", "GD_Weap_Launchers.Projectiles.Projectile_Rocket_Bandit"]
+        seeds += ["GD_Weap_Shared_Effects.Default_Elemental_Explosions", "GD_Weap_Launchers.Projectiles.Projectile_Rocket_Bandit",
+                  "GD_Explosions.explosive.Explosion_ExplosiveMaster", "GD_Explosions.corrosive.Explosion_CorrosiveMaster",
+                  "GD_Explosions.Incendiary.Explosion_IncendiaryMaster", "GD_Explosions.shock.Explosion_ShockMaster"]
         report["seeds"] = seeds
         report["package_names"] = sorted(k for k in ix.top if INTEREST.search(k))[:300]
         report["group_names"] = sorted(k for k in ix.groups if INTEREST.search(k) and k.startswith(("gd_", "d_")))[:300]

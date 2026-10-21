@@ -388,7 +388,7 @@ def test_shooting_rounds_go_in_the_second_plugin(tmp_path):
     pd = proj["SkylandsRound_launcher_Fire"].first("DATA")
     assert st.unpack_from("<H", pd)[0] & 0x2 and st.unpack_from("<I", pd, 36)[0] != 0  # explodes
     assert not st.unpack_from("<H", proj["SkylandsRound_pistol_plain"].first("DATA"))[0] & 0x2  # a plain bullet does not
-    assert abs(st.unpack_from("<f", pd, 8)[0] - 6000 / 3) < 1
+    assert abs(st.unpack_from("<f", pd, 8)[0] - 3000 / 3) < 1
     for w in recs["WEAP"]:  # every gun says which rounds it uses
         ids = st.unpack(f"<{len(w.first('KWDA')) // 4}I", w.first("KWDA"))
         assert any(i & 0xFFFFFF in range(0x81E, 0x824) for i in ids)

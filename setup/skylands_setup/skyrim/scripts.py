@@ -1560,7 +1560,8 @@ def gunner() -> Script:
         params=[("w", "Weapon")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("::temp1", "Bool"), ("t", "Int"), ("k", "Keyword"),
                 ("kind", "Int"), ("elem", "Int"), ("idx", "Int"), ("f", "Form"), ("have", "Int"), ("want", "Int"),
-                ("n", "Int"), ("last", "Int"), ("tens", "Int"), ("units", "Int"), ("msg", "String"), ("a", "String")],
+                ("n", "Int"), ("last", "Int"), ("tens", "Int"), ("units", "Int"), ("msg", "String"), ("a", "String"),
+                ("b", "String"), ("c", "String")],
         code=[
             ("assign", ("id", "Kind"), ("int", -1)),
             ("cast", T0, ("id", "w")),
@@ -1690,7 +1691,14 @@ def gunner() -> Script:
             ("callmethod", ("id", "GetItemCount"), ("id", "Me"), ("id", "Last"), ("id", "Rnd")),
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
             ("cast", ("id", "a"), ("id", "want")),
-            *notify(("str", "Skylands gun: "), ("id", "a"), ("str", "-round magazine")),
+            ("cast", ("id", "b"), ("id", "Last")),
+            ("callmethod", ("id", "IsEquipped"), ("id", "Me"), T0, ("id", "Rnd")),
+            ("assign", ("id", "c"), ("str", "no")),
+            ("jmpf", T0, ("lbl", "noeq")),
+            ("assign", ("id", "c"), ("str", "yes")),
+            ("label", "noeq"),
+            *notify(("str", "Skylands gun: "), ("id", "a"), ("str", "-round magazine, rounds in pack: "), ("id", "b"),
+                    ("str", ", equipped: "), ("id", "c")),
             ("label", "end"),
             ("return", None),
         ],
@@ -1709,7 +1717,7 @@ def gunner() -> Script:
     )
     on_update = Function(
         "OnUpdate",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("n", "Int"), ("fired", "Int")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("n", "Int"), ("fired", "Int"), ("a", "String"), ("msg", "String")],
         code=[
             # Until the game's bow-shot event has been seen, a drop in the count of the gun's rounds is a shot.
             *ret_if(("id", "Seen"), "watch"),
@@ -1717,6 +1725,12 @@ def gunner() -> Script:
             ("jmpf", T0, ("lbl", "again")),
             ("callmethod", ("id", "GetItemCount"), ("id", "Me"), ("id", "n"), ("id", "Rnd")),
             ("isub", ("id", "fired"), ("id", "Last"), ("id", "n")),
+            ("cmp_gt", T0, ("id", "fired"), ("int", 0)),
+            ("jmpf", T0, ("lbl", "quiet")),
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
+            ("cast", ("id", "a"), ("id", "n")),
+            *notify(("str", "Rounds in pack: "), ("id", "a")),
+            ("label", "quiet"),
             ("assign", ("id", "Last"), ("id", "n")),
             ("label", "loop"),
             ("cmp_gt", T0, ("id", "fired"), ("int", 0)),

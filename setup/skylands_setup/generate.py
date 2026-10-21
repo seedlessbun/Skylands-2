@@ -356,11 +356,9 @@ class Gunner:
                 continue
             base = self.rows[KINDS.index(g["type"])]
             sh = g.get("shooting") or {}
-            burst = base["burst"]
-            if int(sh.get("auto_burst", 0) or 0) > 1:
-                burst = int(sh["auto_burst"])  # Dahl's burst fire
-            elif key[1] == "Jakobs":
-                burst = 1  # Jakobs: semi-automatic, as fast as you pull
+            # Borderlands: a weapon type with AutomaticBurstCount = 1 is semi-automatic (one shot per pull); SMGs and assault rifles
+            # without it are fully automatic (here a burst per pull, since Skyrim cannot see a held trigger); other types are semi.
+            burst = 1 if "auto_burst" in sh else base["burst"]
             self.index[key] = len(self.rows)
             self._add(view, f"SkylandsProfile_{key[0]}_{key[1]}", {
                 "clip": int(g.get("clip") or base["clip"]), "reload": float(sh.get("reload", base["reload"])),
