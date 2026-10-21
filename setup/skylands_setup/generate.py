@@ -461,7 +461,8 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
-STAFF_REV = "0.13.4"  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_REV = "0.13.5"
+STAFF_ID_SHIFT = 24  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
 
 
@@ -509,6 +510,8 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     Borderlands bullet (speed, element and explosion from the rounds data), at no magicka and no charge. The SkylandsStaffGun
     script (scripts.staff_gun) keeps the magazine, repeats the shot while the attack button is held, and reloads."""
     log = report["model_log"]
+    for i in range(STAFF_ID_SHIFT):
+        view.new_id(f"SHIFT:SkylandsStaffGun_{STAFF_REV}_{i}")
     gun = next((g for g in guns if g["type"] == "smg" and g["elements"]), None) or next((g for g in guns if g["type"] == "smg"), None)
     if gun is None:
         log.append("Staff gun: no submachine gun was extracted")
