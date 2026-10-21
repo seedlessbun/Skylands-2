@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.13.6"
+VERSION = "0.13.7"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -189,7 +189,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--gun-shooting", default="off", choices=["off", "bullets", "bl2", "both", "staff"],
                     help="bl2: Borderlands rounds per gun type and element (fast bullets, rockets and elemental guns explode); bullets: only the steel bolt becomes a fast flat shot; both")
     ap.add_argument("--gun-calibrate", action="store_true", help="give each rarity a different hold (for finding the right one by eye)")
-    ap.add_argument("--staff-turn", default="0,0,0", help="staff-type SMG: extra turn (pitch,yaw,roll degrees) of the model in the staff's grip")
+    ap.add_argument("--staff-turn", default="-45,0,180", help="staff-type SMG: turn (pitch,yaw,roll degrees) of the model in the staff grip: pitch down 45, rolled 180 (from the in-game test of 0.13.6: it pointed up and was upside down)")
     ap.add_argument("--gun-pitch", type=float, default=0.0, help="raise the barrel this many more degrees (negative lowers it)")
     ap.add_argument("--gun-spin", type=float, default=0.0, help="turn every gun model this many degrees about its up axis (fixes a gun facing the wrong way)")
     ap.add_argument("--gun-scale", type=float, default=1.0, help="make every gun model this many times bigger or smaller")

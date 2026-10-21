@@ -1999,16 +1999,19 @@ def gunner() -> Script:
 def gunner_quest() -> Script:
     """SkylandsGunnerQuest extends Quest (start game enabled, in SkylandsGunModels.esp): makes sure the player has the
     gunner ability, once a few seconds after the plugin is loaded and again every 15 seconds (cheap: one HasSpell)."""
-    on_init = Function("OnInit", locals=[("::nonevar", "None")],
-                       code=[("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)])
+    on_init = Function("OnInit", locals=[("::nonevar", "None"), ("msg", "String")],
+                       code=[*notify(("str", "Skylands quest started")),
+                             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)])
     on_update = Function(
         "OnUpdate",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("msg", "String")],
         code=[
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::Ability_var")),
-            ("jmpt", ("id", "::temp0"), ("lbl", "has")),
+            ("not", ("id", "::temp0"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "has")),
             ("callmethod", ("id", "AddSpell"), ("id", "player"), ("id", "::temp0"), ("id", "::Ability_var"), ("bool", False)),
+            *notify(("str", "Skylands: ability added")),
             ("label", "has"),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 15.0)),
             ("return", None),

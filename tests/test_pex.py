@@ -225,6 +225,7 @@ def test_gunner_scripts_decompile(tmp_path):
     (tmp_path / "q").mkdir()
     q = decompile(tmp_path / "q", scripts.gunner_quest(), "SkylandsGunnerQuest")
     assert "player.AddSpell(Ability, False)" in q and "Spell Property Ability Auto" in q
+    assert "Skylands quest started" in q and "Skylands: ability added" in q
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
