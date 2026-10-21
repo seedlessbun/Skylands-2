@@ -219,8 +219,8 @@ def test_gunner_scripts_decompile(tmp_path):
     psc = decompile(tmp_path, scripts.gunner(), "SkylandsGunner")
     assert "ScriptName SkylandsGunner Extends ActiveMagicEffect" in psc
     for text in ("Event OnPlayerBowShot(Weapon akWeapon, Ammo akAmmo, Float afPower, Bool abSunGazing)", "Gun.Fire(Aim, Rnd)",
-                 "Aim.SetAngle(x, 0.0, h)", "Aim.MoveTo(Me, ox, oy, oz, False)", "Me.UnequipItem(Rnd, False, True)", "Utility.Wait(t)", "Mag = MagSize",
-                 "Me.EquipItem(Rnd, False, True)", "Int[] Property Pellets Auto", "Float[] Property Spread Auto"):
+                 "Aim.SetAngle(x, 0.0, h)", "Aim.MoveTo(Me, ox, oy, oz, False)", "Me.UnequipItem(RndF, False, True)", "Utility.Wait(t)", "Mag = MagSize",
+                 "Me.EquipItem(RndF, False, True)", "Int[] Property Pellets Auto", "Float[] Property Spread Auto"):
         assert text in psc, text
     (tmp_path / "q").mkdir()
     q = decompile(tmp_path / "q", scripts.gunner_quest(), "SkylandsGunnerQuest")
