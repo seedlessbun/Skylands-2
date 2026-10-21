@@ -2028,7 +2028,7 @@ def staff_gun() -> Script:
 
       Event OnEffectStart / OnPlayerLoadGame / OnObjectEquipped / OnObjectUnequipped / OnAnimationEvent / OnSpellCast / OnUpdate
     """
-    T0 = ("id", "::temp0")
+    T0, T1 = ("id", "::temp0"), ("id", "::temp1")
     on_start = Function(
         "OnEffectStart",
         params=[("akTarget", "Actor"), ("akCaster", "Actor")],
@@ -2043,7 +2043,10 @@ def staff_gun() -> Script:
         "Start",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form")],
         code=[
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "Me"), ("str", "MRh_SpellFire_Event")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, ("id", "Reg"), ("id", "Me"), ("str", "MRh_SpellFire_Event")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "Me"), ("str", "BeginCastRight")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "Me"), ("str", "MRh_SpellRelease_Event")),
+            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "Me"), ("str", "attackStart")),
             ("cast", ("id", "f"), ("id", "::StaffGun_var")),
             ("not", T0, ("id", "Given")),
             ("jmpf", T0, ("lbl", "had")),
@@ -2096,16 +2099,27 @@ def staff_gun() -> Script:
     on_anim = Function(
         "OnAnimationEvent",
         params=[("akSource", "ObjectReference"), ("asEventName", "String")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
         code=[
-            # the right hand cast its spell: one shot of the magazine
-            ("not", T0, ("id", "Armed")),
-            ("jmpf", T0, ("lbl", "ready")),
+            # every event the game sends is named on screen (which one a cast sends is what this test wants to know);
+            # only the right hand's spell-fire event is a shot of the magazine
+            ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
+            *notify(("str", "Staff gun event: "), ("id", "asEventName")),
+            ("label", "quiet"),
+            ("cmp_eq", T0, ("id", "asEventName"), ("str", "MRh_SpellFire_Event")),
+            ("jmpf", T0, ("lbl", "end")),
+            call("Shot"),
+            ("label", "end"),
             ("return", None),
-            ("label", "ready"),
-            ("jmpf", ("id", "Reloading"), ("lbl", "loaded")),
-            ("return", None),
-            ("label", "loaded"),
+        ],
+    )
+    shot = Function(
+        "Shot",
+        locals=[("::nonevar", "None"), ("::temp1", "Bool")],
+        code=[
+            # not with the staff away or while reloading
+            *ret_unless(("id", "Armed"), "armed", tmp=T1),
+            *ret_if(("id", "Reloading"), "loaded"),
             ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
             call("Count"),
             ("return", None),
@@ -2120,7 +2134,7 @@ def staff_gun() -> Script:
     arm = Function(
         "Arm",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("c", "String"), ("d", "String"),
-                ("msg", "String")],
+                ("e", "String"), ("msg", "String")],
         code=[
             # the box says what the build made and what the game reports: are the properties set, is the staff in the hand
             *ret_if(("id", "Reloading"), "idle"),
@@ -2138,7 +2152,13 @@ def staff_gun() -> Script:
             ("jmpf", T0, ("lbl", "nospell")),
             ("assign", ("id", "d"), ("str", "set")),
             ("label", "nospell"),
-            ("assign", ("id", "msg"), ("str", "Skylands staff gun. Script weapon: ")),
+            ("assign", ("id", "e"), ("str", "no")),
+            ("jmpf", ("id", "Reg"), ("lbl", "noreg")),
+            ("assign", ("id", "e"), ("str", "yes")),
+            ("label", "noreg"),
+            ("assign", ("id", "msg"), ("str", "Skylands staff gun. Animation events registered: ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "e")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". Script weapon: ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "c")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("str", ", script spell: ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "d")),
@@ -2220,8 +2240,8 @@ def staff_gun() -> Script:
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
-                   ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0))],
+                   ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)), ("Reg", "Bool", ("bool", False))],
         auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
                          ("SpeedMult", "Float"), ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, on_equipped, on_unequipped, on_anim, on_cast, arm, on_update, speed, count, reload_],
+        functions=[on_start, on_load, start, on_equipped, on_unequipped, on_anim, shot, on_cast, arm, on_update, speed, count, reload_],
     )

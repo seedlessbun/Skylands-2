@@ -231,7 +231,8 @@ def test_gunner_scripts_decompile(tmp_path):
 def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     psc = decompile(tmp_path, scripts.staff_gun(), "SkylandsStaffGun")
     assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc
-    for text in ("Self.RegisterForAnimationEvent(Me, \"MRh_SpellFire_Event\")", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
+    for text in ("Reg = Self.RegisterForAnimationEvent(Me, \"MRh_SpellFire_Event\")", "Self.RegisterForAnimationEvent(Me, \"BeginCastRight\")",
+                 "If asEventName == \"MRh_SpellFire_Event\"", "Staff gun event: ", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
                  "Event OnAnimationEvent(ObjectReference akSource, String asEventName)", "Fired += 1", "Mag -= 1", "Self.Reload()",
                  "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize", "Me.EquipItem(f, False, True)",
                  "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
