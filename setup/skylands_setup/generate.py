@@ -461,6 +461,7 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
+STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
 
 
 def staff_donor(m: "Masters", element: str | None, log: list[str]):
@@ -592,10 +593,12 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     view.override(w)
     log.append(f"Staff gun: {edid}: {element or 'no element'}, damage {damage}, bullet speed {speed:.0f}, interval {interval:g} s, "
                f"magazine {clip}, reload {reload_time:g} s, explosion radius {radius:g}, model {mesh or 'the vanilla staff'}")
-    info = (f"Bullet speed {speed:.0f}, damage {damage}, element {element or 'none'}, explosion radius {radius:g}. Donor staff {staff.edid}. "
-            f"The spell and the staff cost no magicka and no charge (cost 0). Hold the attack button to keep firing.")
+    info = (f"Built: animation type {staff.first('DNAM')[0]} (8 = staff) from {staff.edid}; spell {edid}_Spell "
+            f"(effect {d_mgef.edid}); bullet speed {speed:.0f}, damage {damage}, element {element or 'none'}, explosion radius {radius:g}; "
+            f"model {mesh or 'NOT BUILT: the vanilla staff model is kept'}; weapon speed set to {STAFF_SPEED_MULT:g} while it is in the hand. "
+            f"Costs no magicka and no charge.")
     props = [("StaffGun", esp.P_OBJECT, w.form_id), ("BulletSpell", esp.P_OBJECT, bullet.form_id), ("MagSize", esp.P_INT, clip),
-             ("ReloadTime", esp.P_FLOAT, reload_time), ("Interval", esp.P_FLOAT, interval), ("Info", esp.P_STRING, info),
+             ("ReloadTime", esp.P_FLOAT, reload_time), ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("Info", esp.P_STRING, info),
              ("Verbose", esp.P_BOOL, True)]
     fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", "SkylandsStaffGun", props)
     ability = spell(view, "SkylandsStaffGunAbility", "", "",

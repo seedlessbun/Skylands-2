@@ -231,10 +231,10 @@ def test_gunner_scripts_decompile(tmp_path):
 def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     psc = decompile(tmp_path, scripts.staff_gun(), "SkylandsStaffGun")
     assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc
-    for text in ("Key = Input.GetMappedKey(\"Right Attack/Block\", 255)", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
-                 "Bool held = Utility.IsInMenuMode()", "held = Me.IsWeaponDrawn()", "held = Input.IsKeyPressed(Key)",
-                 "Float gap = now - Stamp", "If gap < Interval", "BulletSpell.Cast(Me, None)",
-                 "Mag -= 1", "Self.Reload()", "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize",
-                 "Me.EquipItem(f, False, True)", "Int kind = StaffGun.GetWeaponType()", "Event OnSpellCast(Form akSpell)",
-                 "If w == StaffGun", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto"):
+    for text in ("Self.RegisterForAnimationEvent(Me, \"MRh_SpellFire_Event\")", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
+                 "Event OnAnimationEvent(ObjectReference akSource, String asEventName)", "Fired += 1", "Mag -= 1", "Self.Reload()",
+                 "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize", "Me.EquipItem(f, False, True)",
+                 "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
+                 "If w as Bool && w == StaffGun", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)"):
         assert text in psc, text
+    assert "Input." not in psc and "GetWeaponType" not in psc  # nothing that needs SKSE
