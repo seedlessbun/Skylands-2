@@ -444,6 +444,10 @@ namespace
 	{
 		if (a_message->type == SKSE::MessagingInterface::kDataLoaded) {
 			AttackHook::Install();
+			if (const auto holder = RE::ScriptEventSourceHolder::GetSingleton()) {
+				holder->AddEventSink(CastSink::Get());
+				SKSE::log::info("enemy cast listener registered");
+			}
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
 			if (const auto input = RE::BSInputDeviceManager::GetSingleton()) {
