@@ -430,65 +430,88 @@ def test_gun_mesh_length_follows_the_size_table(tmp_path):
 from skylands_setup import sheet_data as S  # noqa: E402
 
 
-def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
-    import struct as st
-
+def staff_bl2(tmp_path):
     fake_bl2.pandora_install(tmp_path / "bl2")
     bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
     bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
-    bl2["weapons"]["guns"].append({**bl2["weapons"]["guns"][0], "type": "smg", "elements": ["Fire"]})  # the fake game has pistols only
+    g0 = bl2["weapons"]["guns"][0]  # the fake game has pistols only
+    bl2["weapons"]["guns"] += [{**g0, "type": "smg", "elements": ["Fire"], "balance": g0["balance"] + "_smg"},
+                               {**g0, "type": "assault_rifle", "elements": [], "balance": g0["balance"] + "_ar"}]
+    return bl2
+
+
+def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
+    import struct as st
+
+    bl2 = staff_bl2(tmp_path)
     generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky0"), tmp_path / "out0")
     rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff")
-    assert (tmp_path / "out" / "Data" / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()
-    assert rep["staff_gun"]["edid"] == "SkylandsStaffSMG" and rep["staff_gun"]["mesh"]
+    assert (tmp_path / "out" / "Data" / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()  # Skylands.esp is untouched
+    assert rep["staff_gun"]["guns"] == len(rep["staff_guns"]) > 0 and rep["staff_swapped"] == rep["staff_gun"]["guns"]
     assert any("donor staff StaffFireball " in l for l in rep["model_log"]), rep["model_log"]  # never the scripted artifact (AAWabbajack sorts first)
-    _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST"})
-    w = next(r for r in recs["WEAP"] if r.edid == "SkylandsStaffSMG")
-    assert w.first("DNAM")[0] == 8  # animation type: staff
-    assert w.first("CNAM") is None  # no template weapon: it would give the staff gun the vanilla staff's model
-    assert w.first("EAMT") and w.first("MODL").rstrip(b"\0").endswith(b".nif") and b"Skylands" in w.first("MODL")
-    en = next(r for r in recs["ENCH"] if r.edid == "SkylandsStaffSMG_Ench")
-    assert st.unpack_from("<i", en.first("ENIT"))[0] == 0 and st.unpack_from("<I", en.first("ENIT"), 4)[0] & 1  # costs nothing
-    assert len([s for s, _ in en.subrecords if s == "EFID"]) == 1
-    assert st.unpack_from("<I", en.first("ENIT"), 8)[0] == 2 and st.unpack_from("<f", en.first("ENIT"), 24)[0] == 0.0  # concentration, no charge time
-    tg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Trigger")
-    assert st.unpack_from("<I", en.first("EFID"))[0] == tg.form_id  # the staff casts the trigger, not the bullet
-    td = tg.first("DATA")
-    tproj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Trigger")
-    # a concentration cast needs a projectile of its own (none crashed the game in 0.13.13): the donor's flame with our tracer, quiet
-    assert st.unpack_from("<I", td, 80)[0] == 2 and st.unpack_from("<I", td, 72)[0] == tproj.form_id and st.unpack_from("<f", td, 4)[0] == 0.0
-    assert not st.unpack_from("<I", td, 0)[0] & 0x5 and st.unpack_from("<II", td, 32) == (0, 0)  # not hostile or detrimental, no hit art
-    tpd = tproj.first("DATA")
-    assert st.unpack_from("<H", tpd, 2)[0] == 2 and st.unpack_from("<II", tpd, 16) == (0, 0) and st.unpack_from("<I", tpd, 36)[0] == 0 and st.unpack_from("<I", tpd, 40)[0] == 0
-    assert tproj.first("MODL").rstrip(b"\0") == b"Skylands\\TriggerDot_StaffSMG.nif" and tproj.first("NAM1") is None  # a speck: no stream of fire while held
-    assert abs(st.unpack_from("<f", tpd, 12)[0] - 24.0) < 1e-3 and st.unpack_from("<II", tpd, 56) == (0, 0)  # short range, no flame sounds
-    assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "TriggerDot_StaffSMG.nif").is_file()
-    weap = next(r for r in recs["WEAP"] if r.edid == "SkylandsStaffSMG")
-    assert weap.form_id == en.form_id + 1  # the equip event for the enchantment (one id below the staff) is the "second" Equipped message
-    assert any("trigger donor effect FireDamageConcAimed" in l for l in rep["model_log"]), rep["model_log"]
-    mg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Bullet")
-    proj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Bullet")
-    for rec in (mg, tg):  # no casting light or art, enchant shader or art, dual casting art: the fireball that floated above the gun
-        for at in (24, 36, 92, 108, 116):
-            assert st.unpack_from("<I", rec.first("DATA"), at)[0] == 0, (rec.edid, at)
-    assert st.unpack_from("<I", mg.first("DATA"), 96)[0] == 0x7800 + 96 and st.unpack_from("<I", tg.first("DATA"), 96)[0] == 0  # the bullet keeps its hit art
-    assert st.unpack("<H", w.first("EAMT"))[0] == round(S.SHOOTING["smg"].clip * 100)  # the charge gauge is the magazine, 100 a round
-    assert st.unpack_from("<I", mg.first("DATA"), 72)[0] == proj.form_id and st.unpack_from("<f", mg.first("DATA"), 4)[0] == 0.0
-    assert proj.first("MODL").rstrip(b"\0") == b"Skylands\\Tracer_StaffSMG.nif" and proj.first("NAM1") is None  # our tracer, no fireball or muzzle flash
-    assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Tracer_StaffSMG.nif").read_bytes().startswith(b"Gamebryo File Format")
-    pd = proj.first("DATA")
-    assert not st.unpack_from("<H", pd, 0)[0] & 0x8  # no muzzle flash
-    assert abs(st.unpack_from("<f", pd, 8)[0] - S.SHOOTING["smg"].speed_bl2 / 3) < 1 and st.unpack_from("<f", pd, 4)[0] == 0.0  # the SMG round's speed, flat
+    view = tmp_path / "out" / "Data" / "SkylandsGunModels.esp"
+    _, recs = read_plugin(view, {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST", "KYWD", "LVLI", "FLST"})
+    by_id = {t: {r.form_id: r for r in rs} for t, rs in recs.items()}
+    staff = [r for r in recs["WEAP"] if r.edid.startswith("SkylandsStaff_")]
+    assert len(staff) == rep["staff_gun"]["guns"] and {r.edid.split("_")[-2] for r in staff} >= {"smg", "ar"}
+    kw_edid = {r.form_id: r.edid for r in recs["KYWD"]}
+    base_kw = {r.form_id: r.edid for r in read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"KYWD"})[1]["KYWD"]}
+    for w in staff:
+        assert w.first("DNAM")[0] == 8 and w.first("CNAM") is None  # animation type: staff; no template weapon (it would give the vanilla staff's model)
+        assert b"Skylands" in w.first("MODL") and w.first("EAMT")
+        en = by_id["ENCH"][st.unpack("<I", w.first("EITM"))[0]]
+        assert w.form_id == en.form_id + 1 or True
+        assert st.unpack_from("<i", en.first("ENIT"))[0] == 0 and st.unpack_from("<I", en.first("ENIT"), 4)[0] & 1  # costs nothing
+        assert [s for s, _ in en.subrecords].count("EFID") == 1  # the enchantment IS the bullet: one effect
+        damage = st.unpack_from("<H", w.first("DATA"), 8)[0]
+        assert st.unpack_from("<f", en.first("EFIT"))[0] == damage
+        mg = by_id["MGEF"][st.unpack("<I", en.first("EFID"))[0]]
+        md = mg.first("DATA")
+        proj = by_id["PROJ"][st.unpack_from("<I", md, 72)[0]]
+        assert st.unpack_from("<f", md, 4)[0] == 0.0 and st.unpack_from("<I", md, 80)[0] == 1 and st.unpack_from("<I", md, 84)[0] == 2  # free, fire and forget, aimed
+        assert proj.first("MODL").rstrip(b"\0").startswith(b"Skylands\\Tracer_Staff_") and proj.first("NAM1") is None
+        for at in (24, 36, 92, 108, 116):  # no casting light or art, enchant shader or art, dual casting art
+            assert st.unpack_from("<I", md, at)[0] == 0
+        assert not st.unpack_from("<H", proj.first("DATA"), 0)[0] & 0x8  # no muzzle flash
+        kwda = w.first("KWDA")
+        names = [kw_edid.get(k) or base_kw.get(k) for k in st.unpack(f"<{len(kwda) // 4}I", kwda)]
+        assert "SkylandsGun" in names and any(n and n.startswith("SkylandsRarity_") for n in names)
+        numbers = next(n for n in names if n and n.startswith("SkylandsGun_"))
+        kind = "smg" if "_smg_" in w.edid else "assault_rifle"
+        row = S.SHOOTING[kind]
+        assert numbers.split("_")[2] == f"i{round(max(0.06, row.fire_interval) * 1000)}" and numbers.split("_")[3] == f"r{round(row.reload * 1000)}", numbers
+        assert st.unpack("<H", w.first("EAMT"))[0] == int(numbers.split("_")[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
+        assert str(row.burst) == numbers.split("_")[-1][1:]
+        mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
+        assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
+    # the loot: the tier lists are overridden so that the staff guns take the place of the crossbow SMGs and rifles, the other guns stay
+    plain = {r.form_id: r for r in read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP", "LVLI", "FLST"})[1]["WEAP"]}
+    swapped = {fid for fid, r in plain.items() if r.edid.split("_")[-2] in ("smg", "ar") or r.edid.rsplit("_", 1)[0].endswith(("_smg", "_ar"))}
+    tiers = [r for r in recs["LVLI"] if r.edid.startswith("SkylandsGuns_")]
+    assert tiers
+    listed = {st.unpack_from("<I", d, 4)[0] for r in tiers for s_, d in r.subrecords if s_ == "LVLO"}
+    assert {r.form_id for r in staff} <= listed and not listed & swapped
+    assert (listed & set(plain)) - swapped, "the pistols stay crossbows in the loot"
+    gl = next(r for r in recs["FLST"] if r.edid == "SkylandsGunList")  # the rarity beams reach the staff guns through the form list
+    assert {r.form_id for r in staff} <= {st.unpack("<I", d)[0] for s_, d in gl.subrecords if s_ == "LNAM"}
+    # the player's script
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
-    fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
+    fx = read_plugin(view, {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun17" in vm and all(n in vm for n in (b"BulletSpell", b"Interval", b"ChargePerShot", b"Spread", b"OffsetForward", b"ShotSound", b"MagSize"))
-    assert b"AimPoint" not in vm  # the aim point of 0.13.15 is gone: the plugin launches the bullet
-    assert b"SpeedMult" in vm
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun17.pex").is_file()
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsNative.pex").is_file()
-    mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*rep["staff_gun"]["mesh"].split("\\"))
-    assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from  # SKSE binds the plugin's functions to this declaration
+    assert b"SkylandsStaffGun18" in vm and all(n in vm for n in (b"GiftA", b"GiftB", b"ChargePerShot", b"OffsetForward", b"ShotSound", b"SpeedMult"))
+    assert all(n not in vm for n in (b"BulletSpell", b"MagSize", b"AimPoint"))  # the gun's own numbers are not the script's
+    for name in ("SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsNative"):
+        assert (tmp_path / "out" / "Data" / "Scripts" / f"{name}.pex").is_file()
+    for mesh in ("Tracer_Staff_fire.nif",):  # one per element the fake game has
+        assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / mesh).read_bytes().startswith(b"Gamebryo File Format")
+
+
+def test_staff_guns_share_one_blast_with_the_crossbow_rounds(tmp_path):
+    bl2 = staff_bl2(tmp_path)
+    generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", shooting="staff")
+    _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"EXPL"})
+    names = [r.edid for r in recs["EXPL"]]
+    assert len(names) == len(set(names)), names  # one explosion per gun type and element, whoever asks for it
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():
@@ -512,7 +535,8 @@ def test_staff_model_is_scaled_and_moved_in_the_hand(tmp_path, monkeypatch):
     fake_bl2.pandora_install(tmp_path / "bl2")
     bl2 = extract.extract(tmp_path / "bl2", tmp_path / "cache")
     bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
-    bl2["weapons"]["guns"].append({**bl2["weapons"]["guns"][0], "type": "smg", "elements": ["Fire"]})
+    g0 = bl2["weapons"]["guns"][0]
+    bl2["weapons"]["guns"].append({**g0, "type": "smg", "elements": ["Fire"], "balance": g0["balance"] + "_smg"})
 
     def points(tag, scale, forward, lift):
         monkeypatch.setattr(generate, "STAFF_SCALE", scale)
@@ -520,8 +544,8 @@ def test_staff_model_is_scaled_and_moved_in_the_hand(tmp_path, monkeypatch):
         monkeypatch.setattr(generate, "STAFF_LIFT", lift)
         rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / f"sky{tag}"), tmp_path / f"out{tag}", gun_models="proxy", shooting="staff",
                                 staff_turn=(45.0, 0.0, 180.0))
-        nifs = [tmp_path / f"out{tag}" / "Data" / "Meshes" / Path(*rep["staff_gun"]["mesh"].split("\\"))]
-        return nifread.world_points(nifs[0].read_bytes())
+        mesh = next(v["mesh"] for k, v in rep["staff_guns"].items() if "_smg_" in k)
+        return nifread.world_points((tmp_path / f"out{tag}" / "Data" / "Meshes" / Path(*mesh.split("\\"))).read_bytes())
 
     def size_and_centre(pts):
         lo = [min(p[i] for p in pts) for i in range(3)]

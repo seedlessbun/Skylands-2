@@ -103,5 +103,5 @@ def test_the_built_plugin_is_a_windows_dll_with_the_skse_entry_points():
     assert int.from_bytes(data[data.index(b"PE\0\0") + 4:][:2], "little") == 0x8664  # x64
     for export in (b"SKSEPlugin_Version", b"SKSEPlugin_Load", b"SKSEPlugin_Query"):
         assert export in data
-    for text in (b"SkylandsNative", b"TriggerHeld", b"TriggerPressed", b"FireBullet", b"SetGunMode", b"Version", b"NPC R MagicNode [RMag]", b"attack handler hooked"):
+    for text in (b"SkylandsNative", b"TriggerHeld", b"TriggerPressed", b"FireGun", b"GunStat", b"SkylandsGun_", b"SetGunMode", b"Version", b"NPC R MagicNode [RMag]", b"attack handler hooked"):
         assert text in data

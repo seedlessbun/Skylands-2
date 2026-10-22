@@ -231,45 +231,37 @@ def test_gunner_scripts_decompile(tmp_path):
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
-    psc = decompile(tmp_path, scripts.staff_gun(), "SkylandsStaffGun")
-    assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc
+    psc = decompile(tmp_path, scripts.staff_gun("SkylandsStaffGun18"), "SkylandsStaffGun18")
+    assert "ScriptName SkylandsStaffGun18 Extends ActiveMagicEffect" in psc
     assert "Skipped inoperative" not in psc
     for text in (
-            # SKSE: the plugin of Skylands (the attack button, the bullet launch) and SKSE's own charge and version calls
-            "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireBullet(Me, BulletSpell, Spread, OffsetRight, OffsetUp, OffsetForward)",
+            # SKSE: the plugin of Skylands (the attack button, the gun's numbers, the bullet launch) and SKSE's own charge and version calls
+            "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireGun(Me, OffsetRight, OffsetUp, OffsetForward)",
+            "SkylandsNative.GunStat(w, \"clip\")", "SkylandsNative.GunStat(w, \"interval\")", "SkylandsNative.GunStat(w, \"reload\")",
             "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "WornObject.SetItemCharge(Me, 1, 0, v)", "WornObject.GetItemCharge(Me, 1, 0)", "Me.SetActorValue(\"RightItemCharge\", v)",
-            # the plugin keeps the right attack button from the game while the gun is in the hand (no animation); the player's controls stay on
+            # the plugin keeps the right attack button from the game while a gun is in the hand (no animation); the player's controls stay on
             "SkylandsNative.SetGunMode(True)", "SkylandsNative.SetGunMode(False)", "Me.DrawWeapon()", "Self.Grip()", "Self.Let()", "Self.Heal()",
-            "Game.EnablePlayerControls(False, True, False, False, False, False, False, False, 0)", "ControlsOff = False", "If !ControlsOff", "Bool held = r == f",
+            "Game.EnablePlayerControls(False, True, False, False, False, False, False, False, 0)", "ControlsOff = False", "If !ControlsOff",
             "SKSE.GetVersion()",
-            # the loop: a press fires at once, the button held fires one every Interval, nothing while reloading or with the staff away
+            # one script for every gun: whichever staff gun is put on is the Gun, a different one starts with a full magazine, the same one keeps its rounds
+            "Float c = SkylandsNative.GunStat(w, \"clip\")", "Return c > 0.0", "Self.Take(w)", "Self.Load(w)", "Self.Fresh(w)", "If w == Gun", "Gun = w",
+            "Interval = i", "ReloadTime = r", "MagSize = n", "Mag = n", "Weapon Gun",
+            # the loop: a press fires at once, the button held fires one every Interval, nothing while reloading or with the gun away
             "Bool pressed = SkylandsNative.TriggerPressed()", "Bool go = Self.Pull()", "While go", "Utility.Wait(Interval)",
             "go = SkylandsNative.TriggerHeld() && Self.Pull()", "Bool more = Mag > 1", "Return Armed && !Reloading",
             # the magazine, the gauge, the reload (a delay with the gauge empty, then full) and the messages
             "Mag -= 1", "Int r = Fired % 10", "If r == 0 && Verbose", "v *= ChargePerShot", "Utility.Wait(ReloadTime)", "Mag = MagSize",
-            "Staff gun: reloading", "Staff gun: reloaded", "Equipped: id ", ", script copy ", "If w as Bool && Verbose", "Me.AddItem(f, 1, False)",
+            "Staff gun: reloading", "Staff gun: reloaded", "Me.AddItem(f, 1, False)", "Form f = GiftA as Form", "f = GiftB as Form",
             "Me.GetEquippedObject(1)", "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
             "ObjectReference ref = Me as ObjectReference", "ShotSound.Play(ref)",
-            "Float Property Spread Auto", "Float Property ChargePerShot Auto", "Float Property Interval Auto", "Sound Property ShotSound Auto",
-            "Spell Property BulletSpell Auto", "Weapon Property StaffGun Auto", "Float Property OffsetForward Auto"):
+            "Weapon Property GiftA Auto", "Float Property ChargePerShot Auto", "Sound Property ShotSound Auto", "Float Property OffsetForward Auto"):
         assert text in psc, text
-    # the workarounds of plain Papyrus are gone: no animation events or variables, no actor-value gauge, no aim point, no unequip to reload
+    # what the old single-gun script kept in properties is the plugin's now; the workarounds of plain Papyrus are gone
     assert "DisablePlayerControls" not in psc  # 0.14.3 switched the fighting controls off; the plugin swallows the attack button instead
-    for text in ("RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "Aim", "UnequipItem", "EquipItem",
+    for text in ("Property BulletSpell", "Property StaffGun", "Property MagSize", "Property Interval", "Property ReloadTime", "Property Spread",
+                 "FireBullet", "RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "Aim", "UnequipItem", "EquipItem",
                  "Input.", "GetWeaponType", "Burst", "Fill"):
         assert text not in psc, text
-
-
-@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
-def test_native_stub_declares_the_plugins_functions(tmp_path):
-    psc = decompile(tmp_path, scripts.native_stub(), "SkylandsNative")
-    assert "ScriptName SkylandsNative\n" in psc
-    for text in ("Bool Function FireBullet(Actor akShooter, Spell akBullet, Float afSpread, Float afRight, Float afUp, Float afForward) Global Native",
-                 "Bool Function TriggerHeld() Global Native", "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
-        assert text in psc, text
-    main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
-    for text in ('"FireBullet"sv', '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv', '"Version"sv', "RE::Actor* a_shooter, RE::SpellItem* a_spell, float a_spread, float a_right, float a_up, float a_forward"):
-        assert text in main, text  # the stub and the plugin's registrations say the same thing
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")

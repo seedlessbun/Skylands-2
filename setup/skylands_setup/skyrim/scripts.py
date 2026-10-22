@@ -2025,18 +2025,17 @@ def gunner_quest() -> Script:
 
 
 def staff_gun(name: str = "SkylandsStaffGun") -> Script:
-    """SkylandsStaffGun extends ActiveMagicEffect: the staff-type automatic gun prototype (SkylandsGunModels.esp).
+    """SkylandsStaffGun extends ActiveMagicEffect: the player's side of every Skylands staff gun (SkylandsGunModels.esp).
 
-    The gun is a staff (its enchantment is only there for the charge gauge). While it is in the hand the plugin does not give the
-    game's attack handler the right attack button (SkylandsNative.SetGunMode), so the staff casts nothing and plays no animation:
-    the gun stays in the hand pointing forward, and block, shouts and readying work as usual.
-    The bullets are the script's, through the SKSE plugin SkylandsNative
-    (native/skse): the plugin says whether the attack button is down (SkylandsNative.TriggerHeld / TriggerPressed) and launches
-    the bullet spell's projectile from the muzzle node of the gun's own mesh along the crosshair with a spread (FireBullet). The script
-    fires one bullet the moment the button goes down and one every Interval seconds while it is held, counts the magazine,
-    shows it on the staff's enchantment charge (the RightItemCharge actor value drives the bar, WornObject.SetItemCharge keeps
-    the item's own charge), and reloads by waiting ReloadTime with the
-    gauge empty and then filling it. A box on the first equip says what the build made and what SKSE and the plugin report.
+    A staff gun is a staff weapon whose enchantment is its bullet; its numbers (magazine, interval, reload, spread) are in a keyword
+    of its own that the SKSE plugin reads (SkylandsNative.GunStat), so one script serves them all. While one is in the hand the
+    plugin does not give the game's attack handler the right attack button (SkylandsNative.SetGunMode), so the staff casts nothing
+    and plays no animation, and block, shouts and readying work as usual. The plugin says whether the attack button is down
+    (TriggerHeld / TriggerPressed) and launches the bullet from the muzzle node of the gun's own mesh along the crosshair (FireGun).
+    The script fires one bullet the moment the button goes down and one every Interval seconds while it is held, counts the
+    magazine, shows it on the staff's enchantment charge (the RightItemCharge actor value drives the HUD bar, WornObject.SetItemCharge
+    keeps the item's own charge), and reloads by waiting ReloadTime with the gauge empty and then filling it. A box on the first
+    equip says what the build made and what SKSE and the plugin report. Two staff guns are given once at the start, to try.
 
       Event OnEffectStart / OnPlayerLoadGame / OnObjectEquipped / OnObjectUnequipped / OnUpdate
     """
@@ -2053,19 +2052,17 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     start = Function(
         "Start",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("a", "String"), ("msg", "String"), ("n", "Int"), ("v", "Int")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("msg", "String"), ("v", "Int")],
         code=[
-            ("cast", ("id", "f"), ("id", "::StaffGun_var")),
+            # two staff guns to try, given once
             ("not", T0, ("id", "Given")),
             ("jmpf", T0, ("lbl", "had")),
             ("assign", ("id", "Given"), ("bool", True)),
+            ("cast", ("id", "f"), ("id", "::GiftA_var")),
             ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "f"), ("int", 1), ("bool", False)),
-            ("assign", ("id", "Mag"), ("id", "::MagSize_var")),
+            ("cast", ("id", "f"), ("id", "::GiftB_var")),
+            ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "f"), ("int", 1), ("bool", False)),
             ("label", "had"),
-            # how many staff guns the pack holds, whether or not this start gave one
-            ("callmethod", ("id", "GetItemCount"), ("id", "Me"), ("id", "n"), ("id", "f")),
-            ("cast", ("id", "a"), ("id", "n")),
-            *notify(("str", "Staff gun: staff guns in the pack: "), ("id", "a")),
             # is the SKSE plugin of Skylands loaded? (-1: no)
             ("callstatic", ("id", "SKSE"), ("id", "GetPluginVersion"), ("id", "v"), ("str", "SkylandsNative")),
             ("cmp_gt", ("id", "Native"), ("id", "v"), ("int", 0)),
@@ -2076,90 +2073,98 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("label", "tagged"),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
             call("Resume"),
-            call("Report"),
             ("return", None),
         ],
     )
     resume = Function(
         "Resume",
-        locals=[("::nonevar", "None"), ("f", "Form"), ("r", "Form"), ("held", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("r", "Form"), ("w", "Weapon")],
         code=[
-            # a saved game loaded with the staff already in the hand: the equip event does not come again; with it away, the
-            # fighting controls this script switched off are given back
-            ("cast", ("id", "f"), ("id", "::StaffGun_var")),
+            # a saved game loaded with a staff gun already in the hand: the equip event does not come again; with none, the plugin's
+            # gun mode is switched off and the fighting controls an old version switched off are given back
             ("callmethod", ("id", "GetEquippedObject"), ("id", "Me"), ("id", "r"), ("int", 1)),
-            ("cmp_eq", ("id", "held"), ("id", "r"), ("id", "f")),
-            ("jmpf", ("id", "held"), ("lbl", "away")),
-            ("assign", ("id", "Armed"), ("bool", True)),
-            call("Speed"),
-            call("Grip"),
+            ("cast", ("id", "w"), ("id", "r")),
+            call("IsGun", ("id", "w"), dest=T0),
+            ("jmpf", T0, ("lbl", "away")),
+            call("Take", ("id", "w")),
+            ("jmp", ("lbl", "end")),
             ("label", "away"),
-            ("not", ("id", "held"), ("id", "held")),
-            ("jmpf", ("id", "held"), ("lbl", "end")),
             call("Let"),
             ("label", "end"),
             ("return", None),
         ],
     )
-    report = Function(
-        "Report",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("msg", "String")],
+    is_gun = Function(
+        "IsGun",
+        params=[("w", "Weapon")],
+        return_type="Bool",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("c", "Float")],
         code=[
-            # what this copy of the script was given (a saved game can keep an old copy with old values) and whether the plugin is there
-            *ret_unless(("id", "::Verbose_var"), "talk"),
-            ("assign", ("id", "a"), ("str", "NOT SET")),
-            ("cast", T0, ("id", "::StaffGun_var")),
-            ("jmpf", T0, ("lbl", "nogun")),
-            ("assign", ("id", "a"), ("str", "set")),
-            ("label", "nogun"),
-            ("assign", ("id", "b"), ("str", "NOT SET")),
-            ("cast", T0, ("id", "::BulletSpell_var")),
-            ("jmpf", T0, ("lbl", "nospell")),
-            ("assign", ("id", "b"), ("str", "set")),
-            ("label", "nospell"),
-            *notify(("str", "Staff gun script started: weapon "), ("id", "a"), ("str", ", spell "), ("id", "b")),
-            ("return", None),
+            # the plugin knows a staff gun by its keyword: its magazine is more than none
+            ("callstatic", ("id", "SkylandsNative"), ("id", "GunStat"), ("id", "c"), ("id", "w"), ("str", "clip")),
+            ("cmp_gt", T0, ("id", "c"), ("float", 0.0)),
+            ("return", T0),
         ],
     )
     on_equipped = Function(
         "OnObjectEquipped",
         params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
-        locals=[("::nonevar", "None")],
-        code=[call("Equipped", ("id", "akBaseObject")), ("return", None)],
-    )
-    equipped = Function(
-        "Equipped",
-        params=[("f", "Form")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon"), ("a", "String"), ("b", "String"), ("c", "String"),
-                ("d", "String"), ("i", "Int"), ("j", "Int"), ("g", "Form"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
         code=[
-            # a weapon put on is named on screen with its id and the id of this script's staff gun; the staff gun arms the script.
-            # The game also announces the staff's enchantment (the form before the staff in the plugin, so its id is one less) as put on:
-            # that is not a second staff, and it is not told
-            ("cast", ("id", "w"), ("id", "f")),
-            ("cast", T0, ("id", "w")),
-            ("jmpf", T0, ("lbl", "band")),
-            ("assign", T0, ("id", "::Verbose_var")),
-            ("label", "band"),
-            ("jmpf", T0, ("lbl", "quiet")),
-            ("callmethod", ("id", "GetFormID"), ("id", "f"), ("id", "i")),
-            ("cast", ("id", "g"), ("id", "::StaffGun_var")),
-            ("callmethod", ("id", "GetFormID"), ("id", "g"), ("id", "j")),
-            ("cast", ("id", "b"), ("id", "i")),
-            ("cast", ("id", "c"), ("id", "j")),
-            ("cast", ("id", "d"), ("id", "Tag")),
-            *notify(("str", "Equipped: id "), ("id", "b"), ("str", ", the staff gun is id "), ("id", "c"), ("str", ", script copy "), ("id", "d")),
-            ("label", "quiet"),
-            ("cast", T0, ("id", "w")),
-            ("jmpf", T0, ("lbl", "both")),
-            ("cmp_eq", T0, ("id", "w"), ("id", "::StaffGun_var")),
-            ("label", "both"),
+            # a staff gun put on arms the script. The game also announces the gun's enchantment as put on: it is no weapon, nothing happens
+            ("cast", ("id", "w"), ("id", "akBaseObject")),
+            call("IsGun", ("id", "w"), dest=T0),
             ("jmpf", T0, ("lbl", "end")),
+            call("Take", ("id", "w")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    take = Function(
+        "Take",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None")],
+        code=[
+            # this gun is the one in the hand
+            call("Load", ("id", "w")),
             ("assign", ("id", "Armed"), ("bool", True)),
             call("Speed"),
             call("Grip"),
             call("Arm"),
-            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    fresh = Function(
+        "Fresh",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("c", "Float"), ("n", "Int")],
+        code=[
+            # a different gun than the one before starts with a full magazine (the same gun put on again keeps its rounds)
+            ("cmp_eq", T0, ("id", "w"), ("id", "Gun")),
+            ("jmpf", T0, ("lbl", "differ")),
+            ("return", None),
+            ("label", "differ"),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "GunStat"), ("id", "c"), ("id", "w"), ("str", "clip")),
+            ("cast", ("id", "n"), ("id", "c")),
+            ("assign", ("id", "Mag"), ("id", "n")),
+            ("return", None),
+        ],
+    )
+    load = Function(
+        "Load",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None"), ("c", "Float"), ("i", "Float"), ("r", "Float"), ("n", "Int")],
+        code=[
+            # the gun's numbers come from the plugin
+            call("Fresh", ("id", "w")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "GunStat"), ("id", "c"), ("id", "w"), ("str", "clip")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "GunStat"), ("id", "i"), ("id", "w"), ("str", "interval")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "GunStat"), ("id", "r"), ("id", "w"), ("str", "reload")),
+            ("cast", ("id", "n"), ("id", "c")),
+            ("assign", ("id", "Gun"), ("id", "w")),
+            ("assign", ("id", "Interval"), ("id", "i")),
+            ("assign", ("id", "ReloadTime"), ("id", "r")),
+            ("assign", ("id", "MagSize"), ("id", "n")),
             ("return", None),
         ],
     )
@@ -2168,12 +2173,11 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
         code=[
+            # the gun in the hand was put away (another staff gun put on first has already become the Gun)
             ("cast", ("id", "w"), ("id", "akBaseObject")),
-            ("cast", T0, ("id", "w")),
-            ("jmpf", T0, ("lbl", "both")),
-            ("cmp_eq", T0, ("id", "w"), ("id", "::StaffGun_var")),
-            ("label", "both"),
+            ("cmp_eq", T0, ("id", "w"), ("id", "Gun")),
             ("jmpf", T0, ("lbl", "end")),
+            ("jmpf", ("id", "Armed"), ("lbl", "end")),
             ("assign", ("id", "Armed"), ("bool", False)),
             ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "WeaponSpeedMult"), ("float", 1.0)),
             call("Let"),
@@ -2221,7 +2225,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             call("Pull", dest=("id", "go")),
             ("label", "hloop"),
             ("jmpf", ("id", "go"), ("lbl", "hdone")),
-            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "::Interval_var")),
+            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "Interval")),
             ("callstatic", ("id", "SkylandsNative"), ("id", "TriggerHeld"), ("id", "go")),
             ("jmpf", ("id", "go"), ("lbl", "again")),
             call("Pull", dest=("id", "go")),
@@ -2252,9 +2256,9 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         "Fire",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ref", "ObjectReference"), ("n", "Int")],
         code=[
-            # the plugin launches the bullet from the right hand, along the crosshair, within the spread
-            ("callstatic", ("id", "SkylandsNative"), ("id", "FireBullet"), ("id", "::temp0"), ("id", "Me"), ("id", "::BulletSpell_var"),
-             ("id", "::Spread_var"), ("id", "::OffsetRight_var"), ("id", "::OffsetUp_var"), ("id", "::OffsetForward_var")),
+            # the plugin launches the held gun's bullet from its muzzle, along the crosshair, within the gun's spread
+            ("callstatic", ("id", "SkylandsNative"), ("id", "FireGun"), ("id", "::temp0"), ("id", "Me"),
+             ("id", "::OffsetRight_var"), ("id", "::OffsetUp_var"), ("id", "::OffsetForward_var")),
             ("cast", T0, ("id", "::ShotSound_var")),
             ("jmpf", T0, ("lbl", "silent")),
             # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1")
@@ -2291,7 +2295,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("callstatic", ("id", "WornObject"), ("id", "GetItemCharge"), ("id", "got"), ("id", "Me"), ("int", 1), ("int", 0)),
             ("cast", ("id", "a"), ("id", "got")),
             ("cast", ("id", "b"), ("id", "Mag")),
-            ("cast", ("id", "c"), ("id", "::MagSize_var")),
+            ("cast", ("id", "c"), ("id", "MagSize")),
             ("callstatic", ("id", "SKSE"), ("id", "GetVersion"), ("id", "v")),
             ("cast", ("id", "d"), ("id", "v")),
             ("callstatic", ("id", "SKSE"), ("id", "GetVersionMinor"), ("id", "v")),
@@ -2422,8 +2426,8 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             # the staff stays in the hand; the gauge is empty for the reload time, then it is full, as a gun's magazine is
             ("assign", ("id", "Reloading"), ("bool", True)),
             *notify(("str", "Staff gun: reloading")),
-            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "::ReloadTime_var")),
-            ("assign", ("id", "Mag"), ("id", "::MagSize_var")),
+            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "ReloadTime")),
+            ("assign", ("id", "Mag"), ("id", "MagSize")),
             call("Sync"),
             ("assign", ("id", "Reloading"), ("bool", False)),
             *notify(("str", "Staff gun: reloaded")),
@@ -2433,15 +2437,15 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     return Script(
         name=name,
         parent="ActiveMagicEffect",
-        variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
+        variables=[("Me", "Actor", None), ("Gun", "Weapon", None), ("Mag", "Int", ("int", 0)), ("MagSize", "Int", ("int", 0)),
+                   ("Interval", "Float", ("float", 0.1)), ("ReloadTime", "Float", ("float", 2.0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
                    ("Native", "Bool", ("bool", False)), ("Tag", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)),
                    ("ControlsOff", "Bool", ("bool", False))],
-        auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
-                         ("SpeedMult", "Float"), ("Interval", "Float"), ("ChargePerShot", "Float"), ("Spread", "Float"),
+        auto_properties=[("GiftA", "Weapon"), ("GiftB", "Weapon"), ("SpeedMult", "Float"), ("ChargePerShot", "Float"),
                          ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
                          ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, resume, report, on_equipped, equipped, on_unequipped, on_update, poll, hold, pull, fire, ready,
+        functions=[on_start, on_load, start, resume, is_gun, on_equipped, take, fresh, load, on_unequipped, on_update, poll, hold, pull, fire, ready,
                    arm, grip, heal, let, speed, count, tell, sync, reload_],
     )
 
@@ -2459,9 +2463,9 @@ def native_stub() -> Script:
             Function("SetGunMode", return_type="Bool", flags=both, params=[("abOn", "Bool")]),
             Function("TriggerHeld", return_type="Bool", flags=both),
             Function("TriggerPressed", return_type="Bool", flags=both),
-            Function("FireBullet", return_type="Bool", flags=both,
-                     params=[("akShooter", "Actor"), ("akBullet", "Spell"), ("afSpread", "Float"), ("afRight", "Float"), ("afUp", "Float"),
-                             ("afForward", "Float")]),
+            Function("GunStat", return_type="Float", flags=both, params=[("akWeapon", "Weapon"), ("asKey", "String")]),
+            Function("FireGun", return_type="Bool", flags=both,
+                     params=[("akShooter", "Actor"), ("afRight", "Float"), ("afUp", "Float"), ("afForward", "Float")]),
         ],
     )
 

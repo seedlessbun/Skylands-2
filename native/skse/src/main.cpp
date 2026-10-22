@@ -1,8 +1,8 @@
 // SkylandsNative: the SKSE plugin the Skylands guns use for what plain Papyrus cannot do.
 //
 //   TriggerHeld / TriggerPressed   the attack button ("Right Attack/Block": keyboard, mouse or gamepad, whatever the player mapped)
-//   FireBullet                     launches a spell's projectile from the right hand's magic node, aimed along the crosshair,
-//                                  with a spread; no cast animation, no wind-up, no magicka
+//   GunStat / FireGun              a Skylands staff gun's numbers (from its keywords) and its bullet, launched from the gun's muzzle
+//                                  along the crosshair; no cast animation, no wind-up, no magicka. Enemies: the burst after the game's cast
 //
 // Papyrus class: SkylandsNative, static functions. Data/Scripts/SkylandsNative.pex (written by the installer, scripts.native_stub)
 // declares them as native; the types there must match the ones below.
@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 104;  // 1.0.4
+	constexpr std::int32_t kVersion = 110;  // 1.1.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -165,26 +165,116 @@ namespace
 		return pressed && !MenuOpen();
 	}
 
-	void Launch(RE::FormID a_shooter, RE::FormID a_spell, float a_spread, float a_right, float a_up, float a_forward)
+	// ---- guns ----------------------------------------------------------------------------------------------------------
+	//
+	// A Skylands staff gun is a staff weapon whose enchantment is the bullet (a fire-and-forget aimed effect with the Borderlands
+	// projectile) and whose keywords carry its numbers in an editor id: SkylandsGun_c30_i100_r2000_s20_b3 = magazine 30, a round
+	// every 100 ms, reload 2000 ms, spread 2.0 degrees, 3 rounds a burst (enemies). The same weapon serves the player (this plugin
+	// fires it from the attack button) and enemies (the game casts the enchantment, this plugin adds the rest of the burst).
+
+	struct GunInfo
+	{
+		int   clip{ 0 };
+		float interval{ 0.1f };  // seconds
+		float reload{ 2.0f };    // seconds
+		float spread{ 2.0f };    // degrees
+		int   burst{ 1 };        // rounds per burst of an enemy
+	};
+
+	std::mutex                                     g_gunLock;
+	std::unordered_map<RE::FormID, GunInfo>        g_guns;
+
+	// The numbers of a gun weapon from its keywords; false when it is not a Skylands staff gun.
+	bool GunOf(RE::TESObjectWEAP* a_weapon, GunInfo& a_out)
+	{
+		if (!a_weapon) {
+			return false;
+		}
+		const std::lock_guard lock(g_gunLock);
+		if (const auto it = g_guns.find(a_weapon->GetFormID()); it != g_guns.end()) {
+			a_out = it->second;
+			return it->second.clip > 0;
+		}
+		GunInfo info{};
+		a_weapon->ForEachKeyword([&](RE::BGSKeyword* a_keyword) {
+			const std::string_view edid = a_keyword ? a_keyword->GetFormEditorID() : "";
+			constexpr std::string_view prefix = "SkylandsGun_";
+			if (edid.starts_with(prefix)) {
+				std::string_view rest = edid.substr(prefix.size());
+				while (!rest.empty()) {
+					const auto cut = rest.find('_');
+					const std::string_view part = rest.substr(0, cut);
+					rest = cut == std::string_view::npos ? std::string_view{} : rest.substr(cut + 1);
+					if (part.size() < 2) {
+						continue;
+					}
+					int value = 0;
+					std::from_chars(part.data() + 1, part.data() + part.size(), value);
+					switch (part[0]) {
+					case 'c': info.clip = value; break;
+					case 'i': info.interval = (std::max)(0.02f, value / 1000.0f); break;
+					case 'r': info.reload = value / 1000.0f; break;
+					case 's': info.spread = value / 10.0f; break;
+					case 'b': info.burst = (std::max)(1, value); break;
+					default: break;
+					}
+				}
+			}
+			return RE::BSContainer::ForEachResult::kContinue;
+		});
+		g_guns[a_weapon->GetFormID()] = info;
+		a_out = info;
+		return info.clip > 0;
+	}
+
+	// The gun in an actor's hands (right hand first, then left): the weapon, and its numbers.
+	RE::TESObjectWEAP* HeldGun(RE::Actor* a_actor, GunInfo& a_out)
+	{
+		if (!a_actor) {
+			return nullptr;
+		}
+		for (const bool left : { false, true }) {
+			const auto weapon = a_actor->GetEquippedObject(left) ? a_actor->GetEquippedObject(left)->As<RE::TESObjectWEAP>() : nullptr;
+			if (weapon && weapon->formEnchanting && GunOf(weapon, a_out)) {
+				return weapon;
+			}
+		}
+		return nullptr;
+	}
+
+	// Launches the held gun's bullet. The player's bullets cross the crosshair (a_target null); an enemy's go at a_target's chest.
+	// a_spread is in degrees; right, up and forward move the start in the view's own axes.
+	void Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward)
 	{
 		const auto shooter = RE::TESForm::LookupByID<RE::Actor>(a_shooter);
-		const auto spell = RE::TESForm::LookupByID<RE::SpellItem>(a_spell);
-		if (!shooter || !spell || !spell->GetAVEffect() || !spell->GetAVEffect()->data.projectileBase) {
-			SKSE::log::warn("FireBullet: no shooter, spell or projectile (shooter {:08X}, spell {:08X})", a_shooter, a_spell);
+		GunInfo    info{};
+		const auto weapon = HeldGun(shooter, info);
+		if (!weapon || shooter->IsDead()) {
 			return;
 		}
+		const auto spell = weapon->formEnchanting;
+		if (!spell->GetAVEffect() || !spell->GetAVEffect()->data.projectileBase) {
+			SKSE::log::warn("gun {:08X}: its enchantment has no projectile", weapon->GetFormID());
+			return;
+		}
+		const auto target = a_targetId ? RE::TESForm::LookupByID<RE::Actor>(a_targetId) : nullptr;
+		const bool npc = !shooter->IsPlayerRef();
 
-		// where the player is looking: the eye (the camera in first person) and the way it points
+		// where the shooter is looking: the eye (the camera in first person) and the way it points
 		RE::NiPoint3 eye{}, look{};
 		shooter->GetEyeVector(eye, look, true);
-		const Vec3 dir = Norm({ look.x, look.y, look.z });
+		Vec3 dir = Norm({ look.x, look.y, look.z });
+		if (npc) {
+			eye = shooter->GetPosition();
+			eye.z += shooter->GetHeight() * 0.85f;
+		}
 		const Vec3 right = Norm(Cross(dir, { 0.0f, 0.0f, 1.0f }));
 		const Vec3 up = Cross(right, dir);
 
 		// where the bullet starts: the muzzle node of the equipped gun's own mesh (the installer's gun meshes hold an empty node,
 		// SkylandsMuzzle, at the end of the barrel), else the right hand's magic node, else a point ahead of the eye
 		const auto camera = RE::PlayerCamera::GetSingleton();
-		const bool first = shooter->IsPlayerRef() && camera && camera->IsInFirstPerson();
+		const bool first = !npc && camera && camera->IsInFirstPerson();
 		RE::NiPoint3 origin = eye;
 		const char*  found = "none";
 		if (const auto root = shooter->Get3D(first)) {
@@ -199,26 +289,33 @@ namespace
 		if (std::string_view(found) == "none") {  // no node found: a point ahead of the eye, to the right and below it
 			origin = { eye.x + dir.x * 40.0f + right.x * 14.0f, eye.y + dir.y * 40.0f + right.y * 14.0f, eye.z + dir.z * 40.0f - 12.0f };
 		}
-		static std::string_view lastFound;
-		if (lastFound != found) {  // said once, and again when it changes
-			lastFound = found;
-			SKSE::log::info("bullet origin: {} ({}), {} person", found, std::string_view(found) == "muzzle" ? "the gun's own muzzle node" : "no muzzle node in the equipped weapon's 3D", first ? "first" : "third");
+		static std::string_view lastFound[2];
+		if (lastFound[npc] != found) {  // said once, and again when it changes
+			lastFound[npc] = found;
+			SKSE::log::info("bullet origin ({}): {} ({}), {} person", npc ? "enemy" : "player", found,
+				std::string_view(found) == "muzzle" ? "the gun's own muzzle node" : "no muzzle node in the equipped weapon's 3D", first ? "first" : "third");
 		}
 		origin.x += right.x * a_right + up.x * a_up + dir.x * a_forward;
 		origin.y += right.y * a_right + up.y * a_up + dir.y * a_forward;
 		origin.z += right.z * a_right + up.z * a_up + dir.z * a_forward;
 
-		// aimed at the point the crosshair looks at some way ahead, so the bullet crosses the crosshair rather than running beside it
-		const Vec3 target{ eye.x + dir.x * g_convergence, eye.y + dir.y * g_convergence, eye.z + dir.z * g_convergence };
-		const Vec3 aim = Norm({ target.x - origin.x, target.y - origin.y, target.z - origin.z });
+		// aimed at the point the crosshair looks at some way ahead, so the bullet crosses the crosshair rather than running beside it;
+		// an enemy aims at the chest of its target
+		Vec3 point{ eye.x + dir.x * g_convergence, eye.y + dir.y * g_convergence, eye.z + dir.z * g_convergence };
+		if (target) {
+			const auto at = target->GetPosition();
+			point = { at.x, at.y, at.z + target->GetHeight() * 0.7f };
+		}
+		const Vec3 aim = Norm({ point.x - origin.x, point.y - origin.y, point.z - origin.z });
 		float      pitch = -std::asin(std::clamp(aim.z, -1.0f, 1.0f));  // Skyrim's pitch is positive downwards
 		float      heading = std::atan2(aim.x, aim.y);
 
-		// the spread: a random direction inside a cone of a_spread degrees
-		if (a_spread > 0.0f) {
+		// the spread: a random direction inside a cone (an enemy's is twice the player's)
+		const float spread = info.spread * (npc ? 2.0f : 1.0f);
+		if (spread > 0.0f) {
 			static thread_local std::mt19937 rng{ std::random_device{}() };
 			std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-			const float radius = a_spread * std::numbers::pi_v<float> / 180.0f * std::sqrt(unit(rng));
+			const float radius = spread * std::numbers::pi_v<float> / 180.0f * std::sqrt(unit(rng));
 			const float angle = 2.0f * std::numbers::pi_v<float> * unit(rng);
 			pitch += radius * std::sin(angle);
 			heading += radius * std::cos(angle);
@@ -230,19 +327,100 @@ namespace
 		RE::Projectile::Launch(&handle, data);
 	}
 
-	// Launched on the game's own thread, a frame later: a Papyrus call may not touch the world from the script thread.
-	bool FireBullet(RE::StaticFunctionTag*, RE::Actor* a_shooter, RE::SpellItem* a_spell, float a_spread, float a_right, float a_up, float a_forward)
+	void RunOnGameThread(std::function<void()> a_work)
 	{
-		if (!a_shooter || !a_spell) {
+		if (const auto task = SKSE::GetTaskInterface()) {
+			task->AddTask(std::move(a_work));
+		}
+	}
+
+	// ---- enemies ---------------------------------------------------------------------------------------------------------
+	//
+	// An enemy with a Skylands gun in its hands casts the gun's enchantment the way it casts any staff: the game launches the
+	// first bullet. The rest of the burst is ours: it is started from the cast event, spaced by the gun's interval, from the gun's
+	// muzzle, at the enemy's combat target. The gun's magazine is not counted for enemies.
+	class CastSink : public RE::BSTEventSink<RE::TESSpellCastEvent>
+	{
+	public:
+		static CastSink* Get()
+		{
+			static CastSink sink;
+			return std::addressof(sink);
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::TESSpellCastEvent* a_event, RE::BSTEventSource<RE::TESSpellCastEvent>*) override
+		{
+			if (!a_event || !a_event->object) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			const auto actor = skyrim_cast<RE::Actor*>(a_event->object.get());
+			if (!actor || actor->IsPlayerRef()) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			GunInfo    info{};
+			const auto weapon = HeldGun(actor, info);
+			if (!weapon || weapon->formEnchanting->GetFormID() != a_event->spell || info.burst < 2) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			static std::atomic_int logged{ 0 };
+			if (logged.fetch_add(1) < 5) {
+				SKSE::log::info("enemy {:08X} fired gun {:08X}: burst of {}", actor->GetFormID(), weapon->GetFormID(), info.burst);
+			}
+			const RE::FormID shooter = actor->GetFormID();
+			const int        more = info.burst - 1;
+			const auto       gap = std::chrono::milliseconds(static_cast<int>(info.interval * 1000.0f));
+			std::thread([shooter, more, gap]() {
+				for (int i = 0; i < more; ++i) {
+					std::this_thread::sleep_for(gap);
+					RunOnGameThread([shooter]() {
+						const auto who = RE::TESForm::LookupByID<RE::Actor>(shooter);
+						if (!who || who->IsDead() || !who->Is3DLoaded()) {
+							return;
+						}
+						const auto target = who->GetActorRuntimeData().currentCombatTarget.get();
+						Launch(shooter, target ? target->GetFormID() : 0, 0.0f, 0.0f, 0.0f);
+					});
+				}
+			}).detach();
+			return RE::BSEventNotifyControl::kContinue;
+		}
+	};
+
+	// ---- Papyrus (continued) ---------------------------------------------------------------------------------------------
+
+	// One of a gun weapon's numbers: "clip", "interval" (seconds), "reload" (seconds), "spread" (degrees), "burst"; 0 when the weapon is no gun.
+	float GunStat(RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon, std::string_view a_key)
+	{
+		GunInfo info{};
+		if (!GunOf(a_weapon, info)) {
+			return 0.0f;
+		}
+		if (a_key == "clip") {
+			return static_cast<float>(info.clip);
+		}
+		if (a_key == "interval") {
+			return info.interval;
+		}
+		if (a_key == "reload") {
+			return info.reload;
+		}
+		if (a_key == "spread") {
+			return info.spread;
+		}
+		if (a_key == "burst") {
+			return static_cast<float>(info.burst);
+		}
+		return 0.0f;
+	}
+
+	// The player's shot: launched on the game's own thread, a frame later (a Papyrus call may not touch the world from the script thread).
+	bool FireGun(RE::StaticFunctionTag*, RE::Actor* a_shooter, float a_right, float a_up, float a_forward)
+	{
+		if (!a_shooter) {
 			return false;
 		}
 		const auto shooter = a_shooter->GetFormID();
-		const auto spell = a_spell->GetFormID();
-		const auto task = SKSE::GetTaskInterface();
-		if (!task) {
-			return false;
-		}
-		task->AddTask([=]() { Launch(shooter, spell, a_spread, a_right, a_up, a_forward); });
+		RunOnGameThread([=]() { Launch(shooter, 0, a_right, a_up, a_forward); });
 		return true;
 	}
 
@@ -252,7 +430,8 @@ namespace
 		a_vm->RegisterFunction("SetGunMode"sv, "SkylandsNative"sv, SetGunMode);
 		a_vm->RegisterFunction("TriggerHeld"sv, "SkylandsNative"sv, TriggerHeld);
 		a_vm->RegisterFunction("TriggerPressed"sv, "SkylandsNative"sv, TriggerPressed);
-		a_vm->RegisterFunction("FireBullet"sv, "SkylandsNative"sv, FireBullet);
+		a_vm->RegisterFunction("GunStat"sv, "SkylandsNative"sv, GunStat);
+		a_vm->RegisterFunction("FireGun"sv, "SkylandsNative"sv, FireGun);
 		return true;
 	}
 
@@ -285,7 +464,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 0, 4, 0 },
+	.Version = { 1, 1, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
