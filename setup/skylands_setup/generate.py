@@ -537,22 +537,10 @@ STAFF_KINDS = ("smg", "assault_rifle")  # the gun types that are staff guns (the
 STAFF_NPC_BURST_MAX = 6
 
 
-def override_list(view: esp.Plugin, form_id: int, edid: str, entries: list[tuple[int, int]], flags: int = 0x3) -> esp.Rec:
-    """An override (in the second plugin) of a leveled list that Skylands.esp made: the same record with other entries. Entries beyond
-    the list limit go into new sub-lists of the second plugin."""
-    if len(entries) > LIST_LIMIT:
-        chunks = [entries[i : i + LIST_LIMIT] for i in range(0, len(entries), LIST_LIMIT)]
-        entries = [(leveled_list(view, f"{edid}_Staff{k}", chunk, flags).form_id, 1) for k, chunk in enumerate(chunks)]
-    r = esp.Rec("LVLI", form_id, [("EDID", esp.zstr(edid)), ("OBND", obnd()), ("LVLD", bytes([0])), ("LVLF", bytes([flags])),
-                                  ("LLCT", bytes([len(entries)]))])
-    for fid, count in entries:
-        r.add("LVLO", lvlo(fid, count))
-    return view.override(r)
-
-
 class Armory:
-    """The staff guns: a twin of every submachine gun and assault rifle variant of the crossbow set (same parts, rarity, element,
-    stats and name), each a vanilla staff weapon whose enchantment IS the bullet: one aimed fire-and-forget effect whose projectile
+    """The staff guns: every submachine gun and assault rifle variant of the crossbow set is turned into one IN PLACE (the same form id, so
+    the loot lists, the form list of the beams, and every copy already lying in a saved game or carried by an enemy become staff guns;
+    same parts, rarity, element, stats and name), each a vanilla staff weapon whose enchantment IS the bullet: one aimed fire-and-forget effect whose projectile
     is the Borderlands bullet of the gun type and element (speed, tracer colour, explosion from the rounds data).
 
     The player's gun is fired by the SKSE plugin from the attack button (script scripts.staff_gun, plugin FireGun), which keeps the
@@ -637,9 +625,9 @@ class Armory:
         self.bullets[key] = (pr.form_id, parts)
         return self.bullets[key]
 
-    def add(self, g: dict, k: int, gt, rr, built: dict, element: str | None, st: dict, damage: int, value: int, name: str, text: str,
+    def add(self, g: dict, k: int, form_id: int, edid: str, gt, rr, built: dict, element: str | None, st: dict, damage: int, value: int, name: str, text: str,
             clip: int | None, rarity_kw: int, gun_kw: int, color, first_person: dict) -> int | None:
-        """The staff twin of one crossbow gun variant; its form id (None when the staff guns could not be built)."""
+        """Turns one crossbow gun variant into a staff gun (an override in the second plugin with the crossbow's own form id)."""
         if not self.ok:
             return None
         kind = g["type"]
@@ -647,9 +635,8 @@ class Armory:
         donor = self._donor(element) or self._donor(None)
         _, d_ench, d_mgef, _ = donor
         proj_id, (mparts, mdata) = self._bullet(kind, element, gt, shot)
-        edid = f"SkylandsStaff_{g['balance'].rsplit('.', 1)[1]}_{k + 1}"
         # the effect: this gun's own copy of the bullet effect, which carries its stats text (the crossbow guns show theirs the same way)
-        mg = esp.Rec("MGEF", self.view.new_id(f"MGEF:{edid}"), [("EDID", esp.zstr(edid))])
+        mg = esp.Rec("MGEF", self.view.new_id(f"MGEF:Staff_{edid}"), [("EDID", esp.zstr(f"Staff_{edid}"))])
         mg.subs += [(sig, d) for sig, d in mparts]
         mg.set("FULL", esp.zstr("Gun stats"))
         at = next(i for i, (sig, _) in enumerate(mg.subs) if sig == "FULL")
@@ -659,7 +646,7 @@ class Armory:
                      ["EDID", "VMAD", "FULL", "MDOB", "KSIZ", "KWDA", "DNAM", "DATA"] else 7)
         self.view.override(mg)
         # the enchantment: that effect, no cost, no charge time
-        en = esp.Rec("ENCH", self.view.new_id(f"ENCH:{edid}"), [(sig, d) for sig, d in d_ench.subrecords if sig not in ("EFID", "EFIT", "CTDA", "VMAD")])
+        en = esp.Rec("ENCH", self.view.new_id(f"ENCH:Staff_{edid}"), [(sig, d) for sig, d in d_ench.subrecords if sig not in ("EFID", "EFIT", "CTDA", "VMAD")])
         en.set("EDID", esp.zstr(edid))
         if en.get("FULL") is not None:
             en.set("FULL", esp.zstr("Gun stats"))
@@ -672,7 +659,7 @@ class Armory:
         self.view.override(en)
         # the weapon: a copy of the base staff, with this gun's name, numbers, keywords and model
         base = self.base[0]
-        w = esp.Rec("WEAP", self.view.new_id(f"WEAP:{edid}"), [(sig, d) for sig, d in base.subrecords if sig not in ("VMAD", "DESC", "EITM", "EAMT", "CNAM")],
+        w = esp.Rec("WEAP", form_id, [(sig, d) for sig, d in base.subrecords if sig not in ("VMAD", "DESC", "EITM", "EAMT", "CNAM")],
                     flags=base.flags & esp.REC_COMPRESSED)  # CNAM: the template weapon (its model and stats win over this record's)
         w.set("EDID", esp.zstr(edid))
         insert_ordered(w, "FULL", esp.zstr(name), WEAP_ORDER)
@@ -963,7 +950,6 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     gun_types = {g.id: g for g in S.GUN_TYPES.values()}
     by_rarity: dict[int, list[int]] = {}
     starters: list[int] = []
-    swapped: set[int] = set()  # crossbow SMGs and assault rifles that the staff guns replace in the loot
     parts = bl2["weapons"].get("parts", {})
     manufacturers = bl2["weapons"]["manufacturers"]
     for g in bl2["weapons"]["guns"]:
@@ -1007,12 +993,11 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                 w.set("CRDT", u16(st["crit_damage"]) + crit[2:])
             twin = armory is not None and armory.ok and g["type"] in STAFF_KINDS
             mesh = models.model_for(g, built, rr.id, rarity_color(bl2["rarities"], rr.level), edid) if models is not None and not twin else None
-            if twin:  # the staff gun that replaces this crossbow gun in the world
+            if twin:  # this gun is a staff gun: the same form id, overridden in the second plugin
                 clip_n = max(1, round(g["clip"] * st.get("clip_mult", 1.0))) if g.get("clip") else None
-                armory.add(g, k, gt, rr, built, element, st, damage, value, name, text, clip_n, rarity_keywords[rr.level], gun_keyword,
+                armory.add(g, k, w.form_id, edid, gt, rr, built, element, st, damage, value, name, text, clip_n, rarity_keywords[rr.level], gun_keyword,
                            rarity_color(bl2["rarities"], rr.level), first_person)
-                swapped.add(w.form_id)
-            if mesh or rounds is not None:
+            elif mesh or rounds is not None:
                 # What changes about a gun with models or Borderlands rounds goes in a second plugin, as an override of the
                 # whole record, so Skylands.esp never changes (it must stay light or every save made with it loses its
                 # powers and guns).
@@ -1053,13 +1038,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     tier_lists = {lvl: leveled_list(p, f"SkylandsGuns_{rarity_row(lvl).id}", [(f, 1) for f in ids]).form_id
                   for lvl, ids in sorted(by_rarity.items())}
     if armory is not None and armory.ok and armory.count:
-        # the loot lists give the staff guns instead of the crossbow ones: the same lists, overridden in the second plugin
-        for lvl, fid in tier_lists.items():
-            entries = [(f, 1) for f in by_rarity[lvl] if f not in swapped] + [(f, 1) for f in armory.by_rarity.get(lvl, [])]
-            if entries:
-                override_list(view, fid, f"SkylandsGuns_{rarity_row(lvl).id}", entries)
-        armory.finish(m)
-        report["staff_swapped"] = len(swapped)
+        armory.finish(m)  # the loot lists and the beams' form list are untouched: they hold these very form ids
+        report["staff_converted"] = armory.count
     any_entries = [(tier_lists[lvl], 1) for lvl in tier_lists for _ in range(rarity_row(lvl).loot_copies)]
     good_entries = [(tier_lists[lvl], 1) for lvl in tier_lists if lvl >= 2 for _ in range(rarity_row(lvl).loot_copies)]
     gun_any = leveled_list(p, "SkylandsGunsAny", any_entries)
@@ -1090,8 +1070,6 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     for ids in by_rarity.values():
         for fid in ids:
             gun_list.add("LNAM", esp.u32(fid))
-    if armory is not None and armory.ok and armory.count:  # the staff guns get the rarity beams too
-        view.override(esp.Rec("FLST", gun_list.form_id, [*gun_list.subs, *[("LNAM", esp.u32(f)) for ids in armory.by_rarity.values() for f in ids]]))
     watcher_props = [
         ("Owner", esp.P_OBJECT, quest.form_id), ("GunKeyword", esp.P_OBJECT, gun_keyword),
         ("SpeedKeywords", esp.P_OBJECT_ARRAY, speed_keywords), ("GunList", esp.P_OBJECT, gun_list.form_id),

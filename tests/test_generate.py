@@ -447,21 +447,27 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky0"), tmp_path / "out0")
     rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff")
     assert (tmp_path / "out" / "Data" / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()  # Skylands.esp is untouched
-    assert rep["staff_gun"]["guns"] == len(rep["staff_guns"]) > 0 and rep["staff_swapped"] == rep["staff_gun"]["guns"]
+    assert rep["staff_gun"]["guns"] == len(rep["staff_guns"]) == rep["staff_converted"] > 0
     assert any("donor staff StaffFireball " in l for l in rep["model_log"]), rep["model_log"]  # never the scripted artifact (AAWabbajack sorts first)
     view = tmp_path / "out" / "Data" / "SkylandsGunModels.esp"
     _, recs = read_plugin(view, {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST", "KYWD", "LVLI", "FLST"})
     by_id = {t: {r.form_id: r for r in rs} for t, rs in recs.items()}
-    staff = [r for r in recs["WEAP"] if r.edid.startswith("SkylandsStaff_")]
-    assert len(staff) == rep["staff_gun"]["guns"] and {r.edid.split("_")[-2] for r in staff} >= {"smg", "ar"}
+    plain = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP", "LVLI", "FLST", "KYWD"})[1]
+    # the staff guns ARE the crossbow SMGs and rifles: the same form ids, so the loot lists, the beams' form list, and every copy a saved
+    # game or an enemy already holds are staff guns too; nothing in the loot lists or the form list is overridden
+    staff = [r for r in recs["WEAP"] if r.first("DNAM")[0] == 8]
+    old = {r.form_id: r for r in plain["WEAP"]}
+    assert len(staff) == rep["staff_gun"]["guns"] and {r.form_id for r in staff} <= set(old)
+    assert all(old[r.form_id].first("DNAM")[0] == 9 and r.edid == old[r.form_id].edid for r in staff)  # a crossbow in Skylands.esp, a staff over it
+    assert {r.edid.split("_")[-2] for r in staff} >= {"smg", "ar"} and not recs["LVLI"] and not recs["FLST"]
+    assert any(r.form_id not in {s.form_id for s in staff} for r in recs["WEAP"]) or len(old) > len(staff)  # the pistols stay crossbows
     kw_edid = {r.form_id: r.edid for r in recs["KYWD"]}
-    base_kw = {r.form_id: r.edid for r in read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"KYWD"})[1]["KYWD"]}
+    base_kw = {r.form_id: r.edid for r in plain["KYWD"]}
     for w in staff:
-        assert w.first("DNAM")[0] == 8 and w.first("CNAM") is None  # animation type: staff; no template weapon (it would give the vanilla staff's model)
+        assert w.first("CNAM") is None  # no template weapon (it would give the vanilla staff's model)
         assert b"Skylands" in w.first("MODL") and w.first("EAMT")
         assert st.unpack("<I", w.first("ETYP"))[0] == 0x00013F42  # the right hand always (a vanilla staff is "either hand" and went to the left with a gun in the right)
         en = by_id["ENCH"][st.unpack("<I", w.first("EITM"))[0]]
-        assert w.form_id == en.form_id + 1 or True
         assert st.unpack_from("<i", en.first("ENIT"))[0] == 0 and st.unpack_from("<I", en.first("ENIT"), 4)[0] & 1  # costs nothing
         assert [s for s, _ in en.subrecords].count("EFID") == 1  # the enchantment IS the bullet: one effect
         damage = st.unpack_from("<H", w.first("DATA"), 8)[0]
@@ -486,15 +492,11 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         assert str(row.burst) == numbers.split("_")[-1][1:]
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
-    # the loot: the tier lists are overridden so that the staff guns take the place of the crossbow SMGs and rifles, the other guns stay
-    plain = {r.form_id: r for r in read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP", "LVLI", "FLST"})[1]["WEAP"]}
-    swapped = {fid for fid, r in plain.items() if r.edid.split("_")[-2] in ("smg", "ar") or r.edid.rsplit("_", 1)[0].endswith(("_smg", "_ar"))}
-    tiers = [r for r in recs["LVLI"] if r.edid.startswith("SkylandsGuns_")]
-    assert tiers
+    # the loot lists of Skylands.esp hold these very ids, so they drop (and enemies carry them) as staff guns
+    tiers = [r for r in plain["LVLI"] if r.edid.startswith("SkylandsGuns_")]
     listed = {st.unpack_from("<I", d, 4)[0] for r in tiers for s_, d in r.subrecords if s_ == "LVLO"}
-    assert {r.form_id for r in staff} <= listed and not listed & swapped
-    assert (listed & set(plain)) - swapped, "the pistols stay crossbows in the loot"
-    gl = next(r for r in recs["FLST"] if r.edid == "SkylandsGunList")  # the rarity beams reach the staff guns through the form list
+    assert {r.form_id for r in staff} <= listed
+    gl = next(r for r in plain["FLST"] if r.edid == "SkylandsGunList")  # the rarity beams reach them through the form list
     assert {r.form_id for r in staff} <= {st.unpack("<I", d)[0] for s_, d in gl.subrecords if s_ == "LNAM"}
     # the player's script
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])

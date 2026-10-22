@@ -66,9 +66,9 @@ type) is in `stage2-animation-types.md`.
 Skyrim started through `skse64_loader.exe`. The installer checks all three and says what is missing. It installs
 `Data/SKSE/Plugins/SkylandsNative.dll` (source in `native/skse`, built by `.github/workflows/skse-plugin.yml`).
 
-* Since 0.15.0 every submachine gun and assault rifle is a staff gun: a twin of each crossbow variant (same parts, rarity, element,
-  stats, name, model), a copy of a vanilla staff (animation type 8). The crossbow SMGs and rifles are no longer in the loot lists
-  (the tier lists are overridden in the second plugin) and enemies are armed from the same lists. The other four types are still
+* Since 0.15.1 every submachine gun and assault rifle is a staff gun: each crossbow variant is overridden in place in the second plugin
+  (same form id, parts, rarity, element, stats, name, model) by a copy of a vanilla staff (animation type 8), so the loot lists, the
+  beams and any copy in a save or an enemy's pack are staff guns. Enemies are armed from the same lists. The other four types are still
   crossbows. `Skylands.esp` is unchanged.
 * The weapon's enchantment IS the bullet: one aimed, fire-and-forget, hostile effect (cost 0, magnitude = the gun's damage) whose
   projectile is the Borderlands bullet of the gun type and element (speed / 3, gravity 0, the element's explosion shared with the

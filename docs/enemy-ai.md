@@ -6,9 +6,9 @@ defaults below; it waits for the first test.
 
 ## What was built
 * Pandora's enemies are armed by the watcher script (`SkylandsHunter`): it picks a gun from the `SkylandsGunsAny/Good` leveled
-  lists, adds it, equips it (plus 30 steel bolts, now pointless), and the same lists decide what enemies drop. Since 0.15.0 those
-  lists give the **staff guns** in place of the crossbow SMGs and assault rifles (the tier lists are overridden in
-  `SkylandsGunModels.esp`; pistols, shotguns, snipers and launchers are still crossbows). The watcher itself did not change: a
+  lists, adds it, equips it (plus 30 steel bolts, now pointless), and the same lists decide what enemies drop. Since 0.15.1 the SMGs and assault rifles in
+  those lists ARE staff guns (each crossbow record is overridden in `SkylandsGunModels.esp` with the same form id; pistols, shotguns,
+  snipers and launchers are still crossbows). The watcher itself did not change: a
   staff gun carries the `SkylandsGun` keyword, so "is it carrying a gun" and the rarity beams (the `SkylandsGunList` form list) work.
 * A staff gun's enchantment is its bullet: one aimed, fire-and-forget, hostile damage effect with the Borderlands projectile
   (known, the tests read it from the plugin). An enemy holding it is an NPC with a staff.

@@ -188,9 +188,8 @@ Other commands:
   save cannot keep it on). Block, shouts and readying work normally. `Heal` gives back fighting controls a 0.14.3 save left off
   (`ControlsOff`). UNCONFIRMED in game: that the hook is safe on 1.7.104 (slot 6) and swallows the attack; if the game crashes on the first press, the slot is wrong.
 - 0.15.0 (TestBuild-85, plugin 1.1.0), the user chose "option A": every SMG and assault rifle variant has a staff twin (`generate.Armory`:
-  same parts, rarity, element, stats, name and model as the crossbow variant, built inside the crossbow loop; ids `SkylandsStaff_<balance>_<k>`),
-  and the crossbow SMGs/ARs leave the loot (the `SkylandsGuns_<rarity>` tier lists are overridden in `SkylandsGunModels.esp` with the other
-  crossbows plus the staff guns; `Skylands.esp` stays byte-identical, tested). Enemies are armed and drop from the same lists (the watcher is
+  same parts, rarity, element, stats, name and model as the crossbow variant, built inside the crossbow loop; 0.15.0 made twins and overrode the
+  loot lists, 0.15.1 converts the variant itself, see below; `Skylands.esp` stays byte-identical, tested). Enemies are armed and drop from the same lists (the watcher is
   unchanged; staff guns carry the `SkylandsGun` keyword), the rarity beams come through an override of the `SkylandsGunList` FLST. Pistols,
   shotguns, snipers and launchers stay crossbows. The staff's enchantment IS the bullet (one hostile aimed fire-and-forget effect, magnitude =
   damage, per-gun MGEF carrying the stats text; projectile shared per type x element with a tracer in the element's colour; the blast is shared
@@ -215,6 +214,11 @@ Other commands:
   keyword's `formEditorID` member and logs "gun check <id>: N keywords [names] -> clip ..." for the first weapons it looks at; `Sync` also sets
   `LeftItemCharge`; the equip box says which hand holds the gun and the interval the plugin read; equipping the gifted SMG when the plugin
   does not know it says so on screen. If it still fails: read `SkylandsNative.log` ("gun check" lines) and the box.
+- 0.15.1 also changes HOW the SMGs and rifles become staff guns (the user still saw crossbow SMGs/ARs spawning and dropping, probably with the
+  0.15.0 build and/or copies already generated into saves): no twins and no overridden loot lists any more. `Armory.add` overrides the crossbow
+  record itself in `SkylandsGunModels.esp` with the SAME form id (a staff weapon over the crossbow one; `Skylands.esp` still holds the crossbow
+  and stays byte-identical), so the tier lists, the beams' FLST, every copy in a save and every gun an enemy carries are staff guns. Staff gun
+  ids are therefore Skylands.esp's stable ids. The MGEF/ENCH are `Staff_<edid>` (second plugin, positional ids). Report key `staff_converted`.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
