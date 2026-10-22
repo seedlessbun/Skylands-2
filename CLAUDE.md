@@ -135,6 +135,19 @@ Other commands:
   (`TriggerDot_StaffSMG.nif`, range 24, no flame sounds) so the held cast shows no stream. The "Equipped" message is told for
   weapons only. Script `SkylandsStaffGun16`, ids skip 192.
   Champollion segfaulted on a function with several returns and labels (`Down`, first version): keep one `Return` at the end.
+- 0.13.16 in game (user report, no log or screenshot yet): one pull of the trigger fired 2 bullets (so the held check, or the
+  loop, ended after the second; which animation-variable values the "trigger let go" message showed is not known), reload
+  worked (4 s delay, then full), and holding the trigger STILL casts a fire spell (the speck projectile did not remove it; cause
+  unknown: the donor effect's remaining art or sound, or the flame-type projectile itself).
+- PLAN (the user said so, next prompt, more power): SKSE will be added as a dependency, and the plain-Papyrus workarounds are to be
+  refactored out: the animation-variable polling and release-event guesses (`Held`/`Down`, `Release`), the `RightItemCharge`
+  actor-value gauge, the aim point and face origin (`Place`/`Fire`/`MakeAim`, `--staff-origin`), the concentration trigger and its
+  donor flame projectile (`trigger_donor`, `quiet_art`, `TriggerDot`), and the dummy-event diagnostics. Until then, no code changes.
+  Before that the user had agreed to try both origin experiments (an aim point with a real model and a target marker ahead; the
+  bullet spell as a right-hand spell type) with a switch in the `.bat`; SKSE supersedes them if it can place the cast at a node.
+- Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
+  the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
+  animation replacer), not plain Papyrus.
 - Placeholders: tracer/projectile art (donor fireball), per-element ammo on the crossbow guns, explosion radii and
   rocket speeds (`sheets/shooting.json`, `SPLASH`).
 - The user's Stage 2 instruction: after the Stage 1 report they say which animation type suits each gun type; convert
@@ -143,6 +156,6 @@ Other commands:
   Champollion needs `#include <cstring>` in `Pex/FileReader.cpp` and `<strings.h>` in `Champollion/CaselessCompare.h` on Ubuntu.
 
 ## 7. Open questions for the user
-- SKSE: yes or no?
+- SKSE: the user has said it WILL be added (next prompt); still to ask: which version, and how the installer gets it.
 - Melty dependency handling.
 - Which animation type for each gun type (Stage 2).
