@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.13.14"
+VERSION = "0.13.15"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -190,6 +190,7 @@ def main(argv: list[str]) -> int:
                     help="bl2: Borderlands rounds per gun type and element (fast bullets, rockets and elemental guns explode); bullets: only the steel bolt becomes a fast flat shot; both")
     ap.add_argument("--gun-calibrate", action="store_true", help="give each rarity a different hold (for finding the right one by eye)")
     ap.add_argument("--staff-turn", default="45,0,180", help="staff-type SMG: turn (pitch,yaw,roll degrees) of the model in the staff grip: rolled 180 (0.13.6: it pointed up and was upside down); pitch -45 still pointed straight up (0.13.12), so 0.13.14 turns it 90 degrees the other way, 45 (a guess at which way is forward; -135 is the other way)")
+    ap.add_argument("--staff-origin", choices=("aim", "face"), default="aim", help="staff-type SMG: where the bullets leave from: an invisible aim point ahead of and to the right of the eyes (aim), or the player (face: what 0.13.14 did, from the face)")
     ap.add_argument("--gun-pitch", type=float, default=0.0, help="raise the barrel this many more degrees (negative lowers it)")
     ap.add_argument("--gun-spin", type=float, default=0.0, help="turn every gun model this many degrees about its up axis (fixes a gun facing the wrong way)")
     ap.add_argument("--gun-scale", type=float, default=1.0, help="make every gun model this many times bigger or smaller")
@@ -265,7 +266,7 @@ def main(argv: list[str]) -> int:
                     say("UModel was not found and could not be downloaded. Download it from https://www.gildor.org/en/projects/umodel (the Windows zip), "
                         "unzip it and put umodel.exe (or umodel_64.exe) in the work folder next to this log, then run this installer again.")
         report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources,
-                                   model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")))
+                                   model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")), staff_origin=a.staff_origin)
         for src in sources.values():
             say(src.summary())
         for line in report.get("model_log", []):

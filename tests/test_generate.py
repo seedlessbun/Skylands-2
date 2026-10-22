@@ -464,6 +464,11 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert any("trigger donor effect FireDamageConcAimed" in l for l in rep["model_log"]), rep["model_log"]
     mg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Bullet")
     proj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Bullet")
+    for rec in (mg, tg):  # no casting light or art, enchant shader or art, dual casting art: the fireball that floated above the gun
+        for at in (24, 36, 92, 108, 116):
+            assert st.unpack_from("<I", rec.first("DATA"), at)[0] == 0, (rec.edid, at)
+    assert st.unpack_from("<I", mg.first("DATA"), 96)[0] == 0x7800 + 96 and st.unpack_from("<I", tg.first("DATA"), 96)[0] == 0  # the bullet keeps its hit art
+    assert st.unpack("<H", w.first("EAMT"))[0] == round(S.SHOOTING["smg"].clip * 100)  # the charge gauge is the magazine, 100 a round
     assert st.unpack_from("<I", mg.first("DATA"), 72)[0] == proj.form_id and st.unpack_from("<f", mg.first("DATA"), 4)[0] == 0.0
     assert proj.first("MODL").rstrip(b"\0") == b"Skylands\\Tracer_StaffSMG.nif" and proj.first("NAM1") is None  # our tracer, no fireball or muzzle flash
     assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Tracer_StaffSMG.nif").read_bytes().startswith(b"Gamebryo File Format")
@@ -473,8 +478,10 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun14" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"MagSize" in vm and b"SpeedMult" in vm
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun14.pex").is_file()
+    assert b"SkylandsStaffGun15" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"ChargePerShot" in vm and b"AimPoint" in vm
+    aimp = next(r for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"ACTI"})[1]["ACTI"] if r.edid == "SkylandsStaffAim")
+    assert aimp.first("MODL").rstrip(b"\0") == b"Skylands\\AimPoint.nif" and b"MagSize" in vm and b"SpeedMult" in vm
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun15.pex").is_file()
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():

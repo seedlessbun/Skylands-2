@@ -38,7 +38,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 104 passed at 0.13.14.
+Tests that need a tool skip when its variable is unset; with all three set, 104 passed at 0.13.15.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -80,7 +80,7 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.13.14**, TestBuild-77 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.13.15**, TestBuild-78 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -107,6 +107,19 @@ Other commands:
   hostile or detrimental, no hit or enchant shader). If the game has none the staff gun is not built (logged). The model is
   25% bigger (`STAFF_SCALE`) and moved 10% of its length forward along the barrel and 10% up (`STAFF_FORWARD`, `STAFF_LIFT`;
   the directions are computed from the turn, unconfirmed in game). Script `SkylandsStaffGun14`, ids skip 144.
+- 0.13.14 in game: no crash any more (the projectile-less trigger was the likely cause); hold fires; the model faced forward;
+  bullets left from the player's FACE (`Spell.Cast` from the player); a fireball floated above the gun; reload (unequip, wait,
+  re-equip) was slow and "Equipped: id ..." showed twice; the per-shot magazine message cluttered the screen.
+- 0.13.15 (TestBuild-78): the charge gauge is the magazine (`RightItemCharge` actor value, written by `Sync` after every shot and
+  by `Fill` ten times during a reload; weapon `EAMT` = clip x `STAFF_CHARGE_PER_SHOT`; UNCONFIRMED that the value is writable
+  and shows on the HUD, the equip box prints what the game reads back). A reload no longer unequips: the gauge refills over
+  the reload time. The per-shot message is now every 10 shots (`Count`/`Tell`). Bullets are cast from an invisible aim point
+  (ACTI `SkylandsStaffAim`, `Place`/`Fire`: 40 ahead, 14 right, 0.85 height - 10 up, turned like the view); `--staff-origin face`
+  goes back to casting from the player. UNCONFIRMED: that `Spell.Cast` from a placed object fires along its angles, where
+  the bullets appear. `quiet_art` strips casting light/art, enchant shader/art and dual casting art from the trigger and the
+  bullet (and hit art from the trigger): the fireball floating above the gun was most likely the casting art (unconfirmed).
+  The box and "Equipped" messages carry a per-copy tag (`Tag`) so two copies of the script running would show. Script
+  `SkylandsStaffGun15`, ids skip 168.
 - Placeholders: tracer/projectile art (donor fireball), per-element ammo on the crossbow guns, explosion radii and
   rocket speeds (`sheets/shooting.json`, `SPLASH`).
 - The user's Stage 2 instruction: after the Stage 1 report they say which animation type suits each gun type; convert

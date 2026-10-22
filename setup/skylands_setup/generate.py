@@ -461,14 +461,17 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
-STAFF_REV = "0.13.14"
-STAFF_SCRIPT = "SkylandsStaffGun14"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
-STAFF_ID_SHIFT = 144  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_REV = "0.13.15"
+STAFF_SCRIPT = "SkylandsStaffGun15"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
+STAFF_ID_SHIFT = 168  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 STAFF_TRACER_MESH = "Skylands\\Tracer_StaffSMG.nif"
 PROJ_FLAG_MUZZLE_FLASH = 0x8
 PROJ_LIGHT_AT, PROJ_SOUND_AT = 16, 40
 MGEF_HOSTILE, MGEF_DETRIMENTAL, MGEF_HIT_SHADER_AT = 0x1, 0x4, 32
+STAFF_CHARGE_PER_SHOT = 100.0  # enchantment charge of one round: the staff's charge gauge is the magazine (weapon charge = magazine * this)
+MGEF_LIGHT_AT, MGEF_ENCHANT_SHADER_AT = 24, 36
+MGEF_CASTING_ART_AT, MGEF_HIT_ART_AT, MGEF_DUAL_ART_AT, MGEF_ENCHANT_ART_AT = 92, 96, 108, 116
 STAFF_SCALE, STAFF_FORWARD, STAFF_LIFT = 1.25, 0.10, 0.10  # the model in the hand: size, and how far (of its length) it is moved forward and up
 ENIT_CAST_AT, ENIT_CHARGE_AT, MGEF_CASTING_AT = 8, 24, 80
 STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
@@ -541,7 +544,7 @@ def trigger_donor(m: "Masters", element: str | None, log: list[str]):
 
 
 def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, data_dir: Path, guns: list[dict], parts: dict, rarity_colors,
-                   hold_turn: tuple[float, float, float], report: dict) -> None:
+                   hold_turn: tuple[float, float, float], report: dict, origin: str = "aim") -> None:
     """ONE submachine gun built on a vanilla staff (animation type staff): its enchantment casts a spell whose projectile is a
     Borderlands bullet (speed, element and explosion from the rounds data), at no magicka and no charge. The SkylandsStaffGun
     script (scripts.staff_gun) keeps the magazine, repeats the shot while the attack button is held, and reloads."""
@@ -597,6 +600,7 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     md = bytearray(d_mgef.first("DATA"))
     struct.pack_into("<f", md, MGEF_COST_AT, 0.0)
     struct.pack_into("<II", md, MGEF_PROJECTILE_AT, pr.form_id, 0)  # projectile, explosion (the projectile carries its own)
+    quiet_art(md, hit=False)
     mg.set("DATA", bytes(md))
     view.override(mg)
     effect = (mg.form_id, float(damage), 0, 0)
@@ -628,7 +632,7 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     td = bytearray(c_mgef.first("DATA"))
     struct.pack_into("<f", td, MGEF_COST_AT, 0.0)
     struct.pack_into("<I", td, 0, struct.unpack_from("<I", td, 0)[0] & ~(MGEF_HOSTILE | MGEF_DETRIMENTAL))
-    struct.pack_into("<II", td, MGEF_HIT_SHADER_AT, 0, 0)  # hit shader, enchant shader
+    quiet_art(td, hit=True)
     struct.pack_into("<II", td, MGEF_PROJECTILE_AT, tp.form_id, 0)
     struct.pack_into("<I", td, MGEF_CASTING_AT, 2)  # concentration
     tg.set("DATA", bytes(td))
@@ -651,7 +655,7 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     w.set("EDID", esp.zstr(edid))
     insert_ordered(w, "FULL", esp.zstr("Skylands SMG (staff)"), WEAP_ORDER)
     insert_ordered(w, "EITM", esp.u32(en.form_id), WEAP_ORDER)
-    insert_ordered(w, "EAMT", u16(65535), WEAP_ORDER)
+    insert_ordered(w, "EAMT", u16(min(65535, round(clip * STAFF_CHARGE_PER_SHOT))), WEAP_ORDER)  # the charge gauge is the magazine
     dd = w.get("DATA") or b"\0" * 10
     insert_ordered(w, "DATA", struct.pack("<IfH", 600, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
     mesh = None
@@ -674,8 +678,12 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
             f"fired by the script from a concentration cast: one bullet at once, then one every {interval:g} s while the button is held; "
             f"tracer {STAFF_TRACER_MESH}; "
             f"model {mesh or 'NOT BUILT: the vanilla staff model is kept'}; weapon speed set to {STAFF_SPEED_MULT:g} while it is in the hand. "
-            f"Costs no magicka and no charge.")
-    props = [("StaffGun", esp.P_OBJECT, w.form_id), ("BulletSpell", esp.P_OBJECT, bullet.form_id), ("MagSize", esp.P_INT, clip),
+            f"The charge gauge is the magazine ({STAFF_CHARGE_PER_SHOT:g} per round, {clip} rounds); bullets leave from "
+            f"{'a point ahead of the right hand' if origin == 'aim' else 'the player'}.")
+    aim = view.new("ACTI", "SkylandsStaffAim")  # the invisible object the bullets are cast from
+    aim.add("OBND", struct.pack("<6h", 0, 0, 0, 0, 0, 0)).add("MODL", esp.zstr(AIM_POINT_MESH))
+    props = [("AimPoint", esp.P_OBJECT, aim.form_id if origin == "aim" else 0), ("ChargePerShot", esp.P_FLOAT, STAFF_CHARGE_PER_SHOT),
+             ("StaffGun", esp.P_OBJECT, w.form_id), ("BulletSpell", esp.P_OBJECT, bullet.form_id), ("MagSize", esp.P_INT, clip),
              ("ReloadTime", esp.P_FLOAT, reload_time), ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("Interval", esp.P_FLOAT, interval), ("Info", esp.P_STRING, info),
              ("Verbose", esp.P_BOOL, True)]
     fx = script_effect(view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", STAFF_SCRIPT, props)
@@ -686,6 +694,21 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     q.add("FULL", esp.zstr("Skylands Staff Gun")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
     q.add("ANAM", esp.u32(0))
     report["staff_gun"] = {"edid": edid, "element": element, "damage": damage, "speed": speed, "mesh": mesh}
+
+
+def quiet_art(md: bytearray, hit: bool) -> None:
+    """Strips the donor effect's art from an effect record's DATA: the casting light and casting art (the fireball that floated
+    above the staff gun), the enchant shader and enchant art, the dual casting art, and for a trigger also the hit art."""
+    if len(md) < MGEF_ENCHANT_ART_AT + 4:
+        return
+    struct.pack_into("<I", md, MGEF_LIGHT_AT, 0)
+    struct.pack_into("<I", md, MGEF_ENCHANT_SHADER_AT, 0)
+    struct.pack_into("<I", md, MGEF_CASTING_ART_AT, 0)
+    struct.pack_into("<I", md, MGEF_DUAL_ART_AT, 0)
+    struct.pack_into("<I", md, MGEF_ENCHANT_ART_AT, 0)
+    if hit:
+        struct.pack_into("<I", md, MGEF_HIT_SHADER_AT, 0)
+        struct.pack_into("<I", md, MGEF_HIT_ART_AT, 0)
 
 
 def d_ench_cast(ench: Record) -> int:
@@ -836,7 +859,7 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
              gun_models: str = "off", model_sources: dict | None = None, model_spin: float = 0.0, model_pitch: float = 0.0, model_calibrate: bool = False,
              model_scale: float = 1.0, shooting: str = "off",
-             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> dict:
+             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), staff_origin: str = "aim") -> dict:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
@@ -891,7 +914,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         make_gunner(view, m, rounds, gunner, bolts.form_id)
         if shooting == "staff":  # one SMG on a vanilla staff, to compare with the crossbow SMGs
             make_staff_smg(view, m, rounds, models, data_dir, bl2["weapons"]["guns"], bl2["weapons"].get("parts", {}),
-                           lambda level: rarity_color(bl2["rarities"], level), staff_turn, report)
+                           lambda level: rarity_color(bl2["rarities"], level), staff_turn, report, staff_origin)
     if shooting in ("bullets", "both"):
         tune_bolts(view, m, bolts, report["model_log"])
 
@@ -1131,7 +1154,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         if shooting == "staff":
             (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
             (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
-            for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13"):
+            for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14"):
                 (out_data / "Scripts" / f"{old_name}.pex").write_bytes(pex.write(scripts.retired(old_name)))
     tracer_file = report.pop("staff_tracer", None)  # the mesh bytes are not part of the report
     if tracer_file:

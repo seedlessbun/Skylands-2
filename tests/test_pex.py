@@ -236,17 +236,20 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     for text in ("ObjectReference ref = Me as ObjectReference", "Reg = Self.RegisterForAnimationEvent(ref, \"MRh_SpellFire_Event\")", "Self.RegisterForAnimationEvent(ref, \"BeginCastRight\")",
                  "If asEventName == \"MRh_SpellFire_Event\"", "Staff gun event: ", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
                  "Event OnAnimationEvent(ObjectReference akSource, String asEventName)", "Fired += 1", "Mag -= 1", "Self.Reload()",
-                 "Me.UnequipItem(f, False, True)", "Utility.Wait(ReloadTime)", "Mag = MagSize", "Me.EquipItem(f, False, True)",
+                 "Mag = MagSize",
                  "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
                  "If w as Bool && w == StaffGun", "Staff gun script started: weapon ", "Equipped: id ", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)",
                  # the hold loop: a pull of the trigger (the cast starting) fires at once and every Interval until the release
                  "If asEventName == \"BeginCastRight\"", "If asEventName == \"MRh_SpellFire_Event\"", "Gen += 1", "Holding = True", "Self.Hold(Gen)",
                  "Holding = False", "While go", "Utility.Wait(Interval)", "go = Self.Pull(g)", "Bool ok = g == Gen && Holding && Self.Ready()",
-                 "BulletSpell.Cast(ref, ::nonevar)", "Bool more = Mag > 1", "Bool Function Ready()", "Return Armed && !Reloading",
+                 "BulletSpell.Cast(ref, ::nonevar)", "Aim = Me.PlaceAtMe(f, 1, False, False)", "Aim.MoveTo(Me, ox, oy, oz, False)", "Aim.SetAngle(x, 0.0, h)",
+                 "Int r = Fired % 10", "If r == 0 && Verbose", "Me.SetActorValue(\"RightItemCharge\", v)", "v *= ChargePerShot", "Float w = ReloadTime / 10.0",
+                 "Self.Fill(i)", "Float Property ChargePerShot Auto", "Form Property AimPoint Auto", ", script copy ", "Charge gauge now reads ", "Bool more = Mag > 1", "Bool Function Ready()", "Return Armed && !Reloading",
                  "Float Property Interval Auto"):
         assert text in psc, text
     assert "Input." not in psc and "GetWeaponType" not in psc  # nothing that needs SKSE
     assert "Burst" not in psc and "Skipped inoperative" not in psc
+    assert "UnequipItem" not in psc and "EquipItem" not in psc  # a reload no longer takes the staff out of the hand
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")

@@ -202,6 +202,8 @@ def build_full(root: Path) -> Path:
     # a vanilla-style staff: animation type 8, an enchantment whose effect flies a projectile (the staff-type gun copies it)
     bolt_md = bytearray(152)
     struct.pack_into("<f", bolt_md, 4, 25.0)
+    for at in (24, 32, 36, 92, 96, 108, 116):  # casting light, hit shader, enchant shader, casting art, hit art, dual casting art, enchant art
+        struct.pack_into("<I", bolt_md, at, 0x7800 + at)
     struct.pack_into("<II", bolt_md, 72, 0x7200, 0x7300)
     struct.pack_into("<II", bolt_md, 80, 1, 2)  # fire and forget, aimed
     extra.append(group("MGEF", [record("MGEF", 0x5100, [sub("EDID", z("EnchStaffFireballFFAimed")), sub("FULL", sid(1)),
