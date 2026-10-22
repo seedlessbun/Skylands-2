@@ -359,12 +359,17 @@ namespace
 			}
 			GunInfo    info{};
 			const auto weapon = HeldGun(actor, info);
-			if (!weapon || weapon->formEnchanting->GetFormID() != a_event->spell || info.burst < 2) {
+			if (!weapon) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			static std::atomic_int logged{ 0 };
-			if (logged.fetch_add(1) < 5) {
-				SKSE::log::info("enemy {:08X} fired gun {:08X}: burst of {}", actor->GetFormID(), weapon->GetFormID(), info.burst);
+			const bool ours = weapon->formEnchanting->GetFormID() == a_event->spell;
+			if (logged.fetch_add(1) < 8) {  // the first few casts of enemies holding a gun are told, to see what the game sends
+				SKSE::log::info("enemy {:08X} cast {:08X} holding gun {:08X} (its enchantment {:08X}): {}", actor->GetFormID(), a_event->spell,
+					weapon->GetFormID(), weapon->formEnchanting->GetFormID(), ours ? "a burst of " + std::to_string(info.burst) : "not the gun's own cast"s);
+			}
+			if (!ours || info.burst < 2) {
+				return RE::BSEventNotifyControl::kContinue;
 			}
 			const RE::FormID shooter = actor->GetFormID();
 			const int        more = info.burst - 1;
