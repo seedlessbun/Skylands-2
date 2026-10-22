@@ -461,13 +461,15 @@ STAFF_ANIMATION = 8  # WEAP DNAM byte 0: the animation type (8 staff, 9 crossbow
 STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": r"poison|acid", "slag": r"ice|frost", None: r"ice|frost|fire"}
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
-STAFF_REV = "0.13.15"
-STAFF_SCRIPT = "SkylandsStaffGun15"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
-STAFF_ID_SHIFT = 168  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_REV = "0.13.16"
+STAFF_SCRIPT = "SkylandsStaffGun16"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
+STAFF_ID_SHIFT = 192  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 STAFF_TRACER_MESH = "Skylands\\Tracer_StaffSMG.nif"
+STAFF_TRIGGER_MESH = "Skylands\\TriggerDot_StaffSMG.nif"  # the trigger's own projectile: a speck, so the held cast shows no stream of fire
 PROJ_FLAG_MUZZLE_FLASH = 0x8
-PROJ_LIGHT_AT, PROJ_SOUND_AT = 16, 40
+PROJ_LIGHT_AT, PROJ_SOUND_AT, PROJ_SOUND_COUNTDOWN_AT = 16, 40, 56
+PROJ_TRIGGER_RANGE = 24.0
 MGEF_HOSTILE, MGEF_DETRIMENTAL, MGEF_HIT_SHADER_AT = 0x1, 0x4, 32
 STAFF_CHARGE_PER_SHOT = 100.0  # enchantment charge of one round: the staff's charge gauge is the magazine (weapon charge = magazine * this)
 MGEF_LIGHT_AT, MGEF_ENCHANT_SHADER_AT = 24, 36
@@ -544,7 +546,7 @@ def trigger_donor(m: "Masters", element: str | None, log: list[str]):
 
 
 def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, data_dir: Path, guns: list[dict], parts: dict, rarity_colors,
-                   hold_turn: tuple[float, float, float], report: dict, origin: str = "aim") -> None:
+                   hold_turn: tuple[float, float, float], report: dict, origin: str = "face") -> None:
     """ONE submachine gun built on a vanilla staff (animation type staff): its enchantment casts a spell whose projectile is a
     Borderlands bullet (speed, element and explosion from the rounds data), at no magicka and no charge. The SkylandsStaffGun
     script (scripts.staff_gun) keeps the magazine, repeats the shot while the attack button is held, and reloads."""
@@ -576,7 +578,7 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     pr.set("EDID", esp.zstr(f"{edid}_Bullet"))
     pr.set("MODL", esp.zstr(STAFF_TRACER_MESH))  # the glowing tracer (nif.tracer) instead of the donor's fireball
     tracer = nif.tracer(STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None]), BEAM_TEXTURE)
-    report["staff_tracer"] = (STAFF_TRACER_MESH, tracer)
+    report["staff_tracer"] = [(STAFF_TRACER_MESH, tracer), (STAFF_TRIGGER_MESH, nif.tracer((255, 255, 255), BEAM_TEXTURE, 2.0, 0.05))]
     pd = bytearray(d_proj.first("DATA"))
     struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0, speed)
     struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
@@ -616,8 +618,10 @@ def make_staff_smg(view: esp.Plugin, m: "Masters", rounds: "Rounds", models, dat
     # its projectile: the donor's flame with our tracer for a model, and no light, sound or explosion
     tp = esp.Rec("PROJ", view.new_id(f"PROJ:{edid}_Trigger"), [(sig, d) for sig, d in c_proj.subrecords if sig not in ("VMAD", "MODT", "NAM1", "NAM2")])
     tp.set("EDID", esp.zstr(f"{edid}_Trigger"))
-    tp.set("MODL", esp.zstr(STAFF_TRACER_MESH))
+    tp.set("MODL", esp.zstr(STAFF_TRIGGER_MESH))
     tpd = bytearray(c_proj.first("DATA"))
+    struct.pack_into("<f", tpd, PROJ_RANGE_AT, PROJ_TRIGGER_RANGE)  # a flame is as long as its range
+    struct.pack_into("<II", tpd, PROJ_SOUND_COUNTDOWN_AT, 0, 0)  # countdown and disable sounds
     struct.pack_into("<II", tpd, PROJ_LIGHT_AT, 0, 0)  # light, muzzle flash light
     struct.pack_into("<I", tpd, PROJ_EXPLOSION_AT, 0)
     struct.pack_into("<I", tpd, PROJ_SOUND_AT, 0)
@@ -859,7 +863,7 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
              gun_models: str = "off", model_sources: dict | None = None, model_spin: float = 0.0, model_pitch: float = 0.0, model_calibrate: bool = False,
              model_scale: float = 1.0, shooting: str = "off",
-             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), staff_origin: str = "aim") -> dict:
+             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), staff_origin: str = "face") -> dict:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
@@ -1154,10 +1158,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         if shooting == "staff":
             (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
             (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
-            for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14"):
+            for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14", "SkylandsStaffGun15"):
                 (out_data / "Scripts" / f"{old_name}.pex").write_bytes(pex.write(scripts.retired(old_name)))
-    tracer_file = report.pop("staff_tracer", None)  # the mesh bytes are not part of the report
-    if tracer_file:
-        (out_data / "Meshes" / Path(*tracer_file[0].split("\\"))).write_bytes(tracer_file[1])
+    for mesh_path, mesh_bytes in report.pop("staff_tracer", []):  # the mesh bytes are not part of the report
+        (out_data / "Meshes" / Path(*mesh_path.split("\\"))).write_bytes(mesh_bytes)
     report["records"] = len(p.records)
     return report

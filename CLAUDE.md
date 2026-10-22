@@ -38,7 +38,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 104 passed at 0.13.15.
+Tests that need a tool skip when its variable is unset; with all three set, 104 passed at 0.13.16.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -80,7 +80,7 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.13.15**, TestBuild-78 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.13.16**, TestBuild-79 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -120,6 +120,21 @@ Other commands:
   bullet (and hit art from the trigger): the fireball floating above the gun was most likely the casting art (unconfirmed).
   The box and "Equipped" messages carry a per-copy tag (`Tag`) so two copies of the script running would show. Script
   `SkylandsStaffGun15`, ids skip 168.
+- 0.13.15 in game: charge was spent and the weapon sounded, but NO projectile appeared (the aim point does not work as a
+  `Spell.Cast` source: no 3D from an empty nif, or no target for an aimed cast: unconfirmed which); one pull fired the
+  whole magazine and could not be stopped (no release event arrived: neither `MRh_SpellFire_Event` nor
+  `MRh_SpellRelease_Event` ends the concentration cast); holding showed a steady fire stream (the trigger's flame projectile);
+  the "Equipped" message showed twice, once with an id one lower: that is the staff's ENCHANTMENT (created just before the
+  weapon, so id - 1) announced as equipped, not a second staff (`tests/test_generate.py` asserts weapon id = enchantment id + 1).
+- 0.13.16 (TestBuild-79): bullets are cast from the player again (default `--staff-origin face`; `aim` kept, known not to
+  show a projectile). The loop reads the game's animation variables each step: after the first bullet, every next one needs
+  `GetAnimationVariableBool("bWantCastRight")` or `("IsCastingRight")` true (`Held`/`Down`); when neither is, the box tells all
+  three values (`bRitualSpellActive` too) as "trigger let go". UNCONFIRMED that these variables exist and work in
+  vanilla Papyrus (web notes only; if they do not, a pull fires one bullet and the message shows false values). The reload is
+  a delay of `ReloadTime` with the gauge empty, then full (`Reload`). The trigger's projectile is a speck
+  (`TriggerDot_StaffSMG.nif`, range 24, no flame sounds) so the held cast shows no stream. The "Equipped" message is told for
+  weapons only. Script `SkylandsStaffGun16`, ids skip 192.
+  Champollion segfaulted on a function with several returns and labels (`Down`, first version): keep one `Return` at the end.
 - Placeholders: tracer/projectile art (donor fireball), per-element ammo on the crossbow guns, explosion radii and
   rocket speeds (`sheets/shooting.json`, `SPLASH`).
 - The user's Stage 2 instruction: after the Stage 1 report they say which animation type suits each gun type; convert

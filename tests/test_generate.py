@@ -460,7 +460,11 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert not st.unpack_from("<I", td, 0)[0] & 0x5 and st.unpack_from("<II", td, 32) == (0, 0)  # not hostile or detrimental, no hit art
     tpd = tproj.first("DATA")
     assert st.unpack_from("<H", tpd, 2)[0] == 2 and st.unpack_from("<II", tpd, 16) == (0, 0) and st.unpack_from("<I", tpd, 36)[0] == 0 and st.unpack_from("<I", tpd, 40)[0] == 0
-    assert tproj.first("MODL").rstrip(b"\0") == b"Skylands\\Tracer_StaffSMG.nif" and tproj.first("NAM1") is None
+    assert tproj.first("MODL").rstrip(b"\0") == b"Skylands\\TriggerDot_StaffSMG.nif" and tproj.first("NAM1") is None  # a speck: no stream of fire while held
+    assert abs(st.unpack_from("<f", tpd, 12)[0] - 24.0) < 1e-3 and st.unpack_from("<II", tpd, 56) == (0, 0)  # short range, no flame sounds
+    assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "TriggerDot_StaffSMG.nif").is_file()
+    weap = next(r for r in recs["WEAP"] if r.edid == "SkylandsStaffSMG")
+    assert weap.form_id == en.form_id + 1  # the equip event for the enchantment (one id below the staff) is the "second" Equipped message
     assert any("trigger donor effect FireDamageConcAimed" in l for l in rep["model_log"]), rep["model_log"]
     mg = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffSMG_Bullet")
     proj = next(r for r in recs["PROJ"] if r.edid == "SkylandsStaffSMG_Bullet")
@@ -478,10 +482,12 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun15" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"ChargePerShot" in vm and b"AimPoint" in vm
+    assert b"SkylandsStaffGun16" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"ChargePerShot" in vm and b"AimPoint" in vm
     aimp = next(r for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"ACTI"})[1]["ACTI"] if r.edid == "SkylandsStaffAim")
+    props_vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
+    assert props_vm
     assert aimp.first("MODL").rstrip(b"\0") == b"Skylands\\AimPoint.nif" and b"MagSize" in vm and b"SpeedMult" in vm
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun15.pex").is_file()
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun16.pex").is_file()
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():

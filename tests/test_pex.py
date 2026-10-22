@@ -243,13 +243,15 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
                  "If asEventName == \"BeginCastRight\"", "If asEventName == \"MRh_SpellFire_Event\"", "Gen += 1", "Holding = True", "Self.Hold(Gen)",
                  "Holding = False", "While go", "Utility.Wait(Interval)", "go = Self.Pull(g)", "Bool ok = g == Gen && Holding && Self.Ready()",
                  "BulletSpell.Cast(ref, ::nonevar)", "Aim = Me.PlaceAtMe(f, 1, False, False)", "Aim.MoveTo(Me, ox, oy, oz, False)", "Aim.SetAngle(x, 0.0, h)",
-                 "Int r = Fired % 10", "If r == 0 && Verbose", "Me.SetActorValue(\"RightItemCharge\", v)", "v *= ChargePerShot", "Float w = ReloadTime / 10.0",
-                 "Self.Fill(i)", "Float Property ChargePerShot Auto", "Form Property AimPoint Auto", ", script copy ", "Charge gauge now reads ", "Bool more = Mag > 1", "Bool Function Ready()", "Return Armed && !Reloading",
+                 "Int r = Fired % 10", "If r == 0 && Verbose", "Me.SetActorValue(\"RightItemCharge\", v)", "v *= ChargePerShot", 
+                 "Bool Function Held(Int g)", "Bool Function Down()", "GetAnimationVariableBool(\"bWantCastRight\")", "GetAnimationVariableBool(\"IsCastingRight\")", "trigger let go (bWantCastRight ", "go = Self.Held(g) && Self.Pull(g)", "Utility.Wait(ReloadTime)", "Float Property ChargePerShot Auto", "Form Property AimPoint Auto", ", script copy ", "Charge gauge now reads ", "Bool more = Mag > 1", "Bool Function Ready()", "Return Armed && !Reloading",
                  "Float Property Interval Auto"):
         assert text in psc, text
     assert "Input." not in psc and "GetWeaponType" not in psc  # nothing that needs SKSE
     assert "Burst" not in psc and "Skipped inoperative" not in psc
     assert "UnequipItem" not in psc and "EquipItem" not in psc  # a reload no longer takes the staff out of the hand
+    assert "Fill" not in psc  # the gauge is empty for the reload time, then full: it does not fill gradually
+    assert "If w as Bool && Verbose" in psc  # the enchantment announced as put on (one id below the staff) is not told
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
