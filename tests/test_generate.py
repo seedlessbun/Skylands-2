@@ -468,6 +468,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         mg = by_id["MGEF"][st.unpack("<I", en.first("EFID"))[0]]
         md = mg.first("DATA")
         proj = by_id["PROJ"][st.unpack_from("<I", md, 72)[0]]
+        assert st.unpack_from("<I", md, 0)[0] & 0x1  # hostile: the AI aims a hostile staff spell at its enemies
         assert st.unpack_from("<f", md, 4)[0] == 0.0 and st.unpack_from("<I", md, 80)[0] == 1 and st.unpack_from("<I", md, 84)[0] == 2  # free, fire and forget, aimed
         assert proj.first("MODL").rstrip(b"\0").startswith(b"Skylands\\Tracer_Staff_") and proj.first("NAM1") is None
         for at in (24, 36, 92, 108, 116):  # no casting light or art, enchant shader or art, dual casting art

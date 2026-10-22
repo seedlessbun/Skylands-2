@@ -66,17 +66,25 @@ type) is in `stage2-animation-types.md`.
 Skyrim started through `skse64_loader.exe`. The installer checks all three and says what is missing. It installs
 `Data/SKSE/Plugins/SkylandsNative.dll` (source in `native/skse`, built by `.github/workflows/skse-plugin.yml`).
 
-* The weapon is a copy of a vanilla staff (animation type 8). Its enchantment is an aimed concentration cast of an effect
-  that does nothing (no cost, not hostile, no art), a copy of a vanilla concentration effect and its projectile (the game
-  crashed when the projectile was missing): it only makes the staff take the casting pose while the attack button is down.
-* The bullets are the script's. `SkylandsNative.TriggerPressed/TriggerHeld` (the plugin's listener for the "Right Attack/Block"
-  input event: any device, any remapping) say when the button goes down and while it is held; `FireBullet` launches the
-  bullet spell's projectile (`SkylandsStaffSMG_Spell`: Borderlands speed / 3, gravity 0, the gun's element as the explosion, an
-  own glowing tracer mesh) with `Projectile::Launch` from the right hand's magic node, aimed at the crosshair 3000 units ahead,
+* Since 0.15.0 every submachine gun and assault rifle is a staff gun: a twin of each crossbow variant (same parts, rarity, element,
+  stats, name, model), a copy of a vanilla staff (animation type 8). The crossbow SMGs and rifles are no longer in the loot lists
+  (the tier lists are overridden in the second plugin) and enemies are armed from the same lists. The other four types are still
+  crossbows. `Skylands.esp` is unchanged.
+* The weapon's enchantment IS the bullet: one aimed, fire-and-forget, hostile effect (cost 0, magnitude = the gun's damage) whose
+  projectile is the Borderlands bullet of the gun type and element (speed / 3, gravity 0, the element's explosion shared with the
+  crossbow rounds, a glowing tracer in the element's colour). Shared per gun type x element: the projectile; per gun: the effect
+  (it carries the stats text), the enchantment and the weapon. The old trigger (a concentration cast for the casting pose) is gone:
+  the plugin keeps the attack button from the game, so there is no pose to start.
+* A keyword per gun holds its numbers: `SkylandsGun_c<clip>_i<ms>_r<ms>_s<spread*10>_b<burst>`; the plugin reads them (`GunStat`).
+* The player's bullets are the script's. `SkylandsNative.TriggerPressed/TriggerHeld` (the plugin's listener for the "Right
+  Attack/Block" input event: any device, any remapping) say when the button goes down and while it is held; `FireGun` launches
+  the held gun's bullet with `Projectile::Launch` from the gun's own muzzle node, aimed at the crosshair 3000 units ahead,
   within the gun's spread. No cast animation, no wind-up, no magicka.
-* No ammo item: the staff's enchantment charge is the magazine (`WornObject.SetItemCharge`, 100 per round). A reload waits
-  the reload time with the gauge empty, then fills it. The staff stays in the hand.
-* `SkylandsStaffGun17` (ActiveMagicEffect on the player, started by `SkylandsStaffGunQuest`): gives the staff once, fires,
-  counts, reloads, and shows a box on the first equip (SKSE version, whether the plugin is loaded, magazine, charge gauge, what was
-  built). The magazine is told on screen every ten shots.
-* Native BL2 mesh fitted to the staff's own axes, turned `--staff-turn 45,0,180`, 25% bigger, moved 10% forward and up.
+* Enemies cast the staff like any staff; the plugin adds the rest of the burst (`enemy-ai.md`).
+* No ammo item: the staff's enchantment charge is the magazine (`RightItemCharge` and `WornObject.SetItemCharge`, 100 per round). A
+  reload waits the reload time with the gauge empty, then fills it. The gun stays in the hand.
+* `SkylandsStaffGun18` (ActiveMagicEffect on the player, started by `SkylandsStaffGunQuest`): one script for every staff gun (it
+  asks the plugin for the numbers of whichever one is put on), gives two staff guns once, fires, counts, reloads, and shows a box
+  on the first equip (SKSE version, whether the plugin is loaded, magazine, charge gauge, what was built). A different gun starts with
+  a full magazine; the same gun put on again keeps its rounds. The magazine is told on screen every ten shots.
+* Native BL2 mesh fitted to the staff's own axes, turned `--staff-turn 60,0,180`, 25% bigger, moved 10% forward and up.

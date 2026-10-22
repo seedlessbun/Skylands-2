@@ -18,10 +18,14 @@ installs them once (`Check-SKSE.bat` says what is missing; the installer logs th
 Papyrus class `SkylandsNative` (static functions; `Data/Scripts/SkylandsNative.pex`, written by the installer, declares them: SKSE binds a plugin's functions to the natives a script declares):
 | function | what it does |
 |---|---|
-| `Int Version()` | the plugin version (101 = 1.0.1) |
+| `Int Version()` | the plugin version (110 = 1.1.0) |
 | `Bool TriggerHeld()` | the attack button ("Right Attack/Block": keyboard, mouse or gamepad, as remapped) is down, and no menu is open |
 | `Bool TriggerPressed()` | the button went down since the last call (a tap shorter than a script poll is still seen) |
-| `Bool FireBullet(Actor, Spell, Float spread, Float right, Float up, Float forward)` | launches the spell's projectile (`Projectile::Launch`) from the equipped gun's own `SkylandsMuzzle` node (an empty NiNode the installer puts at the end of the barrel in the gun's mesh; the right hand's magic node `NPC R MagicNode [RMag]` follows the staff's tip and was where the bullets left from in 0.14.2), in the first-person skeleton in first person, aimed at the point the crosshair looks at 3000 units ahead (`Convergence` in the ini), within a cone of `spread` degrees, offset in view space; no animation, no wind-up, no magicka. Runs on the game's thread a frame later. |
+| `Float GunStat(Weapon, String key)` | one of a staff gun's numbers, read from its keyword `SkylandsGun_c<clip>_i<ms>_r<ms>_s<tenths of a degree>_b<burst>` (editor ids of keywords are kept at run time): key `"clip"`, `"interval"` (s), `"reload"` (s), `"spread"` (degrees), `"burst"`; 0 for a weapon that is no Skylands staff gun, so `GunStat(w, "clip") > 0` is "is it a gun" |
+| `Bool FireGun(Actor, Float right, Float up, Float forward)` | launches the bullet of the gun in the actor's hands (the projectile of its enchantment's effect, `Projectile::Launch`) from the gun's own `SkylandsMuzzle` node (an empty NiNode the installer puts at the end of the barrel in the gun's mesh; the right hand's magic node `NPC R MagicNode [RMag]` follows the staff's tip and was where the bullets left from in 0.14.2), in the first-person skeleton in first person, aimed at the point the crosshair looks at 3000 units ahead (`Convergence` in the ini), within the gun's spread, offset in view space; no animation, no wind-up, no magicka. Runs on the game's thread a frame later. |
+
+**Enemies** (not a Papyrus function): the plugin listens for `TESSpellCastEvent`. When an enemy casts the enchantment of the gun it holds, the plugin
+launches `burst - 1` more bullets from the muzzle, one every `interval`, at the enemy's combat target (twice the spread). See `docs/enemy-ai.md`.
 
 SKSE's own Papyrus used by the staff gun: `SKSE.GetPluginVersion`, `SKSE.GetVersion*`, `WornObject.GetItemCharge/SetItemCharge`.
 
@@ -47,7 +51,7 @@ They are still crossbows (animation type 9) with Borderlands rounds as ammo (`ma
 a shot is the engine's, extra rounds (shotgun pellets, an SMG's burst) are `Weapon.Fire` from an invisible marker, the magazine and
 reload take the rounds away, and shots were found by counting ammo because `OnPlayerBowShot` never arrived. With SKSE:
 * **Detect the shot properly**: the plugin listens for the projectile launch (`BSTEventSink<TESObjectLoadedEvent>`/a hook on `Projectile::Launch`) or SKSE's `RegisterForActorAction` (bow release): no ammo counting, no 0.25 s polling.
-* **Spawn the extra rounds at the right place**: `FireBullet`-style launches from the weapon's muzzle node with the gun's spread instead of a marker in front of the eyes (pellets, bursts, rockets).
+* **Spawn the extra rounds at the right place**: `FireGun`-style launches from the weapon's muzzle node with the gun's spread instead of a marker in front of the eyes (pellets, bursts, rockets).
 * **Take the draw and reload out of the way**: set the crossbow's attack speed and reload time per instance (`Actor::SetAnimationVariable`, weapon speed multipliers), or fire from the trigger event like the staff does while the crossbow animation only gives the pose; later replace the animation with OAR.
 * **Per-instance data**: one crossbow record per gun *type* with stats on the instance (`WornObject`, `ExtraData`) instead of 40 variants per balance.
 * **Magazine in the enchantment charge** like the staff, instead of rounds taken out of the pack.

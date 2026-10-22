@@ -201,6 +201,7 @@ def build_full(root: Path) -> Path:
                                                         sub("LLCT", b"\x01"), sub("LVLO", lv)])]))
     # a vanilla-style staff: animation type 8, an enchantment whose effect flies a projectile (the staff-type gun copies it)
     bolt_md = bytearray(152)
+    struct.pack_into("<I", bolt_md, 0, 0x5)  # hostile and detrimental, as a vanilla damage staff effect is
     struct.pack_into("<f", bolt_md, 4, 25.0)
     for at in (24, 32, 36, 92, 96, 108, 116):  # casting light, hit shader, enchant shader, casting art, hit art, dual casting art, enchant art
         struct.pack_into("<I", bolt_md, at, 0x7800 + at)
