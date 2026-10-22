@@ -48,7 +48,7 @@ namespace
 			std::erase_if(key, [](unsigned char c) { return std::isspace(c); });
 			if (key == "Convergence") {
 				try {
-					g_convergence = std::max(200.0f, std::stof(line.substr(eq + 1)));
+					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
 				} catch (...) {
 				}
 			}

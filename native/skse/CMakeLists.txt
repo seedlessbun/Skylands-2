@@ -16,6 +16,7 @@ add_subdirectory("${COMMONLIB_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/commonlib" EXCL
 
 add_library(SkylandsNative SHARED src/main.cpp)
 target_link_libraries(SkylandsNative PRIVATE CommonLibSSE::CommonLibSSE)
+target_compile_definitions(SkylandsNative PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_precompile_headers(SkylandsNative PRIVATE src/PCH.h)
 set_target_properties(SkylandsNative PROPERTIES OUTPUT_NAME "SkylandsNative")
 if(MSVC)
