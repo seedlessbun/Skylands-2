@@ -482,12 +482,10 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun16" in vm and b"BulletSpell" in vm and b"Interval" in vm and b"ChargePerShot" in vm and b"AimPoint" in vm
-    aimp = next(r for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"ACTI"})[1]["ACTI"] if r.edid == "SkylandsStaffAim")
-    props_vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert props_vm
-    assert aimp.first("MODL").rstrip(b"\0") == b"Skylands\\AimPoint.nif" and b"MagSize" in vm and b"SpeedMult" in vm
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun16.pex").is_file()
+    assert b"SkylandsStaffGun17" in vm and all(n in vm for n in (b"BulletSpell", b"Interval", b"ChargePerShot", b"Spread", b"OffsetForward", b"ShotSound", b"MagSize"))
+    assert b"AimPoint" not in vm  # the aim point of 0.13.15 is gone: the plugin launches the bullet
+    assert b"SpeedMult" in vm
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun17.pex").is_file()
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():

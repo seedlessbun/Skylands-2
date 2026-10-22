@@ -55,20 +55,28 @@ explosion definitions first.
 ## Not built yet
 Burst/automatic fire, shotgun pellets, spread, magazine and reload, rocket flight/explosion radius from the game, BL2 sounds.
 
-## Staged move away from the crossbow (0.13.0, Stage 1)
+## Staged move away from the crossbow (Stage 1, with SKSE since 0.14.0)
 
 Goal: every gun type gets its own base weapon records instead of a copy of the crossbow, so fire rate, automatic fire and
 feel are not limited by the crossbow's draw-and-reload animation. Stage 1 is one prototype, an SMG on the staff animation
 type (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`). Stage 2 (which animation type for which gun
-type) waits for the in-game report.
+type) is in `stage2-animation-types.md`.
 
-* The weapon is a copy of a vanilla staff (animation type 8). Its enchantment is a new one with cost 0 (not auto-calculated)
-  whose effect is a copy of the staff's projectile effect pointing at a new projectile: Borderlands SMG bullet speed / 3,
-  gravity 0, the gun's element as the explosion (data from the rounds, `Rounds.expl`). The same effect is also a plain spell
-  (`SkylandsStaffSMG_Spell`) that the script casts for repeats.
-* Only the gun's own records; no ammo at all (the element is part of the spell, not of an ammo type).
-* `SkylandsStaffGun` (ActiveMagicEffect on the player, started by its own quest `SkylandsStaffGunQuest`): gives the staff once,
-  repeats the shot while the attack button is held (real-time interval), counts the magazine, reloads by taking the staff
-  out of the hand for the reload time, and shows a box on the first equip (weapon type, spell, magazine, what was built).
-* Native BL2 mesh fitted to the staff's own axes (barrel toward the thicker end of the staff, a guess) with `--staff-turn
-  pitch,yaw,roll` for correcting it by hand.
+**Needs SKSE** (see `setup/skylands_setup/skse.py`): SKSE64 for the player's Skyrim runtime, Address Library for SKSE Plugins, and
+Skyrim started through `skse64_loader.exe`. The installer checks all three and says what is missing. It installs
+`Data/SKSE/Plugins/SkylandsNative.dll` (source in `native/skse`, built by `.github/workflows/skse-plugin.yml`).
+
+* The weapon is a copy of a vanilla staff (animation type 8). Its enchantment is an aimed concentration cast of an effect
+  that does nothing (no cost, not hostile, no art), a copy of a vanilla concentration effect and its projectile (the game
+  crashed when the projectile was missing): it only makes the staff take the casting pose while the attack button is down.
+* The bullets are the script's. `SkylandsNative.TriggerPressed/TriggerHeld` (the plugin's listener for the "Right Attack/Block"
+  input event: any device, any remapping) say when the button goes down and while it is held; `FireBullet` launches the
+  bullet spell's projectile (`SkylandsStaffSMG_Spell`: Borderlands speed / 3, gravity 0, the gun's element as the explosion, an
+  own glowing tracer mesh) with `Projectile::Launch` from the right hand's magic node, aimed at the crosshair 3000 units ahead,
+  within the gun's spread. No cast animation, no wind-up, no magicka.
+* No ammo item: the staff's enchantment charge is the magazine (`WornObject.SetItemCharge`, 100 per round). A reload waits
+  the reload time with the gauge empty, then fills it. The staff stays in the hand.
+* `SkylandsStaffGun17` (ActiveMagicEffect on the player, started by `SkylandsStaffGunQuest`): gives the staff once, fires,
+  counts, reloads, and shows a box on the first equip (SKSE version, whether the plugin is loaded, magazine, charge gauge, what was
+  built). The magazine is told on screen every ten shots.
+* Native BL2 mesh fitted to the staff's own axes, turned `--staff-turn 45,0,180`, 25% bigger, moved 10% forward and up.

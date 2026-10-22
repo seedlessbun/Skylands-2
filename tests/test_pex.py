@@ -233,25 +233,27 @@ def test_gunner_scripts_decompile(tmp_path):
 def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     psc = decompile(tmp_path, scripts.staff_gun(), "SkylandsStaffGun")
     assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc
-    for text in ("ObjectReference ref = Me as ObjectReference", "Reg = Self.RegisterForAnimationEvent(ref, \"MRh_SpellFire_Event\")", "Self.RegisterForAnimationEvent(ref, \"BeginCastRight\")",
-                 "If asEventName == \"MRh_SpellFire_Event\"", "Staff gun event: ", "Form f = StaffGun as Form", "Me.AddItem(f, 1, False)",
-                 "Event OnAnimationEvent(ObjectReference akSource, String asEventName)", "Fired += 1", "Mag -= 1", "Self.Reload()",
-                 "Mag = MagSize",
-                 "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
-                 "If w as Bool && w == StaffGun", "Staff gun script started: weapon ", "Equipped: id ", "Weapon Property StaffGun Auto", "Spell Property BulletSpell Auto", "Event OnSpellCast(Form akSpell)",
-                 # the hold loop: a pull of the trigger (the cast starting) fires at once and every Interval until the release
-                 "If asEventName == \"BeginCastRight\"", "If asEventName == \"MRh_SpellFire_Event\"", "Gen += 1", "Holding = True", "Self.Hold(Gen)",
-                 "Holding = False", "While go", "Utility.Wait(Interval)", "go = Self.Pull(g)", "Bool ok = g == Gen && Holding && Self.Ready()",
-                 "BulletSpell.Cast(ref, ::nonevar)", "Aim = Me.PlaceAtMe(f, 1, False, False)", "Aim.MoveTo(Me, ox, oy, oz, False)", "Aim.SetAngle(x, 0.0, h)",
-                 "Int r = Fired % 10", "If r == 0 && Verbose", "Me.SetActorValue(\"RightItemCharge\", v)", "v *= ChargePerShot", 
-                 "Bool Function Held(Int g)", "Bool Function Down()", "GetAnimationVariableBool(\"bWantCastRight\")", "GetAnimationVariableBool(\"IsCastingRight\")", "trigger let go (bWantCastRight ", "go = Self.Held(g) && Self.Pull(g)", "Utility.Wait(ReloadTime)", "Float Property ChargePerShot Auto", "Form Property AimPoint Auto", ", script copy ", "Charge gauge now reads ", "Bool more = Mag > 1", "Bool Function Ready()", "Return Armed && !Reloading",
-                 "Float Property Interval Auto"):
+    assert "Skipped inoperative" not in psc
+    for text in (
+            # SKSE: the plugin of Skylands (the attack button, the bullet launch) and SKSE's own charge and version calls
+            "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireBullet(Me, BulletSpell, Spread, OffsetRight, OffsetUp, OffsetForward)",
+            "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "WornObject.SetItemCharge(Me, 1, 0, v)", "WornObject.GetItemCharge(Me, 1, 0)",
+            "SKSE.GetVersion()",
+            # the loop: a press fires at once, the button held fires one every Interval, nothing while reloading or with the staff away
+            "Bool pressed = SkylandsNative.TriggerPressed()", "Bool go = Self.Pull()", "While go", "Utility.Wait(Interval)",
+            "go = SkylandsNative.TriggerHeld() && Self.Pull()", "Bool more = Mag > 1", "Return Armed && !Reloading",
+            # the magazine, the gauge, the reload (a delay with the gauge empty, then full) and the messages
+            "Mag -= 1", "Int r = Fired % 10", "If r == 0 && Verbose", "v *= ChargePerShot", "Utility.Wait(ReloadTime)", "Mag = MagSize",
+            "Staff gun: reloading", "Staff gun: reloaded", "Equipped: id ", ", script copy ", "If w as Bool && Verbose", "Me.AddItem(f, 1, False)",
+            "Me.GetEquippedObject(1)", "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
+            "ObjectReference ref = Me as ObjectReference", "ShotSound.Play(ref)",
+            "Float Property Spread Auto", "Float Property ChargePerShot Auto", "Float Property Interval Auto", "Sound Property ShotSound Auto",
+            "Spell Property BulletSpell Auto", "Weapon Property StaffGun Auto", "Float Property OffsetForward Auto"):
         assert text in psc, text
-    assert "Input." not in psc and "GetWeaponType" not in psc  # nothing that needs SKSE
-    assert "Burst" not in psc and "Skipped inoperative" not in psc
-    assert "UnequipItem" not in psc and "EquipItem" not in psc  # a reload no longer takes the staff out of the hand
-    assert "Fill" not in psc  # the gauge is empty for the reload time, then full: it does not fill gradually
-    assert "If w as Bool && Verbose" in psc  # the enchantment announced as put on (one id below the staff) is not told
+    # the workarounds of plain Papyrus are gone: no animation events or variables, no actor-value gauge, no aim point, no unequip to reload
+    for text in ("RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "RightItemCharge", "Aim", "UnequipItem", "EquipItem",
+                 "Input.", "GetWeaponType", "Burst", "Fill"):
+        assert text not in psc, text
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")

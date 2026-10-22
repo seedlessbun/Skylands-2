@@ -70,16 +70,18 @@ def class_choice_quest() -> Script:
     )
     bootstrap = Function(
         "Bootstrap",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("f", "Form")],
         code=[
             # this quest's own properties are fresh, so it can give the player the ability that carries the watcher;
-            # only when missing: adding it again restarts the effect
+            # only when missing: adding it again restarts the effect. The property is ::AbilityInit_var (the log of 0.13 said
+            # "Failed to find variable AbilityInit") and HasSpell takes a Form, not a Spell
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "AbilityInit")),
+            ("cast", ("id", "f"), ("id", "::AbilityInit_var")),
+            ("callmethod", ("id", "HasSpell"), ("id", "player"), ("id", "::temp0"), ("id", "f")),
             ("jmpf", ("id", "::temp0"), ("lbl", "add")),
             ("return", None),
             ("label", "add"),
-            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "AbilityInit"), ("bool", False)),
+            ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::AbilityInit_var"), ("bool", False)),
             ("return", None),
         ],
     )
@@ -315,7 +317,7 @@ def class_choice_quest() -> Script:
         "Spawn",
         return_type="Bool",
         params=[("i", "Int"), ("player", "Actor")],
-        locals=[("::temp0", "Bool"), ("base", "Form"), ("n", "ObjectReference"), ("x", "Float"), ("y", "Float"),
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("base", "Form"), ("n", "ObjectReference"), ("x", "Float"), ("y", "Float"),
                 ("z", "Float"), ("px", "Float"), ("py", "Float"), ("pz", "Float")],
         code=[
             ("array_getelement", ("id", "base"), ("id", "RosterBase"), ("id", "i")),
@@ -338,7 +340,7 @@ def class_choice_quest() -> Script:
         "RespawnOne",
         return_type="Bool",
         params=[("i", "Int"), ("player", "Actor")],
-        locals=[("::temp0", "Bool"), ("old", "ObjectReference"), ("a", "Actor"), ("made", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("old", "ObjectReference"), ("a", "Actor"), ("made", "Bool")],
         code=[
             ("array_getelement", ("id", "old"), ("id", "RosterRef"), ("id", "i")),
             ("cast", ("id", "a"), ("id", "old")),
@@ -860,13 +862,10 @@ def class_choice_quest() -> Script:
         "Alive",
         return_type="Bool",
         params=[("g", "ObjectReference")],
-        locals=[("::temp0", "Bool"), ("c", "ObjectReference")],
+        locals=[("::temp0", "Bool")],
         code=[
-            ("callmethod", ("id", "GetContainer"), ("id", "g"), ("id", "c")),
-            ("cast", ("id", "::temp0"), ("id", "c")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "free")),
-            ("return", ("bool", False)),
-            ("label", "free"),
+            # a gun lying in the world has its 3D loaded; one in a pack or a container does not (ObjectReference has no
+            # GetContainer in Skyrim: the log showed "Method GetContainer not found" every second)
             ("callmethod", ("id", "Is3DLoaded"), ("id", "g"), ("id", "::temp0")),
             ("return", ("id", "::temp0")),
         ],
@@ -2028,17 +2027,17 @@ def gunner_quest() -> Script:
 def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     """SkylandsStaffGun extends ActiveMagicEffect: the staff-type automatic gun prototype (SkylandsGunModels.esp).
 
-    The gun is a staff whose enchantment is an aimed CONCENTRATION cast of an effect that does nothing (no projectile, no
-    damage, no cost): it only makes the staff start casting at once on the press and go on for as long as the button is held.
-    The script (plain Papyrus: no SKSE) gives the staff once, takes the cast's start event as the trigger pulled and the
-    game's spell-fire event as it let go (the latter is a guess: the box names every event), casts the bullet spell from the
-    player at once and then every Interval seconds while it is held, counts the magazine, raises the weapon speed while the
-    staff is in the hand, and reloads by taking the staff out of the hand for the reload time and putting it back. A box on
-    the first equip says what the build made and what the game reports.
+    The gun is a staff whose enchantment is an aimed concentration cast of an effect that does nothing: it only makes the staff
+    take the casting pose while the attack button is down. The bullets are the script's, through the SKSE plugin SkylandsNative
+    (native/skse): the plugin says whether the attack button is down (SkylandsNative.TriggerHeld / TriggerPressed) and launches
+    the bullet spell's projectile from the right hand's magic node along the crosshair with a spread (FireBullet). The script
+    fires one bullet the moment the button goes down and one every Interval seconds while it is held, counts the magazine,
+    shows it on the staff's enchantment charge (SKSE's WornObject.SetItemCharge), and reloads by waiting ReloadTime with the
+    gauge empty and then filling it. A box on the first equip says what the build made and what SKSE and the plugin report.
 
-      Event OnEffectStart / OnPlayerLoadGame / OnObjectEquipped / OnObjectUnequipped / OnAnimationEvent / OnSpellCast / OnUpdate
+      Event OnEffectStart / OnPlayerLoadGame / OnObjectEquipped / OnObjectUnequipped / OnUpdate
     """
-    T0, T1 = ("id", "::temp0"), ("id", "::temp1")
+    T0 = ("id", "::temp0")
     on_start = Function(
         "OnEffectStart",
         params=[("akTarget", "Actor"), ("akCaster", "Actor")],
@@ -2051,16 +2050,8 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     start = Function(
         "Start",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("ref", "ObjectReference"), ("a", "String"), ("b", "String"),
-                ("c", "String"), ("msg", "String"), ("n", "Int")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("a", "String"), ("msg", "String"), ("n", "Int"), ("v", "Int")],
         code=[
-            # the game wants an ObjectReference here: an Actor variable passed as it is makes the call fail ("Type mismatch for argument 1")
-            ("cast", ("id", "ref"), ("id", "Me")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, ("id", "Reg"), ("id", "ref"), ("str", "MRh_SpellFire_Event")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "BeginCastRight")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "MRh_SpellRelease_Event")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "MRh_SpellAimedConcentrationStart")),
-            ("callmethod", ("id", "RegisterForAnimationEvent"), SELF, T0, ("id", "ref"), ("str", "attackStart")),
             ("cast", ("id", "f"), ("id", "::StaffGun_var")),
             ("not", T0, ("id", "Given")),
             ("jmpf", T0, ("lbl", "had")),
@@ -2072,36 +2063,40 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("callmethod", ("id", "GetItemCount"), ("id", "Me"), ("id", "n"), ("id", "f")),
             ("cast", ("id", "a"), ("id", "n")),
             *notify(("str", "Staff gun: staff guns in the pack: "), ("id", "a")),
-            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            # is the SKSE plugin of Skylands loaded? (-1: no)
+            ("callstatic", ("id", "SKSE"), ("id", "GetPluginVersion"), ("id", "v"), ("str", "SkylandsNative")),
+            ("cmp_gt", ("id", "Native"), ("id", "v"), ("int", 0)),
             # a number for this copy of the script, so two copies running side by side show in the messages
             ("cmp_eq", T0, ("id", "Tag"), ("int", 0)),
             ("jmpf", T0, ("lbl", "tagged")),
             ("callstatic", ("id", "Utility"), ("id", "RandomInt"), ("id", "Tag"), ("int", 100), ("int", 999)),
             ("label", "tagged"),
-            call("MakeAim"),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)),
+            call("Resume"),
             call("Report"),
             ("return", None),
         ],
     )
-    make_aim = Function(
-        "MakeAim",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("::temp1", "Bool"), ("f", "Form")],
+    resume = Function(
+        "Resume",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("r", "Form")],
         code=[
-            # the invisible object the bullets are cast from (placed once; a saved game keeps it)
-            ("cast", ("id", "f"), ("id", "::AimPoint_var")),
-            ("cast", T0, ("id", "f")),
-            *ret_unless(T0, "aimset", tmp=T1),
-            ("cast", T0, ("id", "Aim")),
-            *ret_if(T0, "aimhas"),
-            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "Aim"), ("id", "f"), ("int", 1), ("bool", False), ("bool", False)),
+            # a saved game loaded with the staff already in the hand: the equip event does not come again
+            ("cast", ("id", "f"), ("id", "::StaffGun_var")),
+            ("callmethod", ("id", "GetEquippedObject"), ("id", "Me"), ("id", "r"), ("int", 1)),
+            ("cmp_eq", T0, ("id", "r"), ("id", "f")),
+            ("jmpf", T0, ("lbl", "away")),
+            ("assign", ("id", "Armed"), ("bool", True)),
+            call("Speed"),
+            ("label", "away"),
             ("return", None),
         ],
     )
     report = Function(
         "Report",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("c", "String"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("msg", "String")],
         code=[
-            # what this copy of the script was given (a saved game can keep an old copy with old values)
+            # what this copy of the script was given (a saved game can keep an old copy with old values) and whether the plugin is there
             *ret_unless(("id", "::Verbose_var"), "talk"),
             ("assign", ("id", "a"), ("str", "NOT SET")),
             ("cast", T0, ("id", "::StaffGun_var")),
@@ -2113,12 +2108,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("jmpf", T0, ("lbl", "nospell")),
             ("assign", ("id", "b"), ("str", "set")),
             ("label", "nospell"),
-            ("assign", ("id", "c"), ("str", "no")),
-            ("jmpf", ("id", "Given"), ("lbl", "notgiven")),
-            ("assign", ("id", "c"), ("str", "yes")),
-            ("label", "notgiven"),
-            *notify(("str", "Staff gun script started: weapon "), ("id", "a"), ("str", ", spell "), ("id", "b"),
-                    ("str", ", staff given by now: "), ("id", "c")),
+            *notify(("str", "Staff gun script started: weapon "), ("id", "a"), ("str", ", spell "), ("id", "b")),
             ("return", None),
         ],
     )
@@ -2174,146 +2164,72 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("cmp_eq", T0, ("id", "w"), ("id", "::StaffGun_var")),
             ("label", "both"),
             ("jmpf", T0, ("lbl", "end")),
-            ("assign", ("id", "Armed"), ("id", "Reloading")),
-            ("jmpf", ("id", "Reloading"), ("lbl", "away")),
-            ("return", None),
-            ("label", "away"),
+            ("assign", ("id", "Armed"), ("bool", False)),
             ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "WeaponSpeedMult"), ("float", 1.0)),
             ("label", "end"),
             ("return", None),
         ],
     )
-    on_anim = Function(
-        "OnAnimationEvent",
-        params=[("akSource", "ObjectReference"), ("asEventName", "String")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
+    on_update = Function(
+        "OnUpdate",
+        locals=[("::nonevar", "None"), ("next", "Float")],
         code=[
-            # every event the game sends is named on screen (the concentration cast's names are what this test wants to know);
-            # the cast starting is the trigger being pulled, the cast ending (the game's spell-fire event) is it being let go
-            ("jmpf", ("id", "::Verbose_var"), ("lbl", "quiet")),
-            *notify(("str", "Staff gun event: "), ("id", "asEventName")),
-            ("label", "quiet"),
-            ("cmp_eq", T0, ("id", "asEventName"), ("str", "BeginCastRight")),
-            ("jmpf", T0, ("lbl", "second")),
-            call("Press"),
-            ("label", "second"),
-            ("cmp_eq", T0, ("id", "asEventName"), ("str", "MRh_SpellAimedConcentrationStart")),
-            ("jmpf", T0, ("lbl", "third")),
-            call("Press"),
-            ("label", "third"),
-            ("cmp_eq", T0, ("id", "asEventName"), ("str", "MRh_SpellFire_Event")),
-            ("jmpf", T0, ("lbl", "fourth")),
-            call("Release"),
-            ("label", "fourth"),
-            ("cmp_eq", T0, ("id", "asEventName"), ("str", "MRh_SpellRelease_Event")),
-            ("jmpf", T0, ("lbl", "end")),
-            call("Release"),
-            ("label", "end"),
+            # with the staff in the hand the attack button is looked at about thirty times a second (the plugin keeps a press
+            # shorter than that); without it, once a second
+            ("assign", ("id", "next"), ("float", 1.0)),
+            ("jmpf", ("id", "Armed"), ("lbl", "idle")),
+            ("assign", ("id", "next"), ("float", 0.03)),
+            call("Poll"),
+            ("label", "idle"),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "next")),
             ("return", None),
         ],
     )
-    press = Function(
-        "Press",
-        locals=[("::nonevar", "None"), ("::temp1", "Bool")],
+    poll = Function(
+        "Poll",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("pressed", "Bool"), ("ok", "Bool")],
         code=[
-            # not with the staff away or while reloading; every pull of the trigger is a new generation of the loop,
-            # so a loop left from an earlier pull ends by itself
-            *ret_unless(("id", "Armed"), "armed", tmp=T1),
-            *ret_if(("id", "Reloading"), "loaded"),
-            ("iadd", ("id", "Gen"), ("id", "Gen"), ("int", 1)),
-            ("assign", ("id", "Holding"), ("bool", True)),
-            call("Hold", ("id", "Gen")),
+            ("assign", ("id", "ok"), ("id", "Native")),
+            ("jmpf", ("id", "ok"), ("lbl", "nonative")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "TriggerPressed"), ("id", "pressed")),
+            ("assign", ("id", "ok"), ("id", "pressed")),
+            ("label", "nonative"),
+            ("jmpf", ("id", "ok"), ("lbl", "done")),
+            call("Ready", dest=("id", "ok")),
+            ("jmpf", ("id", "ok"), ("lbl", "done")),
+            call("Hold"),
+            ("label", "done"),
             ("return", None),
         ],
-    )
-    release = Function(
-        "Release", locals=[("::nonevar", "None")],
-        code=[("assign", ("id", "Holding"), ("bool", False)), ("return", None)],
     )
     hold = Function(
         "Hold",
-        params=[("g", "Int")],
-        locals=[("::nonevar", "None"), ("go", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("go", "Bool")],
         code=[
-            # the first bullet leaves at once; then, while the trigger is still down, one more every Interval seconds
-            call("Pull", ("id", "g"), dest=("id", "go")),
+            # the first bullet leaves at once; then, while the attack button is still down, one more every Interval seconds
+            call("Pull", dest=("id", "go")),
             ("label", "hloop"),
             ("jmpf", ("id", "go"), ("lbl", "hdone")),
             ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "::Interval_var")),
-            call("Held", ("id", "g"), dest=("id", "go")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "TriggerHeld"), ("id", "go")),
             ("jmpf", ("id", "go"), ("lbl", "again")),
-            call("Pull", ("id", "g"), dest=("id", "go")),
+            call("Pull", dest=("id", "go")),
             ("label", "again"),
             ("jmp", ("lbl", "hloop")),
             ("label", "hdone"),
             ("return", None),
         ],
     )
-    held = Function(
-        "Held",
-        return_type="Bool",
-        params=[("g", "Int")],
-        locals=[("::nonevar", "None"), ("ok", "Bool")],
-        code=[
-            # this pull of the trigger is still the latest, no event has said it was let go, and the game says the right hand wants to cast
-            ("cmp_eq", ("id", "ok"), ("id", "g"), ("id", "Gen")),
-            ("jmpf", ("id", "ok"), ("lbl", "gen")),
-            ("assign", ("id", "ok"), ("id", "Holding")),
-            ("label", "gen"),
-            ("jmpf", ("id", "ok"), ("lbl", "done")),
-            call("Down", dest=("id", "ok")),
-            ("label", "done"),
-            ("return", ("id", "ok")),
-        ],
-    )
-    down = Function(
-        "Down",
-        return_type="Bool",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("r", "Bool"), ("a", "Bool"), ("b", "Bool"), ("c", "Bool"), ("x", "String"),
-                ("y", "String"), ("z", "String"), ("msg", "String")],
-        code=[
-            # the animation variables of the right hand's cast: the button is held (bWantCastRight) or the cast is running (IsCastingRight);
-            # when the answer is no, the three values are told on screen
-            ("callmethod", ("id", "GetAnimationVariableBool"), ("id", "Me"), ("id", "a"), ("str", "bWantCastRight")),
-            ("callmethod", ("id", "GetAnimationVariableBool"), ("id", "Me"), ("id", "b"), ("str", "IsCastingRight")),
-            ("callmethod", ("id", "GetAnimationVariableBool"), ("id", "Me"), ("id", "c"), ("str", "bRitualSpellActive")),
-            ("assign", ("id", "r"), ("id", "a")),
-            ("not", T0, ("id", "r")),
-            ("jmpf", T0, ("lbl", "tried")),
-            ("assign", ("id", "r"), ("id", "b")),
-            ("label", "tried"),
-            ("not", T0, ("id", "r")),
-            ("jmpf", T0, ("lbl", "band")),
-            ("assign", T0, ("id", "::Verbose_var")),
-            ("label", "band"),
-            ("jmpf", T0, ("lbl", "end")),
-            ("cast", ("id", "x"), ("id", "a")),
-            ("cast", ("id", "y"), ("id", "b")),
-            ("cast", ("id", "z"), ("id", "c")),
-            *notify(("str", "Staff gun: trigger let go (bWantCastRight "), ("id", "x"), ("str", ", IsCastingRight "), ("id", "y"),
-                    ("str", ", bRitualSpellActive "), ("id", "z"), ("str", ")")),
-            ("label", "end"),
-            ("return", ("id", "r")),
-        ],
-    )
     pull = Function(
         "Pull",
         return_type="Bool",
-        params=[("g", "Int")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ok", "Bool"), ("more", "Bool")],
         code=[
-            # one bullet: the trigger still held in this generation and the staff in the hand, not reloading
-            ("cmp_eq", ("id", "ok"), ("id", "g"), ("id", "Gen")),
-            ("jmpf", ("id", "ok"), ("lbl", "held")),
-            ("assign", ("id", "ok"), ("id", "Holding")),
-            ("label", "held"),
-            ("jmpf", ("id", "ok"), ("lbl", "ready")),
+            # one bullet, if the staff is in the hand and not being reloaded; the shot that empties the magazine reloads, and then the loop ends
             call("Ready", dest=("id", "ok")),
-            ("label", "ready"),
             ("jmpf", ("id", "ok"), ("lbl", "done")),
             call("Fire"),
             ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
-            # the shot that empties the magazine reloads, and then the loop ends
             ("cmp_gt", ("id", "more"), ("id", "Mag"), ("int", 1)),
             call("Count"),
             ("assign", ("id", "ok"), ("id", "more")),
@@ -2323,42 +2239,17 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     fire = Function(
         "Fire",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ref", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ref", "ObjectReference"), ("n", "Int")],
         code=[
-            # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1"). Cast from the player,
-            # a bullet leaves from the player's face; from the aim point (set in front of the right hand) it leaves from there
+            # the plugin launches the bullet from the right hand, along the crosshair, within the spread
+            ("callstatic", ("id", "SkylandsNative"), ("id", "FireBullet"), ("id", "::temp0"), ("id", "Me"), ("id", "::BulletSpell_var"),
+             ("id", "::Spread_var"), ("id", "::OffsetRight_var"), ("id", "::OffsetUp_var"), ("id", "::OffsetForward_var")),
+            ("cast", T0, ("id", "::ShotSound_var")),
+            ("jmpf", T0, ("lbl", "silent")),
+            # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1")
             ("cast", ("id", "ref"), ("id", "Me")),
-            ("cast", T0, ("id", "Aim")),
-            ("jmpf", T0, ("lbl", "face")),
-            call("Place"),
-            ("assign", ("id", "ref"), ("id", "Aim")),
-            ("label", "face"),
-            ("callmethod", ("id", "Cast"), ("id", "::BulletSpell_var"), NONE, ("id", "ref"), NONE),
-            ("return", None),
-        ],
-    )
-    place = Function(
-        "Place",
-        locals=[("::nonevar", "None"), ("h", "Float"), ("x", "Float"), ("sn", "Float"), ("cs", "Float"), ("ox", "Float"), ("oy", "Float"),
-                ("oz", "Float"), ("t", "Float")],
-        code=[
-            # the aim point goes ahead of and to the right of the eyes, turned the way the player looks; right of the heading h
-            # is (cos h, -sin h) and ahead of it (sin h, cos h)
-            ("callmethod", ("id", "GetAngleZ"), ("id", "Me"), ("id", "h")),
-            ("callmethod", ("id", "GetAngleX"), ("id", "Me"), ("id", "x")),
-            ("callstatic", ("id", "Math"), ("id", "Sin"), ("id", "sn"), ("id", "h")),
-            ("callstatic", ("id", "Math"), ("id", "Cos"), ("id", "cs"), ("id", "h")),
-            ("fmul", ("id", "ox"), ("id", "sn"), ("float", 40.0)),
-            ("fmul", ("id", "t"), ("id", "cs"), ("float", 14.0)),
-            ("fadd", ("id", "ox"), ("id", "ox"), ("id", "t")),
-            ("fmul", ("id", "oy"), ("id", "cs"), ("float", 40.0)),
-            ("fmul", ("id", "t"), ("id", "sn"), ("float", 14.0)),
-            ("fsub", ("id", "oy"), ("id", "oy"), ("id", "t")),
-            ("callmethod", ("id", "GetHeight"), ("id", "Me"), ("id", "oz")),
-            ("fmul", ("id", "oz"), ("id", "oz"), ("float", 0.85)),
-            ("fsub", ("id", "oz"), ("id", "oz"), ("float", 10.0)),
-            ("callmethod", ("id", "MoveTo"), ("id", "Aim"), NONE, ("id", "Me"), ("id", "ox"), ("id", "oy"), ("id", "oz"), ("bool", False)),
-            ("callmethod", ("id", "SetAngle"), ("id", "Aim"), NONE, ("id", "x"), ("float", 0.0), ("id", "h")),
+            ("callmethod", ("id", "Play"), ("id", "::ShotSound_var"), ("id", "n"), ("id", "ref")),
+            ("label", "silent"),
             ("return", None),
         ],
     )
@@ -2375,88 +2266,57 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("return", T0),
         ],
     )
-    on_cast = Function(
-        "OnSpellCast",
-        params=[("akSpell", "Form")],
-        locals=[("::nonevar", "None")],
-        code=[("iadd", ("id", "Casts"), ("id", "Casts"), ("int", 1)), ("return", None)],
-    )
     arm = Function(
         "Arm",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("c", "String"), ("d", "String"),
-                ("e", "String"), ("f", "String"), ("g", "String"), ("got", "Float"), ("msg", "String")],
+                ("e", "String"), ("f", "String"), ("g", "String"), ("got", "Float"), ("v", "Int"), ("msg", "String")],
         code=[
-            # the box says what the build made and what the game reports: are the properties set, is the staff in the hand
+            # the box says what the build made and what the game reports: SKSE, the plugin, the charge gauge
             *ret_if(("id", "Reloading"), "idle"),
             *ret_if(("id", "Boxed"), "shown"),
             ("assign", ("id", "Boxed"), ("bool", True)),
-            ("cast", ("id", "a"), ("id", "Mag")),
-            ("cast", ("id", "b"), ("id", "::MagSize_var")),
-            ("assign", ("id", "c"), ("str", "NOT SET")),
-            ("cast", T0, ("id", "::StaffGun_var")),
-            ("jmpf", T0, ("lbl", "nogun")),
-            ("assign", ("id", "c"), ("str", "set")),
-            ("label", "nogun"),
-            ("assign", ("id", "d"), ("str", "NOT SET")),
-            ("cast", T0, ("id", "::BulletSpell_var")),
-            ("jmpf", T0, ("lbl", "nospell")),
-            ("assign", ("id", "d"), ("str", "set")),
-            ("label", "nospell"),
-            ("assign", ("id", "e"), ("str", "no")),
-            ("jmpf", ("id", "Reg"), ("lbl", "noreg")),
-            ("assign", ("id", "e"), ("str", "yes")),
-            ("label", "noreg"),
             call("Sync"),
             ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("float", 1.0)),
-            # what the game says the staff's charge is a second after it was set (is the gauge writable at all?)
-            ("callmethod", ("id", "GetActorValue"), ("id", "Me"), ("id", "got"), ("str", "RightItemCharge")),
-            ("cast", ("id", "f"), ("id", "got")),
-            ("cast", ("id", "g"), ("id", "::ChargePerShot_var")),
-            ("assign", ("id", "msg"), ("str", "Skylands staff gun. Animation events registered: ")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "e")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". Script weapon: ")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "c")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ", script spell: ")),
+            ("callstatic", ("id", "WornObject"), ("id", "GetItemCharge"), ("id", "got"), ("id", "Me"), ("int", 1), ("int", 0)),
+            ("cast", ("id", "a"), ("id", "got")),
+            ("cast", ("id", "b"), ("id", "Mag")),
+            ("cast", ("id", "c"), ("id", "::MagSize_var")),
+            ("callstatic", ("id", "SKSE"), ("id", "GetVersion"), ("id", "v")),
+            ("cast", ("id", "d"), ("id", "v")),
+            ("callstatic", ("id", "SKSE"), ("id", "GetVersionMinor"), ("id", "v")),
+            ("cast", ("id", "e"), ("id", "v")),
+            ("callstatic", ("id", "SKSE"), ("id", "GetVersionBeta"), ("id", "v")),
+            ("cast", ("id", "f"), ("id", "v")),
+            ("assign", ("id", "g"), ("str", "NOT LOADED: copy SkylandsNative.dll into Data/SKSE/Plugins and install Address Library")),
+            ("jmpf", ("id", "Native"), ("lbl", "nodll")),
+            ("assign", ("id", "g"), ("str", "loaded")),
+            ("label", "nodll"),
+            ("assign", ("id", "msg"), ("str", "Skylands staff gun. SKSE ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "d")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". Magazine: ")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "a")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " of ")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "b")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". Charge gauge now reads ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ".")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "e")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ".")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "f")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " (it was set to rounds in the magazine times ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ", Skylands plugin: ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "g")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", "). ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". Magazine: ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "b")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " of ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "c")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", "; the staff's charge gauge reads ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "a")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "::Info_var")),
             ("callstatic", ("id", "Debug"), ("id", "MessageBox"), NONE, ("id", "msg")),
             ("return", None),
         ],
     )
-    on_update = Function(
-        "OnUpdate",
-        locals=[("::nonevar", "None")],
-        code=[call("Speed"), ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.0)), ("return", None)],
-    )
     speed = Function(
         "Speed",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("got", "Float"), ("d", "Float")],
+        locals=[("::nonevar", "None")],
         code=[
-            # while the staff is in the hand the player's weapon speed is the gun's (the staff's cast is what limits the rate)
-            ("not", T0, ("id", "Armed")),
-            ("jmpf", T0, ("lbl", "armed")),
-            ("return", None),
-            ("label", "armed"),
-            ("callmethod", ("id", "GetActorValue"), ("id", "Me"), ("id", "got"), ("str", "WeaponSpeedMult")),
-            ("fsub", ("id", "d"), ("id", "got"), ("id", "::SpeedMult_var")),
-            ("cmp_gt", T0, ("id", "d"), ("float", 0.05)),
-            ("jmpf", T0, ("lbl", "notabove")),
+            # while the staff is in the hand the player's weapon speed is the gun's (it quickens the casting pose)
             ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "WeaponSpeedMult"), ("id", "::SpeedMult_var")),
-            ("return", None),
-            ("label", "notabove"),
-            ("cmp_lt", T0, ("id", "d"), ("float", -0.05)),
-            ("jmpf", T0, ("lbl", "same")),
-            ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "WeaponSpeedMult"), ("id", "::SpeedMult_var")),
-            ("label", "same"),
             ("return", None),
         ],
     )
@@ -2499,7 +2359,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             # the staff's enchantment charge is the ammunition gauge: rounds left times the charge of one round
             ("cast", ("id", "v"), ("id", "Mag")),
             ("fmul", ("id", "v"), ("id", "v"), ("id", "::ChargePerShot_var")),
-            ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "RightItemCharge"), ("id", "v")),
+            ("callstatic", ("id", "WornObject"), ("id", "SetItemCharge"), NONE, ("id", "Me"), ("int", 1), ("int", 0), ("id", "v")),
             ("return", None),
         ],
     )
@@ -2523,10 +2383,13 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
-                   ("Holding", "Bool", ("bool", False)), ("Gen", "Int", ("int", 0)), ("Aim", "ObjectReference", None), ("Tag", "Int", ("int", 0)), ("Casts", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)), ("Reg", "Bool", ("bool", False))],
+                   ("Native", "Bool", ("bool", False)), ("Tag", "Int", ("int", 0)), ("Fired", "Int", ("int", 0))],
         auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
-                         ("SpeedMult", "Float"), ("Interval", "Float"), ("ChargePerShot", "Float"), ("AimPoint", "Form"), ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, report, on_equipped, equipped, on_unequipped, on_anim, press, release, hold, held, down, pull, fire, place, ready, on_cast, arm, on_update, speed, count, tell, sync, reload_, make_aim],
+                         ("SpeedMult", "Float"), ("Interval", "Float"), ("ChargePerShot", "Float"), ("Spread", "Float"),
+                         ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
+                         ("Info", "String"), ("Verbose", "Bool")],
+        functions=[on_start, on_load, start, resume, report, on_equipped, equipped, on_unequipped, on_update, poll, hold, pull, fire, ready,
+                   arm, speed, count, tell, sync, reload_],
     )
 
 

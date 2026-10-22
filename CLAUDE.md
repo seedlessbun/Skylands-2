@@ -16,7 +16,10 @@ suspected are marked "unconfirmed".
   `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` and
   `Claude-Session: https://claude.ai/code/session_01JsqA4yJHWZFYHUfPM91Vca`.
 - Work on branch `claude/borderlands-skyrim-mashup-4946r6`.
-- Plain Papyrus only, no SKSE.
+- SKSE is a dependency since 0.14.0 (the user decided; Skylands never ships SKSE or Address Library, the player installs them).
+  `setup/skylands_setup/skse.py` checks them and the installer logs `skse:` lines; the Skylands plugin is `Data/SKSE/Plugins/SkylandsNative.dll`
+  (source `native/skse`, built by `.github/workflows/skse-plugin.yml` on GitHub Actions, which commits the DLL to `setup/skylands_setup/bin/`).
+  Plain Papyrus workarounds for what SKSE does are to be removed, not kept (the staff gun's already are).
 - The user tests on an EXISTING character (see the ghost-script lesson below).
 - `Skylands.esp` stays light and byte-identical: a test builds with and without shooting and compares the bytes
   (`tests/test_generate.py`). All new content goes in `SkylandsGunModels.esp` (`generate.MODELS_PLUGIN`).
@@ -30,6 +33,7 @@ suspected are marked "unconfirmed".
 - `skyrim/esp.py`: plugin writer (`Plugin`, `Rec`, `vmad`). `skyrim/pex.py`: `.pex` writer. `skyrim/nif.py`: NIF writer.
 - `bl2/`: reads Borderlands 2 packages (extract, meshes, textures, `shooting_of`). `build.py`: installer entry, `VERSION`.
 - `sheets/` (repo root): design JSON; `sheet_data.py` is generated from it. `docs/`: `bl2-shooting.md` and notes.
+- `skse.py`: SKSE/Address Library detection, plugin staging. `native/skse/`: the C++ plugin (CommonLibSSE-NG). `.github/workflows/skse-plugin.yml`: its build.
 - `tools/`: `gen.py`, `package_testkit.py` (zip + install bats), `espcheck/` (Rust), `nifcheck/` (C++).
 - `tests/`: pytest; `fake_skyrim.py` / `fake_bl2.py` build tiny fake installs.
 

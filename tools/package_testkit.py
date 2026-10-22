@@ -37,11 +37,19 @@ MODEL_BATS = {
     "Shooting-BL2": ("native --gun-shooting bl2", "native gun models and Borderlands shooting: each gun gets its own rounds (equipped for you), a magazine and reload time, shotgun pellets, automatic bursts for SMGs and rifles, spread, and rockets/elemental rounds that explode; messages on screen say what it is doing"),
     "Shooting-Bullets": ("native --gun-shooting bullets", "native gun models, and the steel bolt becomes a fast, nearly flat shot (bullet-like)"),
     "Shooting-Both": ("native --gun-shooting both", "Borderlands rounds and the faster steel bolt together"),
-    "Shooting-Staff": ("native --gun-shooting staff", "STAGE 1 TEST: the Shooting-BL2 install plus ONE submachine gun built on a vanilla staff (given to you once; a staff casts a spell that fires the bullet, so no ammo, no magicka, no charge cost). Compare it with the crossbow SMGs"),
+    "Shooting-Staff": ("native --gun-shooting staff", "STAGE 1 TEST, NEEDS SKSE (run Check-SKSE.bat): the Shooting-BL2 install plus ONE submachine gun built on a vanilla staff (given to you once). The Skylands SKSE plugin fires its bullets from the right hand the moment the attack button goes down and while it is held; no ammo, no magicka; the staff's charge bar is the magazine. Compare it with the crossbow SMGs"),
     "UModel": ("umodel", "Borderlands 2 gun meshes exported with the free UModel tool (downloaded during setup; if that fails, put umodel.exe from gildor.org in the work folder)"),
     "Auto": ("auto", "native, then UModel, then proxy, for each gun"),
 }
 MODEL_BAT = INSTALL.replace("%*", "--gun-models %METHOD% %*").replace("%METHOD%", "{method}")
+SKSE_CHECK = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+"%~dp0python\python.exe" -X utf8 -m skylands_setup sksecheck %*
+echo.
+pause
+"""
 SHOOTING_SURVEY = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -85,12 +93,22 @@ README = f"""Skylands {VERSION} test build: Skyrim played as a Borderlands vault
    you came in. The lesser power "Pandora Log Enemies" notes the hostile people around you for respawning right
    away (the same thing happens by itself every couple of seconds). It all works on an existing character: loading
    the save gives you both powers. Beams are plain statics now; a message on screen says whether the beam and the light were made.
-6. What to look for (no Skyrim script extender is needed): your starter pistol, a "Skylands gun speed" message when you equip a gun, bandits that carry
+6. What to look for (the staff gun test needs SKSE, see SKSE below; the rest needs no script extender): your starter pistol, a "Skylands gun speed" message when you equip a gun, bandits that carry
    guns (a message names them), guns dropping on the ground when they die with a coloured beam and light over
    them, and a stats line on every gun. If something is missing, send work\\skylands-setup.log, work\\parts-summary.json
    and a screenshot.
 7. To undo everything: Uninstall-Skylands.bat (removes only the files Skylands installed and its plugin line;
    plugins.txt.skylands-backup next to your plugins.txt is a copy from before the first install).
+
+SKSE (needed by the staff gun and by everything Skylands does with guns from now on):
+  Skylands now uses the Skyrim Script Extender. You install three things once; Skylands never ships them:
+    1. SKSE64 for your Skyrim version: https://skse.silverlock.org/  (copy skse64_loader.exe, the skse64_*.dll and the Data folder's Scripts into the Skyrim folder).
+    2. Address Library for SKSE Plugins (the "All in one" file for your Skyrim version): https://www.nexusmods.com/skyrimspecialedition/mods/32444
+       (copy its Data/SKSE/Plugins/versionlib-*.bin into the Skyrim's Data/SKSE/Plugins folder).
+    3. Start Skyrim with skse64_loader.exe (Steam's Play button starts it without SKSE).
+  Check-SKSE.bat tells you what is missing. The installer installs Skylands' own plugin (Data/SKSE/Plugins/SkylandsNative.dll) and
+  logs what it found under "skse:" in work\\skylands-setup.log. In game the staff gun's first box says whether SKSE and the plugin are loaded;
+  the plugin's own log is Documents\\My Games\\Skyrim Special Edition\\SKSE\\SkylandsNative.log.
 
 GUN MODELS (new, being tested): Install-Skylands.bat leaves every gun looking like a crossbow. These install the same
 Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (Skylands.esp itself is never changed, so your saves keep their powers and guns; the plain installer removes the second plugin); try them one at a time (each re-run replaces the last):
@@ -109,7 +127,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-79.zip"
+    out = dist / "Skylands-TestBuild-80.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -124,6 +142,7 @@ def main() -> int:
         z.writestr("Install-Skylands.bat", INSTALL.replace("\n", "\r\n"))
         for name, (method, _why) in MODEL_BATS.items():
             z.writestr(f"Install-Skylands-GunModels-{name}.bat", MODEL_BAT.format(method=method).replace("\n", "\r\n"))
+        z.writestr("Check-SKSE.bat", SKSE_CHECK.replace("\n", "\r\n"))
         z.writestr("Run-GunModelSurvey.bat", SURVEY.replace("\n", "\r\n"))
         z.writestr("Run-ShootingSurvey.bat", SHOOTING_SURVEY.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))

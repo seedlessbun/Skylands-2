@@ -17,12 +17,12 @@ import time
 import traceback
 from pathlib import Path
 
-from . import generate
+from . import generate, skse
 from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.13.16"
+VERSION = "0.14.0"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -126,6 +126,8 @@ def verify(sky: Path, plugins: Path | None) -> list[str]:
     for name in ("SkylandsHunter", "SkylandsHunterQuest", "SkylandsHunterPower"):
         pex = data / "Scripts" / f"{name}.pex"
         out.append(f"Scripts\\{name}.pex: {'present' if pex.is_file() else 'MISSING'}")
+    st = skse.status(sky)
+    out.append(f"SKSE: {'ready' if st.ready else 'NOT READY (see the skse lines above)'}; SkylandsNative.dll: {'present' if st.plugin else 'MISSING'}")
     if plugins and plugins.is_file():
         lines = [x.strip() for x in plugins.read_text(encoding="utf-8", errors="replace").splitlines()]
         entry = [x for x in lines if x.lstrip("*").lower() == generate.PLUGIN.lower()]
@@ -190,7 +192,6 @@ def main(argv: list[str]) -> int:
                     help="bl2: Borderlands rounds per gun type and element (fast bullets, rockets and elemental guns explode); bullets: only the steel bolt becomes a fast flat shot; both")
     ap.add_argument("--gun-calibrate", action="store_true", help="give each rarity a different hold (for finding the right one by eye)")
     ap.add_argument("--staff-turn", default="45,0,180", help="staff-type SMG: turn (pitch,yaw,roll degrees) of the model in the staff grip: rolled 180 (0.13.6: it pointed up and was upside down); pitch -45 still pointed straight up (0.13.12), so 0.13.14 turns it 90 degrees the other way, 45 (a guess at which way is forward; -135 is the other way)")
-    ap.add_argument("--staff-origin", choices=("aim", "face"), default="face", help="staff-type SMG: where the bullets leave from: the player (face: from the face, what works), or an invisible aim point ahead of and to the right of the eyes (aim: 0.13.15 did that and no bullet appeared)")
     ap.add_argument("--gun-pitch", type=float, default=0.0, help="raise the barrel this many more degrees (negative lowers it)")
     ap.add_argument("--gun-spin", type=float, default=0.0, help="turn every gun model this many degrees about its up axis (fixes a gun facing the wrong way)")
     ap.add_argument("--gun-scale", type=float, default=1.0, help="make every gun model this many times bigger or smaller")
@@ -266,7 +267,7 @@ def main(argv: list[str]) -> int:
                     say("UModel was not found and could not be downloaded. Download it from https://www.gildor.org/en/projects/umodel (the Windows zip), "
                         "unzip it and put umodel.exe (or umodel_64.exe) in the work folder next to this log, then run this installer again.")
         report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources,
-                                   model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")), staff_origin=a.staff_origin)
+                                   model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")))
         for src in sources.values():
             say(src.summary())
         for line in report.get("model_log", []):
@@ -280,6 +281,12 @@ def main(argv: list[str]) -> int:
         if a.stage_only:
             say(f"Staged only, in {stage}")
             return 0
+        bin_dir = Path(__file__).resolve().parent / "bin"
+        sk = skse.status(sky)
+        for line in skse.describe(sk):
+            say(f"  skse: {line}")
+        staged = skse.stage_plugin(stage, bin_dir)
+        say(f"SkylandsNative plugin: {'staged for install' if staged else 'not in this build (bin/SkylandsNative.dll is missing)'}")
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values
             (sky / "Data" / "Scripts" / old).unlink(missing_ok=True)
         try:
