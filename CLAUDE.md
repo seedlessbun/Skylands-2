@@ -42,7 +42,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 115 passed at 0.14.3.
+Tests that need a tool skip when its variable is unset; with all three set, 115 passed at 0.15.0 (the DLL test needs the CI-built DLL of the same plugin version).
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -83,8 +83,8 @@ Other commands:
   counting ammo never produced shot messages in game (cause unknown); the crossbow gunner code is still in `scripts.gunner`.
 
 ## 6. Current status
-- Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.14.4**, TestBuild-84 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+- Staged move from crossbow-based guns to per-type base weapons: **Stage 1**, version **0.15.0**, TestBuild-85
+  (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`): SMGs and assault rifles are staff guns (see 0.15.0 below).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -187,6 +187,24 @@ Other commands:
   pass it the right attack button while `SkylandsNative.SetGunMode(true)` (set by `Grip`, cleared by `Let`; the plugin starts with it off, so a
   save cannot keep it on). Block, shouts and readying work normally. `Heal` gives back fighting controls a 0.14.3 save left off
   (`ControlsOff`). UNCONFIRMED in game: that the hook is safe on 1.7.104 (slot 6) and swallows the attack; if the game crashes on the first press, the slot is wrong.
+- 0.15.0 (TestBuild-85, plugin 1.1.0), the user chose "option A": every SMG and assault rifle variant has a staff twin (`generate.Armory`:
+  same parts, rarity, element, stats, name and model as the crossbow variant, built inside the crossbow loop; ids `SkylandsStaff_<balance>_<k>`),
+  and the crossbow SMGs/ARs leave the loot (the `SkylandsGuns_<rarity>` tier lists are overridden in `SkylandsGunModels.esp` with the other
+  crossbows plus the staff guns; `Skylands.esp` stays byte-identical, tested). Enemies are armed and drop from the same lists (the watcher is
+  unchanged; staff guns carry the `SkylandsGun` keyword), the rarity beams come through an override of the `SkylandsGunList` FLST. Pistols,
+  shotguns, snipers and launchers stay crossbows. The staff's enchantment IS the bullet (one hostile aimed fire-and-forget effect, magnitude =
+  damage, per-gun MGEF carrying the stats text; projectile shared per type x element with a tracer in the element's colour; the blast is shared
+  with the crossbow rounds, `Rounds.expl` now caches). The old concentration trigger and `trigger_donor` are gone (the plugin swallows the
+  attack button, so no cast pose is needed). Each gun has a keyword `SkylandsGun_c<clip>_i<ms>_r<ms>_s<spread*10>_b<burst>` that the plugin
+  parses (`GunStat`); the script `SkylandsStaffGun18` is generic (retire 17, `STAFF_ID_SHIFT` 300, gives two staff guns once as `GiftA/GiftB`).
+  Plugin API now: `Version, SetGunMode, TriggerHeld, TriggerPressed, GunStat(Weapon, String), FireGun(Actor, right, up, forward)`
+  (`FireBullet` removed). Enemies: a `TESSpellCastEvent` sink; when a non-player actor casts the enchantment of the gun in its hands the
+  plugin launches `burst-1` more bullets from the muzzle, one per interval, at `currentCombatTarget` (2x spread). Notes in `docs/enemy-ai.md`.
+  UNCONFIRMED in game: that the cast event arrives for NPC staff casts with the enchantment's id (the first eight casts are logged in
+  `SkylandsNative.log`), that ordinary bandits use a staff gun at all, that `Projectile::Launch` accepts an enchantment as the spell, that the
+  per-gun keyword editor ids are readable at run time, the loot mix, gun ids across builds (the second plugin numbers by position, so a gun
+  set that changes between builds can change which gun an id is; an old character's earlier staff SMG is gone with 0.15.0).
+  Champollion: a function with a `jmpf` over one assignment then more code gave "Skipped inoperative" (`Load`); `Fresh` (jmpf, return, label) is the pattern that decompiles.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
