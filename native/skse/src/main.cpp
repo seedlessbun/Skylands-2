@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 110;  // 1.1.0
+	constexpr std::int32_t kVersion = 111;  // 1.1.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -196,8 +196,15 @@ namespace
 			return it->second.clip > 0;
 		}
 		GunInfo info{};
+		int     seen = 0;
+		std::string names;
 		a_weapon->ForEachKeyword([&](RE::BGSKeyword* a_keyword) {
-			const std::string_view edid = a_keyword ? a_keyword->GetFormEditorID() : "";
+			// the member, not the virtual GetFormEditorID (a vtable slot that moved between runtimes would read garbage)
+			const std::string_view edid = a_keyword && a_keyword->formEditorID.c_str() ? a_keyword->formEditorID.c_str() : "";
+			++seen;
+			if (names.size() < 300) {
+				names += std::string(edid) + " ";
+			}
 			constexpr std::string_view prefix = "SkylandsGun_";
 			if (edid.starts_with(prefix)) {
 				std::string_view rest = edid.substr(prefix.size());
@@ -222,6 +229,12 @@ namespace
 			}
 			return RE::BSContainer::ForEachResult::kContinue;
 		});
+		static int told = 0;
+		if (told < 12 && (info.clip > 0 || told < 4)) {  // the first weapons looked at are told: how many keywords, which, and what was read
+			++told;
+			SKSE::log::info("gun check {:08X}: {} keywords [{}] -> clip {}, interval {:.3f}, reload {:.1f}, spread {:.1f}, burst {}", a_weapon->GetFormID(), seen,
+				names, info.clip, info.interval, info.reload, info.spread, info.burst);
+		}
 		g_guns[a_weapon->GetFormID()] = info;
 		a_out = info;
 		return info.clip > 0;
@@ -473,7 +486,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 1, 0, 0 },
+	.Version = { 1, 1, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

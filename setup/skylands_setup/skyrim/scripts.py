@@ -2114,8 +2114,24 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             # a staff gun put on arms the script. The game also announces the gun's enchantment as put on: it is no weapon, nothing happens
             ("cast", ("id", "w"), ("id", "akBaseObject")),
             call("IsGun", ("id", "w"), dest=T0),
-            ("jmpf", T0, ("lbl", "end")),
+            ("jmpf", T0, ("lbl", "no")),
             call("Take", ("id", "w")),
+            ("jmp", ("lbl", "end")),
+            ("label", "no"),
+            call("Unknown", ("id", "w")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    unknown = Function(
+        "Unknown",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("msg", "String")],
+        code=[
+            # one of the two guns this script gave, and the plugin does not know it as a gun: say so (the plugin's log says why)
+            ("cmp_eq", T0, ("id", "w"), ("id", "::GiftA_var")),
+            ("jmpf", T0, ("lbl", "end")),
+            *notify(("str", "Skylands: the plugin does not know this staff gun (see SkylandsNative.log)")),
             ("label", "end"),
             ("return", None),
         ],
@@ -2284,7 +2300,8 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     arm = Function(
         "Arm",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "String"), ("b", "String"), ("c", "String"), ("d", "String"),
-                ("e", "String"), ("f", "String"), ("g", "String"), ("got", "Float"), ("v", "Int"), ("msg", "String")],
+                ("e", "String"), ("f", "String"), ("g", "String"), ("got", "Float"), ("v", "Int"), ("msg", "String"),
+                ("r", "Form"), ("w", "Weapon"), ("hand", "String"), ("gi", "Float"), ("gs", "String")],
         code=[
             # the box says what the build made and what the game reports: SKSE, the plugin, the charge gauge
             *ret_if(("id", "Reloading"), "idle"),
@@ -2306,6 +2323,16 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("jmpf", ("id", "Native"), ("lbl", "nodll")),
             ("assign", ("id", "g"), ("str", "loaded")),
             ("label", "nodll"),
+            # which hand holds the gun, and the interval the plugin read from its keyword
+            ("assign", ("id", "hand"), ("str", "NOT the right hand")),
+            ("callmethod", ("id", "GetEquippedObject"), ("id", "Me"), ("id", "r"), ("int", 1)),
+            ("cast", ("id", "w"), ("id", "r")),
+            ("cmp_eq", T0, ("id", "w"), ("id", "Gun")),
+            ("jmpf", T0, ("lbl", "lefty")),
+            ("assign", ("id", "hand"), ("str", "right hand")),
+            ("label", "lefty"),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "GunStat"), ("id", "gi"), ("id", "Gun"), ("str", "interval")),
+            ("cast", ("id", "gs"), ("id", "gi")),
             ("assign", ("id", "msg"), ("str", "Skylands staff gun. SKSE ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "d")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("str", ".")),
@@ -2320,7 +2347,11 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "c")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("str", "; the staff's charge gauge reads ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "a")),
-            ("strcat", ("id", "msg"), ("id", "msg"), ("str", ". ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", "; the gun is in the ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "hand")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", "; the plugin read the gun's interval as ")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("id", "gs")),
+            ("strcat", ("id", "msg"), ("id", "msg"), ("str", " s. ")),
             ("strcat", ("id", "msg"), ("id", "msg"), ("id", "::Info_var")),
             ("callstatic", ("id", "Debug"), ("id", "MessageBox"), NONE, ("id", "msg")),
             ("return", None),
@@ -2415,6 +2446,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("cast", ("id", "v"), ("id", "Mag")),
             ("fmul", ("id", "v"), ("id", "v"), ("id", "::ChargePerShot_var")),
             ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "RightItemCharge"), ("id", "v")),
+            ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "LeftItemCharge"), ("id", "v")),
             ("callstatic", ("id", "WornObject"), ("id", "SetItemCharge"), NONE, ("id", "Me"), ("int", 1), ("int", 0), ("id", "v")),
             ("return", None),
         ],
@@ -2445,7 +2477,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         auto_properties=[("GiftA", "Weapon"), ("GiftB", "Weapon"), ("SpeedMult", "Float"), ("ChargePerShot", "Float"),
                          ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
                          ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, resume, is_gun, on_equipped, take, fresh, load, on_unequipped, on_update, poll, hold, pull, fire, ready,
+        functions=[on_start, on_load, start, resume, is_gun, on_equipped, unknown, take, fresh, load, on_unequipped, on_update, poll, hold, pull, fire, ready,
                    arm, grip, heal, let, speed, count, tell, sync, reload_],
     )
 

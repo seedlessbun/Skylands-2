@@ -532,6 +532,7 @@ def staff_shot_sound(m: "Masters", log: list[str]):
     return found[0][2], found[0][1]
 
 
+STAFF_EQUIP_SLOT = 0x00013F42  # Skyrim.esm EQUP RightHand: a staff gun goes in the right hand whatever the hands hold (a vanilla staff is "either hand", and went to the left with a gun in the right)
 STAFF_KINDS = ("smg", "assault_rifle")  # the gun types that are staff guns (the other types stay crossbows)
 STAFF_NPC_BURST_MAX = 6
 
@@ -676,6 +677,7 @@ class Armory:
         w.set("EDID", esp.zstr(edid))
         insert_ordered(w, "FULL", esp.zstr(name), WEAP_ORDER)
         insert_ordered(w, "EITM", esp.u32(en.form_id), WEAP_ORDER)
+        w.set("ETYP", esp.u32(STAFF_EQUIP_SLOT)) if w.get("ETYP") is not None else insert_ordered(w, "ETYP", esp.u32(STAFF_EQUIP_SLOT), WEAP_ORDER)
         row = self.gunner.rows[self.gunner.index[(kind, g.get("manufacturer", ""))]] if (kind, g.get("manufacturer", "")) in self.gunner.index \
             else self.gunner.rows[KINDS.index(kind)]
         magazine = int(clip or row["clip"])

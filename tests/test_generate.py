@@ -459,6 +459,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     for w in staff:
         assert w.first("DNAM")[0] == 8 and w.first("CNAM") is None  # animation type: staff; no template weapon (it would give the vanilla staff's model)
         assert b"Skylands" in w.first("MODL") and w.first("EAMT")
+        assert st.unpack("<I", w.first("ETYP"))[0] == 0x00013F42  # the right hand always (a vanilla staff is "either hand" and went to the left with a gun in the right)
         en = by_id["ENCH"][st.unpack("<I", w.first("EITM"))[0]]
         assert w.form_id == en.form_id + 1 or True
         assert st.unpack_from("<i", en.first("ENIT"))[0] == 0 and st.unpack_from("<I", en.first("ENIT"), 4)[0] & 1  # costs nothing

@@ -254,7 +254,7 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
             "Staff gun: reloading", "Staff gun: reloaded", "Me.AddItem(f, 1, False)", "Form f = GiftA as Form", "f = GiftB as Form",
             "Me.GetEquippedObject(1)", "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
             "ObjectReference ref = Me as ObjectReference", "ShotSound.Play(ref)",
-            "Weapon Property GiftA Auto", "Float Property ChargePerShot Auto", "Sound Property ShotSound Auto", "Float Property OffsetForward Auto"):
+            "Me.SetActorValue(\"LeftItemCharge\", v)", "Self.Unknown(w)", "the plugin does not know this staff gun", "; the gun is in the ", "Weapon Property GiftA Auto", "Float Property ChargePerShot Auto", "Sound Property ShotSound Auto", "Float Property OffsetForward Auto"):
         assert text in psc, text
     # what the old single-gun script kept in properties is the plugin's now; the workarounds of plain Papyrus are gone
     assert "DisablePlayerControls" not in psc  # 0.14.3 switched the fighting controls off; the plugin swallows the attack button instead

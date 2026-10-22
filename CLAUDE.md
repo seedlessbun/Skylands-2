@@ -205,6 +205,16 @@ Other commands:
   per-gun keyword editor ids are readable at run time, the loot mix, gun ids across builds (the second plugin numbers by position, so a gun
   set that changes between builds can change which gun an id is; an old character's earlier staff SMG is gone with 0.15.0).
   Champollion: a function with a `jmpf` over one assignment then more code gave "Skipped inoperative" (`Load`); `Fresh` (jmpf, return, label) is the pattern that decompiles.
+- 0.15.0 in game (user report, no log yet): the rapid fire was gone for both the SMG and the assault rifle: the staff's own charging
+  animation played on a click and the charge bar no longer moved. That is the unarmed/left-hand picture (gun mode off, or the gun in the LEFT
+  hand where "right attack" is not the gun's button and `RightItemCharge` is not its bar). Not proven. Suspects, in the order they were
+  hardened in 0.15.1: (1) the staff weapon kept the vanilla staff's equip slot "either hand", so with a gun in the right hand it went to the left;
+  (2) the plugin read keyword editor ids through the VIRTUAL `GetFormEditorID` (a slot that may have moved on 1.7.104) and found no
+  `SkylandsGun_` numbers, so `GunStat` read 0 and the script never armed.
+- 0.15.1 (TestBuild-86, plugin 1.1.1): `ETYP` of every staff gun is EQUP RightHand (0x00013F42, `STAFF_EQUIP_SLOT`); the plugin reads the
+  keyword's `formEditorID` member and logs "gun check <id>: N keywords [names] -> clip ..." for the first weapons it looks at; `Sync` also sets
+  `LeftItemCharge`; the equip box says which hand holds the gun and the interval the plugin read; equipping the gifted SMG when the plugin
+  does not know it says so on screen. If it still fails: read `SkylandsNative.log` ("gun check" lines) and the box.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
