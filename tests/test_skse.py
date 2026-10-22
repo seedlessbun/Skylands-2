@@ -60,12 +60,15 @@ def test_stage_plugin_copies_the_dll_and_writes_the_settings(tmp_path):
     assert "Convergence=3000" in (stage / "Data" / "SKSE" / "Plugins" / "SkylandsNative.ini").read_text()
 
 
-def test_the_commonlib_patch_makes_runtimes_from_1_6_on_the_ae_lineage():
+def test_the_plugin_is_built_against_a_commonlib_that_knows_skyrim_1_7():
     root = Path(__file__).resolve().parent.parent
-    patch = (root / "native" / "skse" / "patches" / "commonlib-runtime-minor-7.patch").read_text()
-    assert "_version[1] >= 6" in patch and "a_version[1] >= 6" in patch and "Runtime::AE" in patch
     flow = (root / ".github" / "workflows" / "skse-plugin.yml").read_text()
-    assert "commonlib-runtime-minor-7.patch" in flow and flow.index("apply") < flow.index("vcpkg install")  # applied before the build
+    # CharmedBaryon's CommonLibSSE-NG of 2024 took 1.7.104 for the old Special Edition ("failed to open address library file") and
+    # could not read format 5 ("unsupported address library format: 5"); alandtse's v12.1.0 does both
+    assert "alandtse/CommonLibSSE-NG" in flow and "--branch v12.1.0" in flow and "git clone https://github.com/CharmedBaryon" not in flow
+    assert "directxtk" in flow and "simpleini" in flow and "toml11" in flow  # what that version needs from vcpkg
+    cmake = (root / "native" / "skse" / "CMakeLists.txt").read_text()
+    assert "ENABLE_SKYRIM_VR OFF" not in cmake  # the prebuilt library is built for all three runtimes
 
 
 def test_status_names_the_address_library_file_of_a_1_7_runtime(tmp_path):

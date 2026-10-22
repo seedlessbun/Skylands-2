@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 101;  // 1.0.1
+	constexpr std::int32_t kVersion = 102;  // 1.0.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
@@ -223,11 +223,11 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 0, 1, 0 },
+	.Version = { 1, 0, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
-SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
+SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* a_skse)
 {
 	SKSE::Init(a_skse);
 	StartLog();

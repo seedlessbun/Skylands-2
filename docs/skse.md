@@ -52,9 +52,12 @@ reload take the rounds away, and shots were found by counting ammo because `OnPl
 * **Per-instance data**: one crossbow record per gun *type* with stats on the instance (`WornObject`, `ExtraData`) instead of 40 variants per balance.
 * **Magazine in the enchantment charge** like the staff, instead of rounds taken out of the pack.
 
-## Skyrim 1.7.x (found in 0.14.0)
-CommonLibSSE-NG decides "Anniversary Edition" only when the runtime's minor version is exactly 6. On 1.7.104 it took the old
-Special Edition file name (`version-1-7-104-0.bin`, format 1) and failed with "failed to open address library file" although
-`versionlib-1-7-104-0.bin` was there. The workflow applies `native/skse/patches/commonlib-runtime-minor-7.patch` (minor 6 or more
-is AE, 4 is VR) to the CommonLibSSE-NG checkout before building. Whether the game's own structures and vtables are still those
-CommonLibSSE-NG knows on 1.7 is unconfirmed: the plugin writes the runtime it found to `SkylandsNative.log`.
+## Skyrim 1.7.x (found in 0.14.0 and 0.14.1)
+On the 1.7.104 runtime the plugin built with the 2024 CommonLibSSE-NG (CharmedBaryon) failed twice: it took 1.7 for the old Special
+Edition ("failed to open address library file": it looked for `version-1-7-104-0.bin`; 0.14.1 patched that), and then it could not
+read the Address Library of 1.7.x, which is format 5 ("unsupported address library format: 5"). Since 0.14.2 the plugin is built
+against alandtse/CommonLibSSE-NG v12.1.0 (the maintained fork, released 2026-10-11), which reads format 5, treats minor version 6 or
+more as the Anniversary Edition lineage, and declares the Address Library v5 flag SKSE 2.3.x asks for. SKSE 2.3.1 and the
+"All in one" Address Library v13 or newer (it has `versionlib-1-7-104-0.bin`) are what 1.7.104 needs.
+Whether the game's own structures and vtables on 1.7 are still those that library knows is unconfirmed until the plugin has run:
+it writes the runtime it found to `SkylandsNative.log`.

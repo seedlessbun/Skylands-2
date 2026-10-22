@@ -42,7 +42,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 112 passed at 0.14.0.
+Tests that need a tool skip when its variable is unset; with all three set, 114 passed at 0.14.2.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -84,7 +84,7 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.14.0**, TestBuild-80 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.14.2**, TestBuild-82 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -159,6 +159,11 @@ Other commands:
   `SKSE.GetPluginVersion` sees it, that the attack-button listener works, that the bullet leaves the hand and goes where the crosshair
   points, that `WornObject.SetItemCharge` moves the bar. If the plugin does not load, read `Documents/My Games/Skyrim Special
   Edition/SKSE/skse64.log` and `SkylandsNative.log` (both in that SKSE folder).
+- 0.14.1 in game: "failed to open address library file" on Skyrim 1.7.104 (user's runtime; SKSE 2.3.1; `versionlib-1-7-104-0.bin`):
+  CharmedBaryon's CommonLibSSE-NG picked the SE file name. 0.14.1 patched that; then "unsupported address library format: 5".
+  0.14.2 (TestBuild-82): the workflow now clones alandtse/CommonLibSSE-NG v12.1.0 (reads format 5; the CharmedBaryon one cannot). The
+  plugin is 1.0.2. Never build the plugin against the old CharmedBaryon library again. UNCONFIRMED: that the plugin then loads and
+  works on 1.7.104 (vtable and struct layouts of 1.7 vs the library).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
