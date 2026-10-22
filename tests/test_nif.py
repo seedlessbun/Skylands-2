@@ -92,3 +92,21 @@ def test_gun_carries_the_vanilla_attach_point():
 
     data = nif.gun([(M.box(0, 0, 0, 1, 1, 1), None, None)], extra=[("NiStringExtraData", "Prn", "WeaponBack", 0)])
     assert ("NiStringExtraData", "Prn", "WeaponBack", 0) in nifread.extra_data(data)
+
+
+@pytest.mark.skipif(not NIFCHECK, reason="set NIFCHECK to the nifly checker")
+def test_gun_with_a_muzzle_node_loads_in_nifly_and_the_node_is_where_it_was_put(tmp_path):
+    src, out = tmp_path / "gun.nif", tmp_path / "resaved.nif"
+    src.write_bytes(nif.gun([(M_box(), "textures\\skylands\\guns\\t.dds", None)], (0.1, 0.4, 0.05), 2.0, "Gun", None, (1.5, 20.25, -3.0)))
+    r = subprocess.run([NIFCHECK, str(src), str(out)], capture_output=True, text=True, check=True)
+    assert "NiNode" in r.stdout and "resaved" in r.stdout, r.stdout
+    data = src.read_bytes()
+    assert b"SkylandsMuzzle" in data
+    at = data.rindex(struct.pack("<3f", 1.5, 20.25, -3.0))
+    assert at > 0  # the translation of the node is in the file
+
+
+def M_box():
+    from skylands_setup import meshes as M
+
+    return M.box(0, 0, 0, 0.2, 1.0, 0.3)

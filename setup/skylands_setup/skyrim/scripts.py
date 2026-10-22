@@ -2027,12 +2027,14 @@ def gunner_quest() -> Script:
 def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     """SkylandsStaffGun extends ActiveMagicEffect: the staff-type automatic gun prototype (SkylandsGunModels.esp).
 
-    The gun is a staff whose enchantment is an aimed concentration cast of an effect that does nothing: it only makes the staff
-    take the casting pose while the attack button is down. The bullets are the script's, through the SKSE plugin SkylandsNative
+    The gun is a staff (its enchantment is only there for the charge gauge; the player's fighting controls are switched off while
+    it is in the hand, so the attack button casts nothing and plays no animation: the gun stays in the hand pointing forward).
+    The bullets are the script's, through the SKSE plugin SkylandsNative
     (native/skse): the plugin says whether the attack button is down (SkylandsNative.TriggerHeld / TriggerPressed) and launches
-    the bullet spell's projectile from the right hand's magic node along the crosshair with a spread (FireBullet). The script
+    the bullet spell's projectile from the muzzle node of the gun's own mesh along the crosshair with a spread (FireBullet). The script
     fires one bullet the moment the button goes down and one every Interval seconds while it is held, counts the magazine,
-    shows it on the staff's enchantment charge (SKSE's WornObject.SetItemCharge), and reloads by waiting ReloadTime with the
+    shows it on the staff's enchantment charge (the RightItemCharge actor value drives the bar, WornObject.SetItemCharge keeps
+    the item's own charge), and reloads by waiting ReloadTime with the
     gauge empty and then filling it. A box on the first equip says what the build made and what SKSE and the plugin report.
 
       Event OnEffectStart / OnPlayerLoadGame / OnObjectEquipped / OnObjectUnequipped / OnUpdate
@@ -2079,16 +2081,22 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     resume = Function(
         "Resume",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("r", "Form")],
+        locals=[("::nonevar", "None"), ("f", "Form"), ("r", "Form"), ("held", "Bool")],
         code=[
-            # a saved game loaded with the staff already in the hand: the equip event does not come again
+            # a saved game loaded with the staff already in the hand: the equip event does not come again; with it away, the
+            # fighting controls this script switched off are given back
             ("cast", ("id", "f"), ("id", "::StaffGun_var")),
             ("callmethod", ("id", "GetEquippedObject"), ("id", "Me"), ("id", "r"), ("int", 1)),
-            ("cmp_eq", T0, ("id", "r"), ("id", "f")),
-            ("jmpf", T0, ("lbl", "away")),
+            ("cmp_eq", ("id", "held"), ("id", "r"), ("id", "f")),
+            ("jmpf", ("id", "held"), ("lbl", "away")),
             ("assign", ("id", "Armed"), ("bool", True)),
             call("Speed"),
+            call("Grip"),
             ("label", "away"),
+            ("not", ("id", "held"), ("id", "held")),
+            ("jmpf", ("id", "held"), ("lbl", "end")),
+            call("Let"),
+            ("label", "end"),
             ("return", None),
         ],
     )
@@ -2148,6 +2156,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("jmpf", T0, ("lbl", "end")),
             ("assign", ("id", "Armed"), ("bool", True)),
             call("Speed"),
+            call("Grip"),
             call("Arm"),
             ("label", "end"),
             ("return", None),
@@ -2166,6 +2175,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("jmpf", T0, ("lbl", "end")),
             ("assign", ("id", "Armed"), ("bool", False)),
             ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "WeaponSpeedMult"), ("float", 1.0)),
+            call("Let"),
             ("label", "end"),
             ("return", None),
         ],
@@ -2311,6 +2321,35 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("return", None),
         ],
     )
+    grip = Function(
+        "Grip",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            # the fighting controls (attack, block, readying) are off while the gun is in the hand, so the attack button plays no
+            # animation and casts nothing (the plugin still sees the button); the weapon is drawn, since it cannot be drawn by hand now
+            ("callstatic", ("id", "Game"), ("id", "DisablePlayerControls"), NONE, ("bool", False), ("bool", True), ("bool", False),
+             ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("int", 0)),
+            ("assign", ("id", "ControlsOff"), ("bool", True)),
+            ("callmethod", ("id", "IsWeaponDrawn"), ("id", "Me"), T0),
+            ("not", T0, T0),
+            ("jmpf", T0, ("lbl", "drawn")),
+            ("callmethod", ("id", "DrawWeapon"), ("id", "Me"), NONE),
+            ("label", "drawn"),
+            ("return", None),
+        ],
+    )
+    let = Function(
+        "Let",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            # the fighting controls back, but only if this script switched them off
+            *ret_unless(("id", "ControlsOff"), "off"),
+            ("callstatic", ("id", "Game"), ("id", "EnablePlayerControls"), NONE, ("bool", False), ("bool", True), ("bool", False),
+             ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("int", 0)),
+            ("assign", ("id", "ControlsOff"), ("bool", False)),
+            ("return", None),
+        ],
+    )
     speed = Function(
         "Speed",
         locals=[("::nonevar", "None")],
@@ -2356,9 +2395,12 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         "Sync",
         locals=[("::nonevar", "None"), ("v", "Float")],
         code=[
-            # the staff's enchantment charge is the ammunition gauge: rounds left times the charge of one round
+            # the staff's enchantment charge is the ammunition gauge: rounds left times the charge of one round. The bar of the HUD
+            # follows the RightItemCharge actor value (it dropped with every shot in 0.13.15; WornObject.SetItemCharge alone
+            # left it where it was in 0.14.x), the item's own charge is kept in step with WornObject
             ("cast", ("id", "v"), ("id", "Mag")),
             ("fmul", ("id", "v"), ("id", "v"), ("id", "::ChargePerShot_var")),
+            ("callmethod", ("id", "SetActorValue"), ("id", "Me"), NONE, ("str", "RightItemCharge"), ("id", "v")),
             ("callstatic", ("id", "WornObject"), ("id", "SetItemCharge"), NONE, ("id", "Me"), ("int", 1), ("int", 0), ("id", "v")),
             ("return", None),
         ],
@@ -2383,13 +2425,14 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         parent="ActiveMagicEffect",
         variables=[("Me", "Actor", None), ("Mag", "Int", ("int", 0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
-                   ("Native", "Bool", ("bool", False)), ("Tag", "Int", ("int", 0)), ("Fired", "Int", ("int", 0))],
+                   ("Native", "Bool", ("bool", False)), ("Tag", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)),
+                   ("ControlsOff", "Bool", ("bool", False))],
         auto_properties=[("StaffGun", "Weapon"), ("BulletSpell", "Spell"), ("MagSize", "Int"), ("ReloadTime", "Float"),
                          ("SpeedMult", "Float"), ("Interval", "Float"), ("ChargePerShot", "Float"), ("Spread", "Float"),
                          ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
                          ("Info", "String"), ("Verbose", "Bool")],
         functions=[on_start, on_load, start, resume, report, on_equipped, equipped, on_unequipped, on_update, poll, hold, pull, fire, ready,
-                   arm, speed, count, tell, sync, reload_],
+                   arm, grip, let, speed, count, tell, sync, reload_],
     )
 
 

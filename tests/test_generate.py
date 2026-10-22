@@ -486,7 +486,9 @@ def test_staff_gun_prototype_is_one_staff_weapon_with_a_bullet_spell(tmp_path):
     assert b"AimPoint" not in vm  # the aim point of 0.13.15 is gone: the plugin launches the bullet
     assert b"SpeedMult" in vm
     assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsStaffGun17.pex").is_file()
-    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsNative.pex").is_file()  # SKSE binds the plugin's functions to this declaration
+    assert (tmp_path / "out" / "Data" / "Scripts" / "SkylandsNative.pex").is_file()
+    mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*rep["staff_gun"]["mesh"].split("\\"))
+    assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from  # SKSE binds the plugin's functions to this declaration
 
 
 def test_staff_hold_points_the_barrel_at_the_thicker_end_of_the_staff():

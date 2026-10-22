@@ -42,7 +42,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 114 passed at 0.14.2.
+Tests that need a tool skip when its variable is unset; with all three set, 115 passed at 0.14.3.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -84,7 +84,7 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.14.2**, TestBuild-82 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.14.3**, TestBuild-83 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -164,6 +164,21 @@ Other commands:
   0.14.2 (TestBuild-82): the workflow now clones alandtse/CommonLibSSE-NG v12.1.0 (reads format 5; the CharmedBaryon one cannot). The
   plugin is 1.0.2. Never build the plugin against the old CharmedBaryon library again. UNCONFIRMED: that the plugin then loads and
   works on 1.7.104 (vtable and struct layouts of 1.7 vs the library).
+- 0.14.2 in game (user report + screenshot): the plugin LOADS on Skyrim 1.7.104 with SKSE 2.3.1 (box: "SKSE 2.3.1, Skylands plugin:
+  loaded", magazine 48 of 48, gauge 4800); firing works well: one click one bullet, held fires rapidly, reload after the magazine,
+  the staff gun in the right hand pointing forward. Wrong: bullets left from where the TOP OF THE STAFF would be (the
+  `NPC R MagicNode [RMag]` follows the staff's tip, not the gun), the charge bar no longer dropped (`WornObject.SetItemCharge` alone does not move the HUD bar; the
+  `RightItemCharge` actor value did in 0.13.15), and the staff's casting animation played while the button was held.
+- 0.14.3 (TestBuild-83, plugin 1.0.3): the gun's mesh holds an empty NiNode `SkylandsMuzzle` at the end of the barrel (`nif.gun(muzzle=)`,
+  the point followed through roll, pitch, yaw, shift and fit in `models._build`), and `FireBullet` starts the bullet there (fallback: the hand's
+  magic node, then a point ahead of the eye; the first use logs "bullet origin: ..." to SkylandsNative.log). `Sync` sets the
+  `RightItemCharge` actor value AND `WornObject.SetItemCharge`. While the staff is in the hand the script switches the player's fighting controls
+  off (`Game.DisablePlayerControls(fighting)`, `Grip`; back on in `Let` when the staff is unequipped or on a load without it, tracked by
+  `ControlsOff`), so the attack button casts nothing and plays no animation; it also draws the weapon (`Actor.DrawWeapon`), since R no longer works. The plugin
+  also accepts the attack button by its mapped key when the event has no name (controls that are off may not name their events; UNCONFIRMED). Script
+  class and the plugin records are unchanged (no new ids): the existing staff stays. UNCONFIRMED in game: that the muzzle node is found,
+  that the bar drops, that the animation is gone, and that the plugin still sees the attack button while fighting controls are off. If a
+  save keeps the controls off after the plugin or script is removed: console `enableplayercontrols`.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

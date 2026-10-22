@@ -237,7 +237,10 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     for text in (
             # SKSE: the plugin of Skylands (the attack button, the bullet launch) and SKSE's own charge and version calls
             "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireBullet(Me, BulletSpell, Spread, OffsetRight, OffsetUp, OffsetForward)",
-            "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "WornObject.SetItemCharge(Me, 1, 0, v)", "WornObject.GetItemCharge(Me, 1, 0)",
+            "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "WornObject.SetItemCharge(Me, 1, 0, v)", "WornObject.GetItemCharge(Me, 1, 0)", "Me.SetActorValue(\"RightItemCharge\", v)",
+            # the fighting controls are off while the gun is in the hand (no attack animation), given back when it is away
+            "Game.DisablePlayerControls(False, True, False, False, False, False, False, False, 0)", "Game.EnablePlayerControls(False, True, False, False, False, False, False, False, 0)",
+            "ControlsOff = True", "ControlsOff = False", "If !ControlsOff", "Me.DrawWeapon()", "Self.Grip()", "Self.Let()", "Bool held = r == f",
             "SKSE.GetVersion()",
             # the loop: a press fires at once, the button held fires one every Interval, nothing while reloading or with the staff away
             "Bool pressed = SkylandsNative.TriggerPressed()", "Bool go = Self.Pull()", "While go", "Utility.Wait(Interval)",
@@ -251,7 +254,7 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
             "Spell Property BulletSpell Auto", "Weapon Property StaffGun Auto", "Float Property OffsetForward Auto"):
         assert text in psc, text
     # the workarounds of plain Papyrus are gone: no animation events or variables, no actor-value gauge, no aim point, no unequip to reload
-    for text in ("RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "RightItemCharge", "Aim", "UnequipItem", "EquipItem",
+    for text in ("RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "Aim", "UnequipItem", "EquipItem",
                  "Input.", "GetWeaponType", "Burst", "Fill"):
         assert text not in psc, text
 

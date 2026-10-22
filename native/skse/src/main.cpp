@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 102;  // 1.0.2
+	constexpr std::int32_t kVersion = 103;  // 1.0.3
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
@@ -55,6 +55,20 @@ namespace
 		}
 	}
 
+	// Is this button event the attack button? By its user event name, or, when the name is missing (the game may not name the
+	// events of controls that are switched off), by the key the player has mapped to "Right Attack/Block" on that device.
+	bool IsAttack(const RE::ButtonEvent* a_button, const RE::UserEvents* a_events)
+	{
+		if (a_button->QUserEvent() == a_events->rightAttack) {
+			return true;
+		}
+		if (!a_button->QUserEvent().empty()) {
+			return false;
+		}
+		const auto map = RE::ControlMap::GetSingleton();
+		return map && map->GetMappedKey(a_events->rightAttack.c_str(), a_button->GetDevice()) == a_button->GetIDCode();
+	}
+
 	// The attack button, from the game's own input events.
 	class InputSink : public RE::BSTEventSink<RE::InputEvent*>
 	{
@@ -76,7 +90,7 @@ namespace
 					continue;
 				}
 				const auto button = e->AsButtonEvent();
-				if (!button || button->QUserEvent() != events->rightAttack) {
+				if (!button || !IsAttack(button, events)) {
 					continue;
 				}
 				if (button->IsPressed()) {
@@ -132,19 +146,28 @@ namespace
 		const Vec3 right = Norm(Cross(dir, { 0.0f, 0.0f, 1.0f }));
 		const Vec3 up = Cross(right, dir);
 
-		// the right hand's magic node, in the first-person skeleton when the camera is first person
+		// where the bullet starts: the muzzle node of the equipped gun's own mesh (the installer's gun meshes hold an empty node,
+		// SkylandsMuzzle, at the end of the barrel), else the right hand's magic node, else a point ahead of the eye
 		const auto camera = RE::PlayerCamera::GetSingleton();
 		const bool first = shooter->IsPlayerRef() && camera && camera->IsInFirstPerson();
 		RE::NiPoint3 origin = eye;
-		bool         onNode = false;
+		const char*  found = "none";
 		if (const auto root = shooter->Get3D(first)) {
-			if (const auto node = root->GetObjectByName("NPC R MagicNode [RMag]"sv)) {
+			if (const auto node = root->GetObjectByName("SkylandsMuzzle"sv)) {
 				origin = node->world.translate;
-				onNode = true;
+				found = "muzzle";
+			} else if (const auto hand = root->GetObjectByName("NPC R MagicNode [RMag]"sv)) {
+				origin = hand->world.translate;
+				found = "hand";
 			}
 		}
-		if (!onNode) {  // no node found: a point ahead of the eye, to the right and below it
+		if (std::string_view(found) == "none") {  // no node found: a point ahead of the eye, to the right and below it
 			origin = { eye.x + dir.x * 40.0f + right.x * 14.0f, eye.y + dir.y * 40.0f + right.y * 14.0f, eye.z + dir.z * 40.0f - 12.0f };
+		}
+		static std::string_view lastFound;
+		if (lastFound != found) {  // said once, and again when it changes
+			lastFound = found;
+			SKSE::log::info("bullet origin: {} ({}), {} person", found, std::string_view(found) == "muzzle" ? "the gun's own muzzle node" : "no muzzle node in the equipped weapon's 3D", first ? "first" : "third");
 		}
 		origin.x += right.x * a_right + up.x * a_up + dir.x * a_forward;
 		origin.y += right.y * a_right + up.y * a_up + dir.y * a_forward;
@@ -223,7 +246,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 0, 2, 0 },
+	.Version = { 1, 0, 3, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

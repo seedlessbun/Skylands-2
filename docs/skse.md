@@ -21,7 +21,7 @@ Papyrus class `SkylandsNative` (static functions; `Data/Scripts/SkylandsNative.p
 | `Int Version()` | the plugin version (101 = 1.0.1) |
 | `Bool TriggerHeld()` | the attack button ("Right Attack/Block": keyboard, mouse or gamepad, as remapped) is down, and no menu is open |
 | `Bool TriggerPressed()` | the button went down since the last call (a tap shorter than a script poll is still seen) |
-| `Bool FireBullet(Actor, Spell, Float spread, Float right, Float up, Float forward)` | launches the spell's projectile (`Projectile::Launch`) from the right hand's magic node (the first-person skeleton in first person), aimed at the point the crosshair looks at 3000 units ahead (`Convergence` in the ini), within a cone of `spread` degrees, offset in view space; no animation, no wind-up, no magicka. Runs on the game's thread a frame later. |
+| `Bool FireBullet(Actor, Spell, Float spread, Float right, Float up, Float forward)` | launches the spell's projectile (`Projectile::Launch`) from the equipped gun's own `SkylandsMuzzle` node (an empty NiNode the installer puts at the end of the barrel in the gun's mesh; the right hand's magic node `NPC R MagicNode [RMag]` follows the staff's tip and was where the bullets left from in 0.14.2), in the first-person skeleton in first person, aimed at the point the crosshair looks at 3000 units ahead (`Convergence` in the ini), within a cone of `spread` degrees, offset in view space; no animation, no wind-up, no magicka. Runs on the game's thread a frame later. |
 
 SKSE's own Papyrus used by the staff gun: `SKSE.GetPluginVersion`, `SKSE.GetVersion*`, `WornObject.GetItemCharge/SetItemCharge`.
 

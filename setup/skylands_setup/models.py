@@ -434,6 +434,15 @@ class GunModels:
             hold_pitch, hold_yaw, hold_roll = CALIBRATION[calib_level]
         else:
             hold_pitch, hold_yaw, hold_roll = HOLD_PITCH + self.pitch, HOLD_YAW + self.spin, 0.0
+        marker = None
+        if hold is not None:
+            # the muzzle: the middle of the barrel's end, followed through every turn and the fit below as a one-vertex mesh
+            plo, phi = _bounds_of(placed)
+            span = max(phi[1] - plo[1], 1e-6)
+            end = [pt for pm in placed for pt in pm.positions if pt[1] >= phi[1] - 0.04 * span]
+            tip = (sum(pt[0] for pt in end) / len(end), phi[1], sum(pt[2] for pt in end) / len(end)) if end else ((plo[0] + phi[0]) / 2, phi[1], (plo[2] + phi[2]) / 2)
+            marker = M.Mesh(positions=[tip], normals=[(0.0, 1.0, 0.0)], tris=[])
+            placed = [*placed, marker]
         roll = math.radians(hold_roll)  # about the barrel axis
         placed = [M.transformed(p, ((math.cos(roll), 0.0, math.sin(roll)), (0.0, 1.0, 0.0), (-math.sin(roll), 0.0, math.cos(roll)))) for p in placed] if roll else placed
         pitch = math.radians(hold_pitch)
@@ -456,6 +465,10 @@ class GunModels:
             off = tuple((bx, by, bz)[i] * hold.forward * length + (ux, uy, uz)[i] * hold.lift * length for i in range(3))
             placed = [M.transformed(p, None, 1.0, off) for p in placed]
         placed = [fit_mesh(p, fit, 1.0) for p in placed]
+        muzzle = None
+        if marker is not None:
+            muzzle = tuple(float(c) for c in placed[-1].positions[0])
+            placed = placed[:-1]
         groups: dict[tuple[str | None, str | None], list[M.Mesh]] = {}
         for p in placed:
             groups.setdefault((p.texture, p.normal_map), []).append(p)
@@ -469,7 +482,7 @@ class GunModels:
         lo2, hi2 = allp.bounds()
         half = tuple(max(0.02, (hi2[i] - lo2[i]) / 2 / HAVOK_SCALE) for i in range(3))
         self.sizes.setdefault(gun_type, []).append((hi2[1] - lo2[1], max(hi2[i] - lo2[i] for i in range(3))))
-        data = nif.gun(shapes, half, 2.0, "SkylandsGun", extra)  # type: ignore[arg-type]
+        data = nif.gun(shapes, half, 2.0, "SkylandsGun", extra, muzzle)  # type: ignore[arg-type]
         rel = f"{MESH_DIR}\\{method}_{key}.nif"
         path = self.out / "Meshes" / Path(*rel.split("\\"))
         path.parent.mkdir(parents=True, exist_ok=True)
