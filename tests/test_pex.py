@@ -257,6 +257,18 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_native_stub_declares_the_plugins_functions(tmp_path):
+    psc = decompile(tmp_path, scripts.native_stub(), "SkylandsNative")
+    assert "ScriptName SkylandsNative\n" in psc
+    for text in ("Bool Function FireBullet(Actor akShooter, Spell akBullet, Float afSpread, Float afRight, Float afUp, Float afForward) Global Native",
+                 "Bool Function TriggerHeld() Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
+        assert text in psc, text
+    main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
+    for text in ('"FireBullet"sv', '"TriggerHeld"sv', '"TriggerPressed"sv', '"Version"sv', "RE::Actor* a_shooter, RE::SpellItem* a_spell, float a_spread, float a_right, float a_up, float a_forward"):
+        assert text in main, text  # the stub and the plugin's registrations say the same thing
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_retired_script_is_empty(tmp_path):
     psc = decompile(tmp_path, scripts.retired("SkylandsStaffGun"), "SkylandsStaffGun")
     assert "ScriptName SkylandsStaffGun Extends ActiveMagicEffect" in psc and "Function" not in psc and "Event" not in psc

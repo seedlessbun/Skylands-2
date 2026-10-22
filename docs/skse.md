@@ -15,7 +15,7 @@ installs them once (`Check-SKSE.bat` says what is missing; the installer logs th
 (MSVC, CommonLibSSE-NG, Address Library: it runs on every runtime Address Library supports). Its log:
 `Documents/My Games/Skyrim Special Edition/SKSE/SkylandsNative.log`.
 
-Papyrus class `SkylandsNative` (static functions):
+Papyrus class `SkylandsNative` (static functions; `Data/Scripts/SkylandsNative.pex`, written by the installer, declares them: SKSE binds a plugin's functions to the natives a script declares):
 | function | what it does |
 |---|---|
 | `Int Version()` | the plugin version (100 = 1.0.0) |

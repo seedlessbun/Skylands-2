@@ -1176,6 +1176,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         if shooting == "staff":
             (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
             (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
+            (out_data / "Scripts" / "SkylandsNative.pex").write_bytes(pex.write(scripts.native_stub()))  # the declarations of the SKSE plugin's functions
             for old_name in ("SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14", "SkylandsStaffGun15", "SkylandsStaffGun16"):
                 (out_data / "Scripts" / f"{old_name}.pex").write_bytes(pex.write(scripts.retired(old_name)))
     for mesh_path, mesh_bytes in report.pop("staff_tracer", []):  # the mesh bytes are not part of the report

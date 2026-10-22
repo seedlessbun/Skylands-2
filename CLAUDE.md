@@ -42,7 +42,7 @@ Run from the repo root (needs `pytest`, `lz4`):
 
     CHAMPOLLION=<path>/Champollion ESPCHECK=<path>/espcheck NIFCHECK=<path>/check python -m pytest tests -q
 
-Tests that need a tool skip when its variable is unset; with all three set, 104 passed at 0.13.16.
+Tests that need a tool skip when its variable is unset; with all three set, 112 passed at 0.14.0.
 Rebuild the tools if they are gone:
 - Champollion (decompiler): `git clone https://github.com/Orvid/Champollion`, then
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build` (needs Boost program_options);
@@ -84,7 +84,7 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.13.16**, TestBuild-79 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.14.0**, TestBuild-80 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -143,12 +143,22 @@ Other commands:
   loop, ended after the second; which animation-variable values the "trigger let go" message showed is not known), reload
   worked (4 s delay, then full), and holding the trigger STILL casts a fire spell (the speck projectile did not remove it; cause
   unknown: the donor effect's remaining art or sound, or the flame-type projectile itself).
-- PLAN (the user said so, next prompt, more power): SKSE will be added as a dependency, and the plain-Papyrus workarounds are to be
-  refactored out: the animation-variable polling and release-event guesses (`Held`/`Down`, `Release`), the `RightItemCharge`
-  actor-value gauge, the aim point and face origin (`Place`/`Fire`/`MakeAim`, `--staff-origin`), the concentration trigger and its
-  donor flame projectile (`trigger_donor`, `quiet_art`, `TriggerDot`), and the dummy-event diagnostics. Until then, no code changes.
-  Before that the user had agreed to try both origin experiments (an aim point with a real model and a target marker ahead; the
-  bullet spell as a right-hand spell type) with a switch in the `.bat`; SKSE supersedes them if it can place the cast at a node.
+- 0.14.0 (TestBuild-80): SKSE added (see the standing rule and `docs/skse.md`). `skse.py` (installer checks, `Check-SKSE.bat`), `native/skse`
+  (plugin `SkylandsNative`: `TriggerHeld`/`TriggerPressed` from the input event of "Right Attack/Block", `FireBullet` =
+  `Projectile::Launch` of the bullet spell from `NPC R MagicNode [RMag]`, aimed at the crosshair 3000 units ahead within the
+  spread), `SkylandsNative.pex` (`scripts.native_stub`, declares the natives: SKSE needs it), the staff script rewritten
+  (`SkylandsStaffGun17`: polls `TriggerPressed` 30 times a second while armed, fires at once and every `Interval` while held,
+  gauge = `WornObject.SetItemCharge` 100 a round, reload = delay then full, box shows SKSE version, plugin loaded or not, gauge
+  read-back, `Resume` arms a staff already in hand). Removed: animation events and variables, `RightItemCharge`, aim point,
+  `--staff-origin`, unequip reload. The trigger effect is still a concentration cast (the cast pose) of a donor flame effect, now
+  with no-hit flags and no impact data (the fire the user saw while holding is still unexplained). Hunter script fixes from the 0.13
+  Papyrus log: `Bootstrap` used `AbilityInit` instead of `::AbilityInit_var` and passed a Spell to HasSpell, `Spawn`/`RespawnOne` lacked
+  `::nonevar`, `Alive` called a `GetContainer` that Skyrim does not have. The DLL is built by CI (run 2 succeeded; the CI commit is
+  `SkylandsNative.dll built by CI`); `git pull` after a push that touches `native/skse` (use `[skip ci]` for comment-only changes).
+  UNCONFIRMED in game: that the DLL loads (needs SKSE + Address Library for the user's runtime, which the user must install), that
+  `SKSE.GetPluginVersion` sees it, that the attack-button listener works, that the bullet leaves the hand and goes where the crosshair
+  points, that `WornObject.SetItemCharge` moves the bar. If the plugin does not load, read `Documents/My Games/Skyrim Special
+  Edition/SKSE/skse64.log` and `SkylandsNative.log` (both in that SKSE folder).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
@@ -160,6 +170,6 @@ Other commands:
   Champollion needs `#include <cstring>` in `Pex/FileReader.cpp` and `<strings.h>` in `Champollion/CaselessCompare.h` on Ubuntu.
 
 ## 7. Open questions for the user
-- SKSE: the user has said it WILL be added (next prompt); still to ask: which version, and how the installer gets it.
+- SKSE: added in 0.14.0. Still unknown: the user's Skyrim runtime version (the installer logs it) and whether they have SKSE and Address Library yet.
 - Melty dependency handling.
 - Which animation type for each gun type (Stage 2).

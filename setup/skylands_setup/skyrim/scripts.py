@@ -2393,6 +2393,25 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
 
 
+def native_stub() -> Script:
+    """SkylandsNative: the declarations of the functions the SKSE plugin SkylandsNative.dll registers (Data/Scripts/SkylandsNative.pex).
+    SKSE binds a plugin's functions to the native functions a script declares, so a plugin's class needs this file or the game
+    cannot find the class when another script calls it. The types must be those of the plugin's C++ functions (native/skse/src/main.cpp)."""
+    both = 1 | 2  # global, native
+    return Script(
+        name="SkylandsNative",
+        parent="",
+        functions=[
+            Function("Version", return_type="Int", flags=both),
+            Function("TriggerHeld", return_type="Bool", flags=both),
+            Function("TriggerPressed", return_type="Bool", flags=both),
+            Function("FireBullet", return_type="Bool", flags=both,
+                     params=[("akShooter", "Actor"), ("akBullet", "Spell"), ("afSpread", "Float"), ("afRight", "Float"), ("afUp", "Float"),
+                             ("afForward", "Float")]),
+        ],
+    )
+
+
 def retired(name: str) -> Script:
     """A script with nothing in it, written over an earlier revision's file: a saved game keeps running the old script
     objects of that name as ghosts, and with this they do nothing."""

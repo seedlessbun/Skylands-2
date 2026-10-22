@@ -67,3 +67,41 @@ def test_full_build_with_proxy_models_and_uninstall(tmp_path, monkeypatch):
     log = (work / "skylands-setup.log").read_text(encoding="utf-8") if (work / "skylands-setup.log").exists() else ""
     assert "Gun models (proxy)" in log, log
     assert (sky / "Data" / "Meshes" / "Skylands" / "Guns").is_dir() or rc != 0
+
+
+def test_build_installs_the_skse_plugin_and_logs_what_skse_is_missing(tmp_path, monkeypatch):
+    bin_dir = HERE.parent / "setup" / "skylands_setup" / "bin"
+    bl2 = tmp_path / "bl2"
+    fake_bl2.pandora_install(bl2)
+    sky = fake_skyrim.build_full(tmp_path / "sky")
+    work = tmp_path / "work"
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    rc = build.main(["--bl2", str(bl2), "--skyrim", str(sky), "--done", str(work / "setup-done.txt"), "--gun-models", "proxy"])
+    log = (work / "skylands-setup.log").read_text(encoding="utf-8")
+    assert rc == 0, log
+    assert "skse: SKSE loader (skse64_loader.exe): MISSING" in log and "skse: Address Library" in log and "Check-SKSE" not in log  # the fake Skyrim has no SKSE
+    assert "skse: Skylands needs SKSE and Address Library" in log
+    plugin = sky / "Data" / "SKSE" / "Plugins" / "SkylandsNative.dll"
+    if (bin_dir / "SkylandsNative.dll").is_file():
+        assert plugin.is_file() and (sky / "Data" / "SKSE" / "Plugins" / "SkylandsNative.ini").is_file()
+        assert "SkylandsNative plugin: staged for install" in log and "SkylandsNative.dll: present" in log
+        assert build.uninstall_main(["--work", str(work)]) == 0
+        assert not plugin.exists()  # uninstall takes the plugin away with the rest
+    else:
+        assert "SkylandsNative plugin: not in this build" in log
+
+
+def test_the_built_plugin_is_a_windows_dll_with_the_skse_entry_points():
+    dll = HERE.parent / "setup" / "skylands_setup" / "bin" / "SkylandsNative.dll"
+    if not dll.is_file():
+        import pytest
+
+        pytest.skip("SkylandsNative.dll is built by CI (.github/workflows/skse-plugin.yml)")
+    data = dll.read_bytes()
+    assert data[:2] == b"MZ" and b"PE\0\0" in data[:1024]
+    assert int.from_bytes(data[data.index(b"PE\0\0") + 4:][:2], "little") == 0x8664  # x64
+    for export in (b"SKSEPlugin_Version", b"SKSEPlugin_Load", b"SKSEPlugin_Query"):
+        assert export in data
+    for text in (b"SkylandsNative", b"TriggerHeld", b"TriggerPressed", b"FireBullet", b"Version", b"NPC R MagicNode [RMag]"):
+        assert text in data

@@ -4,7 +4,8 @@
 //   FireBullet                     launches a spell's projectile from the right hand's magic node, aimed along the crosshair,
 //                                  with a spread; no cast animation, no wind-up, no magicka
 //
-// Papyrus class: SkylandsNative (Data/Scripts is not needed: the scripts of Skylands call it by name; the functions are static).
+// Papyrus class: SkylandsNative, static functions. Data/Scripts/SkylandsNative.pex (written by the installer, scripts.native_stub)
+// declares them as native; the types there must match the ones below.
 // Built with CommonLibSSE-NG and Address Library, so it works on every runtime that Address Library supports.
 
 #include "PCH.h"
