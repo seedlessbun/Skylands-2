@@ -2027,8 +2027,9 @@ def gunner_quest() -> Script:
 def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     """SkylandsStaffGun extends ActiveMagicEffect: the staff-type automatic gun prototype (SkylandsGunModels.esp).
 
-    The gun is a staff (its enchantment is only there for the charge gauge; the player's fighting controls are switched off while
-    it is in the hand, so the attack button casts nothing and plays no animation: the gun stays in the hand pointing forward).
+    The gun is a staff (its enchantment is only there for the charge gauge). While it is in the hand the plugin does not give the
+    game's attack handler the right attack button (SkylandsNative.SetGunMode), so the staff casts nothing and plays no animation:
+    the gun stays in the hand pointing forward, and block, shouts and readying work as usual.
     The bullets are the script's, through the SKSE plugin SkylandsNative
     (native/skse): the plugin says whether the attack button is down (SkylandsNative.TriggerHeld / TriggerPressed) and launches
     the bullet spell's projectile from the muzzle node of the gun's own mesh along the crosshair with a spread (FireBullet). The script
@@ -2325,11 +2326,10 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         "Grip",
         locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
-            # the fighting controls (attack, block, readying) are off while the gun is in the hand, so the attack button plays no
-            # animation and casts nothing (the plugin still sees the button); the weapon is drawn, since it cannot be drawn by hand now
-            ("callstatic", ("id", "Game"), ("id", "DisablePlayerControls"), NONE, ("bool", False), ("bool", True), ("bool", False),
-             ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("int", 0)),
-            ("assign", ("id", "ControlsOff"), ("bool", True)),
+            # the plugin keeps the right attack button from the game while the gun is in the hand (no animation); fighting controls
+            # that 0.14.3 switched off in a saved game are given back; the weapon is drawn
+            call("Heal"),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "SetGunMode"), ("id", "::temp0"), ("bool", True)),
             ("callmethod", ("id", "IsWeaponDrawn"), ("id", "Me"), T0),
             ("not", T0, T0),
             ("jmpf", T0, ("lbl", "drawn")),
@@ -2338,15 +2338,25 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("return", None),
         ],
     )
-    let = Function(
-        "Let",
+    heal = Function(
+        "Heal",
         locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
-            # the fighting controls back, but only if this script switched them off
+            # 0.14.3 switched the fighting controls off with Game.DisablePlayerControls and a save keeps that: give them back once
             *ret_unless(("id", "ControlsOff"), "off"),
             ("callstatic", ("id", "Game"), ("id", "EnablePlayerControls"), NONE, ("bool", False), ("bool", True), ("bool", False),
              ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("bool", False), ("int", 0)),
             ("assign", ("id", "ControlsOff"), ("bool", False)),
+            ("return", None),
+        ],
+    )
+    let = Function(
+        "Let",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            # the gun is away: the attack button is the game's again
+            call("Heal"),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "SetGunMode"), ("id", "::temp0"), ("bool", False)),
             ("return", None),
         ],
     )
@@ -2432,7 +2442,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
                          ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
                          ("Info", "String"), ("Verbose", "Bool")],
         functions=[on_start, on_load, start, resume, report, on_equipped, equipped, on_unequipped, on_update, poll, hold, pull, fire, ready,
-                   arm, grip, let, speed, count, tell, sync, reload_],
+                   arm, grip, heal, let, speed, count, tell, sync, reload_],
     )
 
 
@@ -2446,6 +2456,7 @@ def native_stub() -> Script:
         parent="",
         functions=[
             Function("Version", return_type="Int", flags=both),
+            Function("SetGunMode", return_type="Bool", flags=both, params=[("abOn", "Bool")]),
             Function("TriggerHeld", return_type="Bool", flags=both),
             Function("TriggerPressed", return_type="Bool", flags=both),
             Function("FireBullet", return_type="Bool", flags=both,

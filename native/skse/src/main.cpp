@@ -12,9 +12,10 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 103;  // 1.0.3
+	constexpr std::int32_t kVersion = 104;  // 1.0.4
 
 	std::atomic_bool g_held{ false };
+	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
 	float g_convergence = 3000.0f;  // how far ahead the bullets are aimed to cross the crosshair (game units)
@@ -106,6 +107,32 @@ namespace
 		}
 	};
 
+	// The game's own attack handler (right and left attack/block). While a Skylands gun is in the hand it is not given the right attack
+	// button, so the staff plays no attack or cast animation; block (left) and everything else go through untouched. The vtable
+	// slot of ProcessButton is 4, and 6 from Skyrim 1.7.99 on (the base class gained two virtual functions: CommonLibSSE-NG's
+	// PlayerInputHandler says so).
+	struct AttackHook
+	{
+		static void Thunk(RE::AttackBlockHandler* a_this, RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data)
+		{
+			if (g_gunMode.load() && a_event && IsAttack(a_event, RE::UserEvents::GetSingleton())) {
+				return;
+			}
+			Original(a_this, a_event, a_data);
+		}
+
+		static bool Install()
+		{
+			REL::Relocation<std::uintptr_t> vtbl{ RE::VTABLE_AttackBlockHandler[0] };
+			const std::size_t slot = REL::Module::IsAtLeast(SKSE::RUNTIME_SSE_1_7_99) ? 0x06 : 0x04;
+			Original = vtbl.write_vfunc(slot, Thunk);
+			SKSE::log::info("attack handler hooked (vtable slot {})", slot);
+			return true;
+		}
+
+		static inline REL::Relocation<decltype(Thunk)> Original;
+	};
+
 	bool MenuOpen()
 	{
 		const auto ui = RE::UI::GetSingleton();
@@ -117,6 +144,14 @@ namespace
 	std::int32_t Version(RE::StaticFunctionTag*)
 	{
 		return kVersion;
+	}
+
+	// Papyrus: a Skylands gun is in the hand (true) or not (false); the plugin starts with false, so a saved game cannot keep it on
+	bool SetGunMode(RE::StaticFunctionTag*, bool a_on)
+	{
+		g_gunMode = a_on;
+		SKSE::log::info("gun mode {}", a_on ? "on" : "off");
+		return true;
 	}
 
 	bool TriggerHeld(RE::StaticFunctionTag*)
@@ -214,6 +249,7 @@ namespace
 	bool RegisterPapyrus(RE::BSScript::IVirtualMachine* a_vm)
 	{
 		a_vm->RegisterFunction("Version"sv, "SkylandsNative"sv, Version);
+		a_vm->RegisterFunction("SetGunMode"sv, "SkylandsNative"sv, SetGunMode);
 		a_vm->RegisterFunction("TriggerHeld"sv, "SkylandsNative"sv, TriggerHeld);
 		a_vm->RegisterFunction("TriggerPressed"sv, "SkylandsNative"sv, TriggerPressed);
 		a_vm->RegisterFunction("FireBullet"sv, "SkylandsNative"sv, FireBullet);
@@ -222,6 +258,9 @@ namespace
 
 	void OnMessage(SKSE::MessagingInterface::Message* a_message)
 	{
+		if (a_message->type == SKSE::MessagingInterface::kDataLoaded) {
+			AttackHook::Install();
+		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
 			if (const auto input = RE::BSInputDeviceManager::GetSingleton()) {
 				input->AddEventSink(InputSink::Get());
@@ -246,7 +285,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 0, 3, 0 },
+	.Version = { 1, 0, 4, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

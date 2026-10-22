@@ -84,7 +84,7 @@ Other commands:
 
 ## 6. Current status
 - Staged move from crossbow-based guns to per-type base weapons: **Stage 1** (staff SMG prototype), version
-  **0.14.3**, TestBuild-83 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
+  **0.14.4**, TestBuild-84 (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`).
 - Confirmed in game (0.13.11, log and screenshot): quest starts, ability added, staff given, box on equip (events registered,
   script weapon and spell set), shots counted from the cast event, reload (unequip/re-equip) happens. The Papyrus log had no
   error from the staff script; its errors were SkylandsHunter (`AbilityInit`, `GetContainer`) and a ghost `SkylandsGunnerQuest`.
@@ -179,6 +179,14 @@ Other commands:
   class and the plugin records are unchanged (no new ids): the existing staff stays. UNCONFIRMED in game: that the muzzle node is found,
   that the bar drops, that the animation is gone, and that the plugin still sees the attack button while fighting controls are off. If a
   save keeps the controls off after the plugin or script is removed: console `enableplayercontrols`.
+- 0.14.3 in game: bullets leave from a better spot (the muzzle node works), the charge bar works, removing the player's fighting
+  controls removed the animation and felt more realistic, but the controls stayed off until the gun was put away (the user wants them
+  back when not shooting); the gun aims a little high.
+- 0.14.4 (TestBuild-84, plugin 1.0.4): `--staff-turn` default 60,0,180 (more pitch lowers the barrel: -45 up, 45 a little high). No more
+  `DisablePlayerControls`: the plugin hooks the game's `AttackBlockHandler::ProcessButton` (vtable slot 4, 6 from 1.7.99 on) and does not
+  pass it the right attack button while `SkylandsNative.SetGunMode(true)` (set by `Grip`, cleared by `Let`; the plugin starts with it off, so a
+  save cannot keep it on). Block, shouts and readying work normally. `Heal` gives back fighting controls a 0.14.3 save left off
+  (`ControlsOff`). UNCONFIRMED in game: that the hook is safe on 1.7.104 (slot 6) and swallows the attack; if the game crashes on the first press, the slot is wrong.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

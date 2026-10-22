@@ -238,9 +238,9 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
             # SKSE: the plugin of Skylands (the attack button, the bullet launch) and SKSE's own charge and version calls
             "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireBullet(Me, BulletSpell, Spread, OffsetRight, OffsetUp, OffsetForward)",
             "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "WornObject.SetItemCharge(Me, 1, 0, v)", "WornObject.GetItemCharge(Me, 1, 0)", "Me.SetActorValue(\"RightItemCharge\", v)",
-            # the fighting controls are off while the gun is in the hand (no attack animation), given back when it is away
-            "Game.DisablePlayerControls(False, True, False, False, False, False, False, False, 0)", "Game.EnablePlayerControls(False, True, False, False, False, False, False, False, 0)",
-            "ControlsOff = True", "ControlsOff = False", "If !ControlsOff", "Me.DrawWeapon()", "Self.Grip()", "Self.Let()", "Bool held = r == f",
+            # the plugin keeps the right attack button from the game while the gun is in the hand (no animation); the player's controls stay on
+            "SkylandsNative.SetGunMode(True)", "SkylandsNative.SetGunMode(False)", "Me.DrawWeapon()", "Self.Grip()", "Self.Let()", "Self.Heal()",
+            "Game.EnablePlayerControls(False, True, False, False, False, False, False, False, 0)", "ControlsOff = False", "If !ControlsOff", "Bool held = r == f",
             "SKSE.GetVersion()",
             # the loop: a press fires at once, the button held fires one every Interval, nothing while reloading or with the staff away
             "Bool pressed = SkylandsNative.TriggerPressed()", "Bool go = Self.Pull()", "While go", "Utility.Wait(Interval)",
@@ -254,6 +254,7 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
             "Spell Property BulletSpell Auto", "Weapon Property StaffGun Auto", "Float Property OffsetForward Auto"):
         assert text in psc, text
     # the workarounds of plain Papyrus are gone: no animation events or variables, no actor-value gauge, no aim point, no unequip to reload
+    assert "DisablePlayerControls" not in psc  # 0.14.3 switched the fighting controls off; the plugin swallows the attack button instead
     for text in ("RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "Aim", "UnequipItem", "EquipItem",
                  "Input.", "GetWeaponType", "Burst", "Fill"):
         assert text not in psc, text
@@ -264,10 +265,10 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     psc = decompile(tmp_path, scripts.native_stub(), "SkylandsNative")
     assert "ScriptName SkylandsNative\n" in psc
     for text in ("Bool Function FireBullet(Actor akShooter, Spell akBullet, Float afSpread, Float afRight, Float afUp, Float afForward) Global Native",
-                 "Bool Function TriggerHeld() Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
+                 "Bool Function TriggerHeld() Global Native", "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
         assert text in psc, text
     main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
-    for text in ('"FireBullet"sv', '"TriggerHeld"sv', '"TriggerPressed"sv', '"Version"sv', "RE::Actor* a_shooter, RE::SpellItem* a_spell, float a_spread, float a_right, float a_up, float a_forward"):
+    for text in ('"FireBullet"sv', '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv', '"Version"sv', "RE::Actor* a_shooter, RE::SpellItem* a_spell, float a_spread, float a_right, float a_up, float a_forward"):
         assert text in main, text  # the stub and the plugin's registrations say the same thing
 
 
