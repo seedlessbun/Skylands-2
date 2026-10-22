@@ -58,3 +58,22 @@ def test_stage_plugin_copies_the_dll_and_writes_the_settings(tmp_path):
     assert skse.stage_plugin(stage, bin_dir) == "Data/SKSE/Plugins/SkylandsNative.dll"
     assert (stage / "Data" / "SKSE" / "Plugins" / "SkylandsNative.dll").read_bytes() == b"MZ\x90"
     assert "Convergence=3000" in (stage / "Data" / "SKSE" / "Plugins" / "SkylandsNative.ini").read_text()
+
+
+def test_the_commonlib_patch_makes_runtimes_from_1_6_on_the_ae_lineage():
+    root = Path(__file__).resolve().parent.parent
+    patch = (root / "native" / "skse" / "patches" / "commonlib-runtime-minor-7.patch").read_text()
+    assert "_version[1] >= 6" in patch and "a_version[1] >= 6" in patch and "Runtime::AE" in patch
+    flow = (root / ".github" / "workflows" / "skse-plugin.yml").read_text()
+    assert "commonlib-runtime-minor-7.patch" in flow and flow.index("apply") < flow.index("vcpkg install")  # applied before the build
+
+
+def test_status_names_the_address_library_file_of_a_1_7_runtime(tmp_path):
+    fake_exe(tmp_path / "SkyrimSE.exe", (1, 7, 104, 0))
+    plugins = tmp_path / "Data" / "SKSE" / "Plugins"
+    plugins.mkdir(parents=True)
+    (plugins / "versionlib-1-7-104-0.bin").write_bytes(b"\0")
+    (tmp_path / "skse64_loader.exe").write_bytes(b"MZ")
+    (tmp_path / "skse64_1_7_104.dll").write_bytes(b"MZ")
+    st = skse.status(tmp_path)
+    assert st.ready and st.runtime == (1, 7, 104, 0) and st.address_library == "versionlib-1-7-104-0.bin"

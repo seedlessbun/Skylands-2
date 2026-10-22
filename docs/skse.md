@@ -18,7 +18,7 @@ installs them once (`Check-SKSE.bat` says what is missing; the installer logs th
 Papyrus class `SkylandsNative` (static functions; `Data/Scripts/SkylandsNative.pex`, written by the installer, declares them: SKSE binds a plugin's functions to the natives a script declares):
 | function | what it does |
 |---|---|
-| `Int Version()` | the plugin version (100 = 1.0.0) |
+| `Int Version()` | the plugin version (101 = 1.0.1) |
 | `Bool TriggerHeld()` | the attack button ("Right Attack/Block": keyboard, mouse or gamepad, as remapped) is down, and no menu is open |
 | `Bool TriggerPressed()` | the button went down since the last call (a tap shorter than a script poll is still seen) |
 | `Bool FireBullet(Actor, Spell, Float spread, Float right, Float up, Float forward)` | launches the spell's projectile (`Projectile::Launch`) from the right hand's magic node (the first-person skeleton in first person), aimed at the point the crosshair looks at 3000 units ahead (`Convergence` in the ini), within a cone of `spread` degrees, offset in view space; no animation, no wind-up, no magicka. Runs on the game's thread a frame later. |
@@ -51,3 +51,10 @@ reload take the rounds away, and shots were found by counting ammo because `OnPl
 * **Take the draw and reload out of the way**: set the crossbow's attack speed and reload time per instance (`Actor::SetAnimationVariable`, weapon speed multipliers), or fire from the trigger event like the staff does while the crossbow animation only gives the pose; later replace the animation with OAR.
 * **Per-instance data**: one crossbow record per gun *type* with stats on the instance (`WornObject`, `ExtraData`) instead of 40 variants per balance.
 * **Magazine in the enchantment charge** like the staff, instead of rounds taken out of the pack.
+
+## Skyrim 1.7.x (found in 0.14.0)
+CommonLibSSE-NG decides "Anniversary Edition" only when the runtime's minor version is exactly 6. On 1.7.104 it took the old
+Special Edition file name (`version-1-7-104-0.bin`, format 1) and failed with "failed to open address library file" although
+`versionlib-1-7-104-0.bin` was there. The workflow applies `native/skse/patches/commonlib-runtime-minor-7.patch` (minor 6 or more
+is AE, 4 is VR) to the CommonLibSSE-NG checkout before building. Whether the game's own structures and vtables are still those
+CommonLibSSE-NG knows on 1.7 is unconfirmed: the plugin writes the runtime it found to `SkylandsNative.log`.

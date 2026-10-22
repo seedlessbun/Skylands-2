@@ -23,6 +23,9 @@ jobs:
         run: |
           git clone https://github.com/CharmedBaryon/CommonLibSSE-NG ext/CommonLibSSE-NG
           git -C ext/CommonLibSSE-NG checkout b93280e832f263dbef44e44cbe2936622a02f91a
+          # CommonLibSSE-NG takes only a minor version of exactly 6 for the Anniversary Edition: Skyrim 1.7.104 was treated as the old
+          # Special Edition and looked for version-1-7-104-0.bin instead of versionlib-1-7-104-0.bin ("failed to open address library file")
+          git -C ext/CommonLibSSE-NG apply "$PWD/native/skse/patches/commonlib-runtime-minor-7.patch"
 
       - uses: ilammy/msvc-dev-cmd@v1
         with:

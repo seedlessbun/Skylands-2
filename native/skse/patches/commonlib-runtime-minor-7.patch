@@ -1,0 +1,50 @@
+diff --git a/include/REL/Module.h b/include/REL/Module.h
+index 54a484c..94cb415 100644
+--- a/include/REL/Module.h
++++ b/include/REL/Module.h
+@@ -164,15 +164,12 @@ namespace REL
+ 			_instance._filename = _instance._filePath = a_filename.data();
+ 			_instance._version = a_version;
+ 			if (a_runtime == Runtime::Unknown) {
+-				switch (a_version[1]) {
+-					case 4:
+-						_instance._runtime = Runtime::VR;
+-						break;
+-					case 6:
+-						_instance._runtime = Runtime::AE;
+-						break;
+-					default:
+-						_instance._runtime = Runtime::SE;
++				if (a_version[1] == 4) {
++					_instance._runtime = Runtime::VR;
++				} else if (a_version[1] >= 6) {
++					_instance._runtime = Runtime::AE;
++				} else {
++					_instance._runtime = Runtime::SE;
+ 				}
+ 			} else {
+ 				_instance._runtime = a_runtime;
+@@ -335,15 +332,14 @@ namespace REL
+ 			const auto version = GetFileVersion(_filePath);
+ 			if (version) {
+ 				_version = *version;
+-				switch (_version[1]) {
+-					case 4:
+-						_runtime = Runtime::VR;
+-						break;
+-					case 6:
+-						_runtime = Runtime::AE;
+-						break;
+-					default:
+-						_runtime = Runtime::SE;
++				// Skylands patch: every 1.x with a minor version of 6 or more is the Anniversary Edition lineage (1.7.104 is: its
++				// Address Library file is versionlib-1-7-104-0.bin, not version-1-7-104-0.bin)
++				if (_version[1] == 4) {
++					_runtime = Runtime::VR;
++				} else if (_version[1] >= 6) {
++					_runtime = Runtime::AE;
++				} else {
++					_runtime = Runtime::SE;
+ 				}
+ 				return true;
+ 			}
