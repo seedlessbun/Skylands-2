@@ -233,14 +233,14 @@ def test_gunner_scripts_decompile(tmp_path):
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
-    psc = decompile(tmp_path, scripts.staff_gun("SkylandsStaffGun19"), "SkylandsStaffGun19")
-    assert "ScriptName SkylandsStaffGun19 Extends ActiveMagicEffect" in psc
+    psc = decompile(tmp_path, scripts.staff_gun("SkylandsStaffGun20"), "SkylandsStaffGun20")
+    assert "ScriptName SkylandsStaffGun20 Extends ActiveMagicEffect" in psc
     assert "Skipped inoperative" not in psc
     for text in (
             # the plugin knows a staff gun by its keyword (a native with no string parameter) and fires it; the script introduces the gun
             "Int c = SkylandsNative.GunClip(w)", "Return c > 0", "Self.Take(w)", "Self.Load(w)", "Gun = w", "Weapon Gun",
-            "SkylandsNative.SetShotSound(a)", "SkylandsNative.SetReloadSounds(b, c, d)", "Cur = ShotSound", "While i < n", "If w.HasKeyword(k)", "Sound s = Sounds[i]", "Cur = s",
-            "Keyword[] Property SoundKeywords Auto", "Sound[] Property Sounds Auto", "Sound Property ShotSound Auto",
+            "SkylandsNative.SetShotSound(Cur)", "SkylandsNative.SetReloadSounds(RelOut, RelIn, RelEnd)", "Cur = ShotSound", "While i < n", "If w.HasKeyword(k)", "Form s = Sounds[i]", "Cur = s",
+            "Keyword[] Property SoundKeywords Auto", "Form[] Property Sounds Auto", "Form Property ShotSound Auto",
             "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "Weapon Property GiftA Auto", "Form f = GiftA as Form", "f = GiftB as Form",
             "Me.AddItem(f, 1, False)", "Me.GetEquippedObject(1)", "Self.Unknown(w)", "the plugin does not know this staff gun",
             # the plugin keeps the right attack button from the game while a gun is in the hand (no animation); the player's controls stay on

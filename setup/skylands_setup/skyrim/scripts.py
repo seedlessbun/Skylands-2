@@ -2182,17 +2182,13 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     load = Function(
         "Load",
         params=[("w", "Weapon")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "Form"), ("b", "Form"), ("c", "Form"), ("d", "Form")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
             # remember the gun, pick its sounds and hand them to the plugin as Forms (a native with a Sound parameter never ran: no log line from it)
             ("assign", ("id", "Gun"), ("id", "w")),
             call("PickSound", ("id", "w")),
-            ("cast", ("id", "a"), ("id", "Cur")),
-            ("cast", ("id", "b"), ("id", "RelOut")),
-            ("cast", ("id", "c"), ("id", "RelIn")),
-            ("cast", ("id", "d"), ("id", "RelEnd")),
-            ("callstatic", ("id", "SkylandsNative"), ("id", "SetShotSound"), ("id", "::temp0"), ("id", "a")),
-            ("callstatic", ("id", "SkylandsNative"), ("id", "SetReloadSounds"), ("id", "::temp0"), ("id", "b"), ("id", "c"), ("id", "d")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "SetShotSound"), ("id", "::temp0"), ("id", "Cur")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "SetReloadSounds"), ("id", "::temp0"), ("id", "RelOut"), ("id", "RelIn"), ("id", "RelEnd")),
             ("return", None),
         ],
     )
@@ -2419,7 +2415,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     pick_sound = Function(
         "PickSound",
         params=[("w", "Weapon")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("n", "Int"), ("k", "Keyword"), ("s", "Sound")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("n", "Int"), ("k", "Keyword"), ("s", "Form")],
         code=[
             # this gun's shot sound: the one whose keyword the gun carries (one per gun type), else the default
             ("assign", ("id", "Cur"), ("id", "::ShotSound_var")),
@@ -2454,15 +2450,15 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     return Script(
         name=name,
         parent="ActiveMagicEffect",
-        variables=[("Me", "Actor", None), ("Gun", "Weapon", None), ("Cur", "Sound", None), ("RelOut", "Sound", None), ("RelIn", "Sound", None),
-                   ("RelEnd", "Sound", None), ("Armed", "Bool", ("bool", False)),
+        variables=[("Me", "Actor", None), ("Gun", "Weapon", None), ("Cur", "Form", None), ("RelOut", "Form", None), ("RelIn", "Form", None),
+                   ("RelEnd", "Form", None), ("Armed", "Bool", ("bool", False)),
                    ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)), ("Native", "Bool", ("bool", False)),
                    ("Tag", "Int", ("int", 0)), ("Told", "Int", ("int", 0)), ("WasReloading", "Bool", ("bool", False)),
                    ("ControlsOff", "Bool", ("bool", False))],
         auto_properties=[("GiftA", "Weapon"), ("GiftB", "Weapon"), ("SpeedMult", "Float"), ("ChargePerShot", "Float"),
-                         ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
-                         ("SoundKeywords", "Keyword[]"), ("Sounds", "Sound[]"), ("ReloadOut", "Sound[]"), ("ReloadIn", "Sound[]"),
-                         ("ReloadEnd", "Sound[]"), ("Info", "String"), ("Verbose", "Bool")],
+                         ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Form"),
+                         ("SoundKeywords", "Keyword[]"), ("Sounds", "Form[]"), ("ReloadOut", "Form[]"), ("ReloadIn", "Form[]"),
+                         ("ReloadEnd", "Form[]"), ("Info", "String"), ("Verbose", "Bool")],
         functions=[on_start, on_load, start, resume, is_gun, on_equipped, unknown, take, load, on_unequipped, on_update, watch, count10, tell_if,
                    reloads, say_reload, tell, tenths, arm, grip, heal, let, pick_sound],
     )

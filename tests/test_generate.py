@@ -538,14 +538,14 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(view, {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun19" in vm and all(n in vm for n in (b"GiftA", b"GiftB", b"ChargePerShot", b"OffsetForward", b"ShotSound", b"SpeedMult"))
+    assert b"SkylandsStaffGun20" in vm and all(n in vm for n in (b"GiftA", b"GiftB", b"ChargePerShot", b"OffsetForward", b"ShotSound", b"SpeedMult"))
     assert b"SoundKeywords" in vm and b"Sounds" in vm
     snd = [r for r in recs["KYWD"] if r.edid.startswith("SkylandsSnd_")]
     assert {r.edid for r in snd} == {"SkylandsSnd_smg", "SkylandsSnd_assault_rifle"}  # one shot sound per gun type, chosen by this keyword
     assert all(any(st.unpack("<I", w.first("KWDA")[i:i + 4])[0] in {r.form_id for r in snd} for i in range(0, len(w.first("KWDA")), 4)) for w in staff)
     assert any("smg shot sound WPNCrossbowFire" in l for l in rep["model_log"]) and any("assault_rifle shot sound WPNBowFireShort" in l for l in rep["model_log"]), rep["model_log"]
     assert all(n not in vm for n in (b"BulletSpell", b"MagSize", b"AimPoint"))  # the gun's own numbers are not the script's
-    for name in ("SkylandsStaffGun19", "SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsNative"):
+    for name in ("SkylandsStaffGun20", "SkylandsStaffGun19", "SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsNative"):
         assert (tmp_path / "out" / "Data" / "Scripts" / f"{name}.pex").is_file()
     for word in ("plain", "fire", "shock", "corrosive", "slag"):  # the muzzle flash meshes the plugin spawns, one per element colour and size
         for percent in (75, 90):  # submachine guns 25% smaller, assault rifles 10% smaller

@@ -466,8 +466,8 @@ STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": 
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
 STAFF_REV = "0.15.0"
-STAFF_SCRIPT = "SkylandsStaffGun19"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
-STAFF_ID_SHIFT = 340  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_SCRIPT = "SkylandsStaffGun20"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
+STAFF_ID_SHIFT = 380  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 PROJ_FLAG_MUZZLE_FLASH = 0x8
 PROJ_LIGHT_AT, PROJ_SOUND_AT, PROJ_SOUND_COUNTDOWN_AT = 16, 40, 56
@@ -597,7 +597,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.19.1"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.19.2"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -1407,7 +1407,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
             (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
             (out_data / "Scripts" / "SkylandsNative.pex").write_bytes(pex.write(scripts.native_stub()))  # the declarations of the SKSE plugin's functions
-            for old_name in ("SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14", "SkylandsStaffGun15", "SkylandsStaffGun16"):
+            for old_name in ("SkylandsStaffGun19", "SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14", "SkylandsStaffGun15", "SkylandsStaffGun16"):
                 (out_data / "Scripts" / f"{old_name}.pex").write_bytes(pex.write(scripts.retired(old_name)))
     for mesh_path, mesh_bytes in report.pop("staff_tracer", []):  # the mesh bytes are not part of the report
         (out_data / "Meshes" / Path(*mesh_path.split("\\"))).write_bytes(mesh_bytes)
