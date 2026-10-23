@@ -523,24 +523,68 @@ def staff_donor(m: "Masters", element: str | None, log: list[str], strict: bool 
     return w, ench, mg, pj
 
 
-def staff_shot_sound(m: "Masters", log: list[str]):
-    """The sound of a gun shot for the staff gun: a crossbow's firing sound from the masters (the nearest thing Skyrim has).
-    (form id, editor id), or None when none is found."""
-    rx_what, rx_fire = re.compile(r"crossbow", re.I), re.compile(r"fire|shoot|attack|release|loose", re.I)
-    found = sorted(((0 if rx_fire.search(r.edid) else 1, r.edid, r.form_id) for r in m.by_type.get("SNDR", {}).values() if rx_what.search(r.edid or "")))
+STAFF_SOUND_WORDS = {  # per gun type: a vanilla sound that stands in for the Borderlands one until those are extracted (docs/gun-feel.md)
+    "smg": (r"crossbow", r"fire|shoot|attack|release|loose"),
+    "assault_rifle": (r"(?<!cross)bow", r"fire|shoot|attack|release|loose"),
+}
+
+
+def staff_shot_sound(m: "Masters", log: list[str], kind: str = "smg"):
+    """The sound of a gun shot for a staff gun type: a vanilla firing sound from the masters (the nearest thing Skyrim has; the
+    Borderlands sounds come later). (form id, editor id), or None when none is found."""
+    what, fire = STAFF_SOUND_WORDS.get(kind, STAFF_SOUND_WORDS["smg"])
+    rx_what, rx_fire = re.compile(what, re.I), re.compile(fire, re.I)
+    pool = list(m.by_type.get("SNDR", {}).values())
+    found = sorted(((0 if rx_fire.search(r.edid or "") else 1, len(r.edid or ""), r.edid, r.form_id) for r in pool
+                    if rx_what.search(r.edid or "") and (kind != "assault_rifle" or "crossbow" not in (r.edid or "").lower())))
+    if not found and kind != "smg":
+        return staff_shot_sound(m, log, "smg")
     if not found:
-        log.append("Staff gun: no crossbow sound was found in the masters; the staff gun is silent")
+        log.append(f"Staff gun: no {kind} firing sound was found in the masters; those staff guns are silent")
         return None
-    log.append(f"Staff gun: shot sound {found[0][1]} (of {len(found)} crossbow sounds)")
-    return found[0][2], found[0][1]
+    log.append(f"Staff gun: {kind} shot sound {found[0][2]} (of {len(found)} candidates)")
+    return found[0][3], found[0][2]
 
 
 STAFF_EQUIP_SLOT = 0x00013F42  # Skyrim.esm EQUP RightHand: a staff gun goes in the right hand whatever the hands hold (a vanilla staff is "either hand", and went to the left with a gun in the right)
 STAFF_BULLET_SPEED = 1.25  # the bullets fly this much faster than the Borderlands speed / 3 (the user asked for +25%)
 STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH = 45.0, 0.8  # half the size of the first tracer (90 long, 1.6 wide)
 MGEF_RESIST_AT = 16
+PROJ_MUZZLE_LIGHT_AT, PROJ_MUZZLE_DURATION_AT = 20, 44
+STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, STAFF_FLASH_SECONDS = 26.0, 6.0, 0.05  # the muzzle flash: a short glowing burst ahead of the barrel
+STAFF_FLASH_LIGHT_RADIUS = 260
 STAFF_KINDS = ("smg", "assault_rifle")  # the gun types that are staff guns (the other types stay crossbows)
 STAFF_NPC_BURST_MAX = 6
+
+
+def muzzle_light(view: esp.Plugin, m: "Masters", edid: str, rgb: tuple[int, int, int], radius: int) -> int:
+    """A point light for a muzzle flash, copied from a plain vanilla light (radius and colour changed, so nothing flickers, pulses or
+    casts shadows), else written from scratch. Returns its form id."""
+    best = None
+    for r in sorted(m.by_type["LIGH"].values(), key=lambda r: r.edid):
+        d = r.first("DATA")
+        if not d or len(d) < 48 or r.first("MODL"):
+            continue
+        _, rad, _color, flags = struct.unpack_from("<iI4sI", d)
+        score = (0 if flags & 1 else 1, 0 if not flags & LIGHT_BAD_FLAGS else 1, abs(rad - radius))
+        if best is None or score < best[0]:
+            best = (score, r)
+    if best is not None:
+        lt = esp.Rec("LIGH", view.new_id(f"LIGH:{edid}"), [(sig, d) for sig, d in best[1].subrecords if sig in LIGHT_KEEP])
+        data = bytearray(lt.get("DATA"))
+    else:
+        lt = esp.Rec("LIGH", view.new_id(f"LIGH:{edid}"), [("OBND", obnd()), ("FNAM", struct.pack("<f", 1.0))])
+        data = bytearray(struct.pack("<iI4sIffffffIf", -1, radius, bytes(4), 1, 1.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0))
+        lt.subs.insert(0, ("EDID", b""))
+    lt.set("EDID", esp.zstr(edid))
+    struct.pack_into("<I", data, 4, radius)
+    data[8:12] = bytes([*rgb, 0])
+    struct.pack_into("<I", data, 12, 0x1)  # dynamic only: no flicker, pulse, spot or shadows
+    lt.set("DATA", bytes(data))
+    order = ["EDID", "OBND", "DATA", "FNAM"]
+    lt.subs.sort(key=lambda sd: order.index(sd[0]) if sd[0] in order else 99)
+    view.override(lt)
+    return lt.form_id
 
 
 class Armory:
@@ -569,6 +613,7 @@ class Armory:
         self.blasts: dict[tuple, int] = {}
         self.tracers: dict[str, bytes] = {}
         self.count = 0
+        self.kinds: set[str] = set()
         for i in range(STAFF_ID_SHIFT):
             view.new_id(f"SHIFT:SkylandsStaffGun_{STAFF_REV}_{i}")
         # the ids of the records the player's script lives in, reserved now so they do not move when the number of guns does
@@ -657,7 +702,14 @@ class Armory:
         struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
         struct.pack_into("<II", pd, PROJ_LIGHT_AT, 0, 0)  # the donor's firelight and muzzle light
         struct.pack_into("<I", pd, PROJ_SOUND_AT, 0)  # the donor's flight sound
-        flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] & ~PROJ_FLAG_MUZZLE_FLASH
+        # the muzzle flash: our own glowing burst and a short light, shown for a moment where the bullet leaves
+        rgb = STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None])
+        flash = f"Skylands\\Flash_Staff_{(element or 'plain').lower()}.nif"
+        if flash not in self.tracers:
+            self.tracers[flash] = nif.tracer(rgb, BEAM_TEXTURE, STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, forward=True)
+        struct.pack_into("<I", pd, PROJ_MUZZLE_LIGHT_AT, muzzle_light(self.view, self.m, f"SkylandsMuzzleLight_{(element or 'plain').lower()}", rgb, STAFF_FLASH_LIGHT_RADIUS))
+        struct.pack_into("<f", pd, PROJ_MUZZLE_DURATION_AT, STAFF_FLASH_SECONDS)
+        flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] | PROJ_FLAG_MUZZLE_FLASH
         explosion = 0
         if element is not None:  # the element's status effect, delivered by a silent explosion
             explosion = self._blast(kind, element, gt, shot)
@@ -667,6 +719,10 @@ class Armory:
         struct.pack_into("<H", pd, PROJ_FLAGS_AT, flags)
         struct.pack_into("<I", pd, PROJ_EXPLOSION_AT, explosion)
         pr.set("DATA", bytes(pd))
+        at = next(i for i, (sig, _) in enumerate(pr.subs) if sig == "DATA")
+        pr.subs.insert(at + 1, ("NAM1", esp.zstr(flash)))  # the muzzle flash model follows the data
+        order = ["EDID", "VMAD", "OBND", "FULL", "MODL", "MODT", "MODC", "MODS", "DEST", "DSTD", "DSTF", "DATA", "NAM1", "NAM2", "VNAM"]
+        pr.subs.sort(key=lambda sd: order.index(sd[0]) if sd[0] in order else 98)  # the order the game reads them in
         self.view.override(pr)
         md = bytearray(d_mgef.first("DATA"))
         struct.pack_into("<f", md, MGEF_COST_AT, 0.0)
@@ -736,7 +792,8 @@ class Armory:
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
         numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}"
-        ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers)]
+        self.kinds.add(kind)
+        ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
         insert_ordered(w, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
         insert_ordered(w, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)
         mesh = self.models.model_for(g, built, rr.id, color, edid, self.hold) if self.models is not None else None
@@ -762,14 +819,20 @@ class Armory:
         """The player's script: an ability (run by a start-game-enabled quest) with the few numbers that are not the gun's own."""
         if not self.ok:
             return
-        sound = staff_shot_sound(m, self.log)
+        sound = staff_shot_sound(m, self.log, "smg")
+        snd_kw, snd_ids = [], []
+        for kind in sorted(self.kinds):  # one shot sound per gun type, found by the gun's SkylandsSnd_<type> keyword
+            found = staff_shot_sound(m, self.log, kind)
+            if found:
+                snd_kw.append(self._keyword(f"SkylandsSnd_{kind}"))
+                snd_ids.append(found[0])
         gifts = [self.gifts.get(kind) or self.first_of.get(kind) or next(iter(self.first_of.values())) for kind in STAFF_KINDS]
         info = (f"Build {STAFF_REV}. {self.count} staff guns (submachine guns and assault rifles) from the vanilla staff {self.base[0].edid}; "
                 f"each one's numbers are in its SkylandsGun_ keyword; tracers {len(self.tracers)}; shot sound {sound[1] if sound else 'none found'}; "
                 f"the SKSE plugin launches a bullet from the gun's muzzle when the attack button goes down, then one every interval while it is held.")
         props = [("ChargePerShot", esp.P_FLOAT, STAFF_CHARGE_PER_SHOT),
                  ("OffsetRight", esp.P_FLOAT, STAFF_OFFSET[0]), ("OffsetUp", esp.P_FLOAT, STAFF_OFFSET[1]), ("OffsetForward", esp.P_FLOAT, STAFF_OFFSET[2]),
-                 ("ShotSound", esp.P_OBJECT, sound[0] if sound else 0), ("GiftA", esp.P_OBJECT, gifts[0]), ("GiftB", esp.P_OBJECT, gifts[1]),
+                 ("ShotSound", esp.P_OBJECT, sound[0] if sound else 0), ("SoundKeywords", esp.P_OBJECT_ARRAY, snd_kw), ("Sounds", esp.P_OBJECT_ARRAY, snd_ids), ("GiftA", esp.P_OBJECT, gifts[0]), ("GiftB", esp.P_OBJECT, gifts[1]),
                  ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("Info", esp.P_STRING, info), ("Verbose", esp.P_BOOL, True)]
         fx = script_effect(self.view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", STAFF_SCRIPT, props)
         assert fx == self.fx_id

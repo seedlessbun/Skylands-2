@@ -24,7 +24,7 @@ def skse_check(argv: list[str]) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] not in ("survey", "build", "uninstall", "modelsurvey", "shootingsurvey", "sksecheck"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("survey", "build", "uninstall", "modelsurvey", "shootingsurvey", "sksecheck", "bl2audio"):
         print("usage: python -m skylands_setup survey --out FILE [--bl2 DIR --skyrim DIR]")
         print("       python -m skylands_setup build --done FILE [--bl2 DIR --skyrim DIR] [--stage-only]")
         print("       python -m skylands_setup uninstall --work DIR")
@@ -41,6 +41,10 @@ def main() -> int:
         from . import shootingsurvey
 
         return shootingsurvey.main(sys.argv[2:])
+    if sys.argv[1] == "bl2audio":
+        from . import audioprobe
+
+        return audioprobe.main(sys.argv[2:])
     if sys.argv[1] == "sksecheck":
         return skse_check(sys.argv[2:])
     if sys.argv[1] == "build":

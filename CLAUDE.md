@@ -241,6 +241,16 @@ Other commands:
   (4) relics: the player's actor values `Variable06/07/08` = fire rate / reload / accuracy bonus in percent, read by the script's `Boost` every
   shot (`FireGun` got a spread multiplier argument); `docs/relics.md`. The relic items themselves, and damage/magazine bonuses, are not built.
   UNCONFIRMED in game: all of it (bullets look, the hit art, the actor values being usable on this runtime, beams).
+- 0.17.0 (TestBuild-89, plugin 1.2.1), user requests: (1) the ten-shot magazine message now also tells the fire rate (commanded, relic bonuses
+  included), a MEASURED rate (`Measured`: rounds / seconds since the trigger went down), reload and spread (`Tell`, `Fmt1`; new native
+  `GunSpreadTenths(Weapon) Int`); (2) shot sounds per gun type: each staff gun carries keyword `SkylandsSnd_<type>`, props `SoundKeywords`/`Sounds`
+  (arrays) and `PickSound` chooses; the sounds are Skyrim stand-ins (SMG: crossbow shot, AR: bow shot) because Borderlands audio is not extracted -
+  `audioprobe.py` / `Check-BL2-Audio.bat` (`python -m skylands_setup bl2audio`) writes `work\bl2-audio-report.txt` (file types, audio files, sound-looking
+  package names) for the user to send; nothing about BL2's audio format is known yet (Wwise `.wem`/banks vs UE3 sound objects), the plan is in
+  `docs/gun-feel.md`; (3) muzzle flash: the bullet PROJ has the muzzle-flash flag, `NAM1` = our `Flash_Staff_*.nif` (`nif.tracer(forward=True)`), muzzle light
+  (`muzzle_light`, a LIGH copied from a vanilla light) and duration 0.05 s; UNCONFIRMED in game, and unconfirmed that a plugin-launched projectile
+  shows it. Docs: `docs/gun-feel.md` (small details), `docs/staff-roadmap.md` (features from skse.md in order). Note: a careless slice in an edit once
+  deleted the Armory class; edit `generate.py` with exact-match replaces and run the tests after each.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

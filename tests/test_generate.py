@@ -478,10 +478,13 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         proj = by_id["PROJ"][st.unpack_from("<I", md, 72)[0]]
         assert st.unpack_from("<I", md, 0)[0] & 0x1  # hostile: the AI aims a hostile staff spell at its enemies
         assert st.unpack_from("<f", md, 4)[0] == 0.0 and st.unpack_from("<I", md, 80)[0] == 1 and st.unpack_from("<I", md, 84)[0] == 2  # free, fire and forget, aimed
-        assert proj.first("MODL").rstrip(b"\0").startswith(b"Skylands\\Tracer_Staff_") and proj.first("NAM1") is None
+        assert proj.first("MODL").rstrip(b"\0").startswith(b"Skylands\\Tracer_Staff_") and proj.first("NAM1").rstrip(b"\0").startswith(b"Skylands\\Flash_Staff_")  # our tracer, our muzzle flash (not the donor's fireball)
+        assert [s_ for s_, _ in proj.subrecords].index("MODL") < [s_ for s_, _ in proj.subrecords].index("DATA") < [s_ for s_, _ in proj.subrecords].index("NAM1")
+        pdat = proj.first("DATA")
+        assert st.unpack_from("<H", pdat, 0)[0] & 0x8 and st.unpack_from("<I", pdat, 20)[0] != 0 and 0.0 < st.unpack_from("<f", pdat, 44)[0] < 0.2  # muzzle flash on, with a light and a short duration
+        assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / proj.first("NAM1").rstrip(b"\0").decode().split("\\")[-1]).is_file()
         for at in (24, 36, 92, 108, 116):  # no casting light or art, enchant shader or art, dual casting art
             assert st.unpack_from("<I", md, at)[0] == 0
-        assert not st.unpack_from("<H", proj.first("DATA"), 0)[0] & 0x8  # no muzzle flash
         kwda = w.first("KWDA")
         names = [kw_edid.get(k) or base_kw.get(k) for k in st.unpack(f"<{len(kwda) // 4}I", kwda)]
         assert "SkylandsGun" in names and any(n and n.startswith("SkylandsRarity_") for n in names)
@@ -508,7 +511,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         seen.add(element)
         pd = pj.first("DATA")
         assert abs(st.unpack_from("<f", pd, 8)[0] - S.SHOOTING[kind].speed_bl2 / 3 * 1.25) < 1.0  # +25% projectile speed
-        assert st.unpack_from("<II", pd, 16) == (0, 0) and st.unpack_from("<I", pd, 40)[0] == 0  # no firelight, no flight sound
+        assert st.unpack_from("<I", pd, 16)[0] == 0 and st.unpack_from("<I", pd, 40)[0] == 0  # no firelight along the flight, no flight sound
         mg = next(m for m in recs["MGEF"] if st.unpack_from("<I", m.first("DATA"), 72)[0] == pj.form_id and m.edid.startswith("Staff_"))
         md = mg.first("DATA")
         assert st.unpack_from("<I", md, 76)[0] == 0
@@ -538,6 +541,11 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     fx = read_plugin(view, {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
     assert b"SkylandsStaffGun18" in vm and all(n in vm for n in (b"GiftA", b"GiftB", b"ChargePerShot", b"OffsetForward", b"ShotSound", b"SpeedMult"))
+    assert b"SoundKeywords" in vm and b"Sounds" in vm
+    snd = [r for r in recs["KYWD"] if r.edid.startswith("SkylandsSnd_")]
+    assert {r.edid for r in snd} == {"SkylandsSnd_smg", "SkylandsSnd_assault_rifle"}  # one shot sound per gun type, chosen by this keyword
+    assert all(any(st.unpack("<I", w.first("KWDA")[i:i + 4])[0] in {r.form_id for r in snd} for i in range(0, len(w.first("KWDA")), 4)) for w in staff)
+    assert any("smg shot sound WPNCrossbowFire" in l for l in rep["model_log"]) and any("assault_rifle shot sound WPNBowFireShort" in l for l in rep["model_log"]), rep["model_log"]
     assert all(n not in vm for n in (b"BulletSpell", b"MagSize", b"AimPoint"))  # the gun's own numbers are not the script's
     for name in ("SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsNative"):
         assert (tmp_path / "out" / "Data" / "Scripts" / f"{name}.pex").is_file()

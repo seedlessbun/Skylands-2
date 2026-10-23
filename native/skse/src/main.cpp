@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 120;  // 1.2.0
+	constexpr std::int32_t kVersion = 121;  // 1.2.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -433,6 +433,13 @@ namespace
 		return GunOf(a_weapon, info) ? static_cast<std::int32_t>(info.reload * 1000.0f + 0.5f) : 0;
 	}
 
+	// The gun's base spread in tenths of a degree (before any relic bonus)
+	std::int32_t GunSpreadTenths(RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)
+	{
+		GunInfo info{};
+		return GunOf(a_weapon, info) ? static_cast<std::int32_t>(info.spread * 10.0f + 0.5f) : 0;
+	}
+
 	// The player's shot: launched on the game's own thread, a frame later (a Papyrus call may not touch the world from the script thread).
 	bool FireGun(RE::StaticFunctionTag*, RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult)
 	{
@@ -453,6 +460,7 @@ namespace
 		a_vm->RegisterFunction("GunClip"sv, "SkylandsNative"sv, GunClip);
 		a_vm->RegisterFunction("GunIntervalMs"sv, "SkylandsNative"sv, GunIntervalMs);
 		a_vm->RegisterFunction("GunReloadMs"sv, "SkylandsNative"sv, GunReloadMs);
+		a_vm->RegisterFunction("GunSpreadTenths"sv, "SkylandsNative"sv, GunSpreadTenths);
 		a_vm->RegisterFunction("FireGun"sv, "SkylandsNative"sv, FireGun);
 		return true;
 	}
@@ -490,7 +498,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 2, 0, 0 },
+	.Version = { 1, 2, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

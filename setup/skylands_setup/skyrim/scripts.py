@@ -2197,6 +2197,31 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("return", None),
         ],
     )
+    pick_sound = Function(
+        "PickSound",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("n", "Int"), ("k", "Keyword"), ("s", "Sound")],
+        code=[
+            # this gun's shot sound: the one whose keyword the gun carries (one per gun type), else the default
+            ("assign", ("id", "Cur"), ("id", "::ShotSound_var")),
+            ("array_length", ("id", "n"), ("id", "::SoundKeywords_var")),
+            ("assign", ("id", "i"), ("int", 0)),
+            ("label", "loop"),
+            ("cmp_lt", T0, ("id", "i"), ("id", "n")),
+            ("jmpf", T0, ("lbl", "end")),
+            ("array_getelement", ("id", "k"), ("id", "::SoundKeywords_var"), ("id", "i")),
+            ("callmethod", ("id", "HasKeyword"), ("id", "w"), T0, ("id", "k")),
+            ("jmpf", T0, ("lbl", "next")),
+            ("array_getelement", ("id", "s"), ("id", "::Sounds_var"), ("id", "i")),
+            ("assign", ("id", "Cur"), ("id", "s")),
+            ("assign", ("id", "i"), ("id", "n")),
+            ("label", "next"),
+            ("iadd", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
     load = Function(
         "Load",
         params=[("w", "Weapon")],
@@ -2204,6 +2229,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         code=[
             # the gun's numbers come from the plugin (whole numbers: clip, and milliseconds)
             call("Fresh", ("id", "w")),
+            call("PickSound", ("id", "w")),
             ("callstatic", ("id", "SkylandsNative"), ("id", "GunClip"), ("id", "n"), ("id", "w")),
             ("callstatic", ("id", "SkylandsNative"), ("id", "GunIntervalMs"), ("id", "i"), ("id", "w")),
             ("callstatic", ("id", "SkylandsNative"), ("id", "GunReloadMs"), ("id", "r"), ("id", "w")),
@@ -2273,6 +2299,8 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         code=[
             # the first bullet leaves at once; then, while the attack button is still down, one more every Interval seconds (a relic's
             # fire rate bonus shortens it)
+            ("callstatic", ("id", "Utility"), ("id", "GetCurrentRealTime"), ("id", "HoldStart")),
+            ("assign", ("id", "HoldShots"), ("int", 0)),
             call("Pull", dest=("id", "go")),
             ("label", "hloop"),
             ("jmpf", ("id", "go"), ("lbl", "hdone")),
@@ -2297,6 +2325,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("jmpf", ("id", "ok"), ("lbl", "done")),
             call("Fire"),
             ("iadd", ("id", "Fired"), ("id", "Fired"), ("int", 1)),
+            ("iadd", ("id", "HoldShots"), ("id", "HoldShots"), ("int", 1)),
             ("cmp_gt", ("id", "more"), ("id", "Mag"), ("int", 1)),
             call("Count"),
             ("assign", ("id", "ok"), ("id", "more")),
@@ -2313,11 +2342,11 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
             ("callmethod", ("id", "Boost"), SELF, ("id", "sm"), ("float", 1.0), ("str", RELIC_ACCURACY)),
             ("callstatic", ("id", "SkylandsNative"), ("id", "FireGun"), ("id", "::temp0"), ("id", "Me"),
              ("id", "::OffsetRight_var"), ("id", "::OffsetUp_var"), ("id", "::OffsetForward_var"), ("id", "sm")),
-            ("cast", T0, ("id", "::ShotSound_var")),
+            ("cast", T0, ("id", "Cur")),
             ("jmpf", T0, ("lbl", "silent")),
             # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1")
             ("cast", ("id", "ref"), ("id", "Me")),
-            ("callmethod", ("id", "Play"), ("id", "::ShotSound_var"), ("id", "n"), ("id", "ref")),
+            ("callmethod", ("id", "Play"), ("id", "Cur"), ("id", "n"), ("id", "ref")),
             ("label", "silent"),
             ("return", None),
         ],
@@ -2466,12 +2495,69 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     tell = Function(
         "Tell",
-        locals=[("::nonevar", "None"), ("a", "String"), ("b", "String"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("a", "String"), ("b", "String"), ("c", "String"), ("d", "String"), ("e", "String"), ("msg", "String"),
+                ("gap", "Float"), ("rate", "Float"), ("rt", "Float"), ("sp", "Float"), ("n", "Int"), ("m", "Float"), ("f", "String")],
         code=[
+            # every ten shots: the magazine and what the gun is doing right now, relic bonuses included (fire rate in rounds a second,
+            # reload in seconds, shot spread in degrees), so the numbers can be checked against the gun's description
             ("cast", ("id", "a"), ("id", "Mag")),
-            ("cast", ("id", "b"), ("id", "Fired")),
-            *notify(("str", "Staff gun: magazine "), ("id", "a"), ("str", ", shots seen "), ("id", "b")),
+            ("cast", ("id", "b"), ("id", "MagSize")),
+            ("callmethod", ("id", "Boost"), SELF, ("id", "gap"), ("id", "Interval"), ("str", RELIC_FIRE_RATE)),
+            ("fdiv", ("id", "rate"), ("float", 1.0), ("id", "gap")),
+            ("callmethod", ("id", "Fmt1"), SELF, ("id", "c"), ("id", "rate")),
+            ("callmethod", ("id", "Measured"), SELF, ("id", "m")),
+            ("callmethod", ("id", "Fmt1"), SELF, ("id", "f"), ("id", "m")),
+            ("callmethod", ("id", "Boost"), SELF, ("id", "rt"), ("id", "ReloadTime"), ("str", RELIC_RELOAD)),
+            ("callmethod", ("id", "Fmt1"), SELF, ("id", "d"), ("id", "rt")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "GunSpreadTenths"), ("id", "n"), ("id", "Gun")),
+            ("cast", ("id", "sp"), ("id", "n")),
+            ("fmul", ("id", "sp"), ("id", "sp"), ("float", 0.1)),
+            ("callmethod", ("id", "Boost"), SELF, ("id", "sp"), ("id", "sp"), ("str", RELIC_ACCURACY)),
+            ("callmethod", ("id", "Fmt1"), SELF, ("id", "e"), ("id", "sp")),
+            *notify(("str", "Staff gun: magazine "), ("id", "a"), ("str", " of "), ("id", "b"), ("str", ", fire rate "), ("id", "c"),
+                    ("str", "/s (measured "), ("id", "f"), ("str", "/s), reload "), ("id", "d"), ("str", " s, spread "), ("id", "e"), ("str", " deg")),
             ("return", None),
+        ],
+    )
+    measured = Function(
+        "Measured",
+        return_type="Float",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("now", "Float"), ("dt", "Float"), ("r", "Float")],
+        code=[
+            # rounds a second actually fired since the trigger went down (0 when there are too few rounds to tell)
+            ("callstatic", ("id", "Utility"), ("id", "GetCurrentRealTime"), ("id", "now")),
+            ("fsub", ("id", "dt"), ("id", "now"), ("id", "HoldStart")),
+            ("cmp_lt", T0, ("id", "dt"), ("float", 0.3)),
+            ("jmpf", T0, ("lbl", "enough")),
+            ("return", ("float", 0.0)),
+            ("label", "enough"),
+            ("cmp_lt", T0, ("id", "HoldShots"), ("int", 3)),
+            ("jmpf", T0, ("lbl", "many")),
+            ("return", ("float", 0.0)),
+            ("label", "many"),
+            ("cast", ("id", "r"), ("id", "HoldShots")),
+            ("fsub", ("id", "r"), ("id", "r"), ("float", 1.0)),
+            ("fdiv", ("id", "r"), ("id", "r"), ("id", "dt")),
+            ("return", ("id", "r")),
+        ],
+    )
+    fmt1 = Function(
+        "Fmt1",
+        return_type="String",
+        params=[("x", "Float")],
+        locals=[("::nonevar", "None"), ("n", "Int"), ("whole", "Int"), ("tenth", "Int"), ("a", "String"), ("b", "String"), ("out", "String")],
+        code=[
+            # a number with one decimal ("7.2"): Papyrus prints a Float with six
+            ("fmul", ("id", "x"), ("id", "x"), ("float", 10.0)),
+            ("fadd", ("id", "x"), ("id", "x"), ("float", 0.5)),
+            ("cast", ("id", "n"), ("id", "x")),
+            ("idiv", ("id", "whole"), ("id", "n"), ("int", 10)),
+            ("imod", ("id", "tenth"), ("id", "n"), ("int", 10)),
+            ("cast", ("id", "a"), ("id", "whole")),
+            ("cast", ("id", "b"), ("id", "tenth")),
+            ("strcat", ("id", "out"), ("id", "a"), ("str", ".")),
+            ("strcat", ("id", "out"), ("id", "out"), ("id", "b")),
+            ("return", ("id", "out")),
         ],
     )
     sync = Function(
@@ -2539,15 +2625,15 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     return Script(
         name=name,
         parent="ActiveMagicEffect",
-        variables=[("Me", "Actor", None), ("Gun", "Weapon", None), ("Mag", "Int", ("int", 0)), ("MagSize", "Int", ("int", 0)),
+        variables=[("Me", "Actor", None), ("Gun", "Weapon", None), ("Cur", "Sound", None), ("Mag", "Int", ("int", 0)), ("MagSize", "Int", ("int", 0)),
                    ("Interval", "Float", ("float", 0.1)), ("ReloadTime", "Float", ("float", 2.0)), ("Armed", "Bool", ("bool", False)),
                    ("Reloading", "Bool", ("bool", False)), ("Boxed", "Bool", ("bool", False)), ("Given", "Bool", ("bool", False)),
-                   ("Native", "Bool", ("bool", False)), ("Tag", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)),
+                   ("Native", "Bool", ("bool", False)), ("HoldStart", "Float", ("float", 0.0)), ("HoldShots", "Int", ("int", 0)), ("Tag", "Int", ("int", 0)), ("Fired", "Int", ("int", 0)),
                    ("ControlsOff", "Bool", ("bool", False))],
         auto_properties=[("GiftA", "Weapon"), ("GiftB", "Weapon"), ("SpeedMult", "Float"), ("ChargePerShot", "Float"),
                          ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
-                         ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, resume, is_gun, on_equipped, unknown, take, fresh, load, on_unequipped, on_update, poll, hold, pull, fire, ready, atleast, boost,
+                         ("SoundKeywords", "Keyword[]"), ("Sounds", "Sound[]"), ("Info", "String"), ("Verbose", "Bool")],
+        functions=[on_start, on_load, start, resume, is_gun, on_equipped, unknown, take, fresh, load, on_unequipped, on_update, poll, hold, pull, fire, ready, atleast, boost, measured, fmt1, pick_sound,
                    arm, grip, heal, let, speed, count, tell, sync, reload_],
     )
 
@@ -2568,6 +2654,7 @@ def native_stub() -> Script:
             Function("GunClip", return_type="Int", flags=both, params=[("akWeapon", "Weapon")]),
             Function("GunIntervalMs", return_type="Int", flags=both, params=[("akWeapon", "Weapon")]),
             Function("GunReloadMs", return_type="Int", flags=both, params=[("akWeapon", "Weapon")]),
+            Function("GunSpreadTenths", return_type="Int", flags=both, params=[("akWeapon", "Weapon")]),
             Function("FireGun", return_type="Bool", flags=both,
                      params=[("akShooter", "Actor"), ("afRight", "Float"), ("afUp", "Float"), ("afForward", "Float"), ("afSpreadMult", "Float")]),
         ],

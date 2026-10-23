@@ -50,6 +50,16 @@ set "PYTHONPATH=%~dp0app"
 echo.
 pause
 """
+AUDIO_PROBE = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+echo Looking at how Borderlands 2 stores its sound (changes nothing; a few minutes) ...
+"%~dp0python\python.exe" -X utf8 -m skylands_setup bl2audio --out "%~dp0work\bl2-audio-report.txt" %*
+echo.
+echo Send work\bl2-audio-report.txt back to Claude.
+pause
+"""
 SHOOTING_SURVEY = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -116,6 +126,8 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\skylands-setup.log: it says how many gun meshes each method built and which guns kept the crossbow.
   If guns face the wrong way or are too big/small, add --gun-spin 180 (any angle) or --gun-scale 1.5 to the same command,
   e.g.  Install-Skylands-GunModels-Proxy.bat --gun-spin 90
+  Check-BL2-Audio.bat looks at how Borderlands 2 stores its sound (changes nothing) and writes work\\bl2-audio-report.txt; send it so the
+  guns can get their Borderlands sounds.
   Run-GunModelSurvey.bat reads Borderlands 2 and writes work\\gun-model-survey.json (what the real mesh files look like);
   send it whenever the native or UModel method builds fewer meshes than it should.
 
@@ -127,7 +139,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-88.zip"
+    out = dist / "Skylands-TestBuild-89.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -145,6 +157,7 @@ def main() -> int:
         z.writestr("Check-SKSE.bat", SKSE_CHECK.replace("\n", "\r\n"))
         z.writestr("Run-GunModelSurvey.bat", SURVEY.replace("\n", "\r\n"))
         z.writestr("Run-ShootingSurvey.bat", SHOOTING_SURVEY.replace("\n", "\r\n"))
+        z.writestr("Check-BL2-Audio.bat", AUDIO_PROBE.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))
     print(f"{out.relative_to(ROOT)} {out.stat().st_size} bytes")

@@ -256,7 +256,10 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
             "Mag -= 1", "Int r = Fired % 10", "If r == 0 && Verbose", "v *= ChargePerShot", "Mag = MagSize",
             "Staff gun: reloading", "Staff gun: reloaded", "Me.AddItem(f, 1, False)", "Form f = GiftA as Form", "f = GiftB as Form",
             "Me.GetEquippedObject(1)", "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
-            "ObjectReference ref = Me as ObjectReference", "ShotSound.Play(ref)",
+            "ObjectReference ref = Me as ObjectReference", "Cur.Play(ref)", "Cur = ShotSound", "While i < n", "If w.HasKeyword(k)", "Sound s = Sounds[i]", "Cur = s", "Keyword[] Property SoundKeywords Auto", "Sound[] Property Sounds Auto",
+            # every ten shots the magazine and what the gun is doing now: fire rate (commanded and measured), reload, spread, relic bonuses included
+            "SkylandsNative.GunSpreadTenths(Gun)", "Float Function Measured()", "String Function Fmt1(Float x)", "HoldStart = Utility.GetCurrentRealTime()", "HoldShots += 1",
+            "/s (measured ", "/s), reload ", " s, spread ", " deg",
             "Me.SetActorValue(\"LeftItemCharge\", v)", "Self.Unknown(w)", "the plugin does not know this staff gun", "; the gun is in the ", "Weapon Property GiftA Auto", "Float Property ChargePerShot Auto", "Sound Property ShotSound Auto", "Float Property OffsetForward Auto"):
         assert text in psc, text
     # what the old single-gun script kept in properties is the plugin's now; the workarounds of plain Papyrus are gone
@@ -273,12 +276,12 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     assert "ScriptName SkylandsNative\n" in psc
     for text in ("Bool Function FireGun(Actor akShooter, Float afRight, Float afUp, Float afForward, Float afSpreadMult) Global Native",
                  "Int Function GunClip(Weapon akWeapon) Global Native", "Int Function GunIntervalMs(Weapon akWeapon) Global Native",
-                 "Int Function GunReloadMs(Weapon akWeapon) Global Native", "Bool Function TriggerHeld() Global Native",
+                 "Int Function GunReloadMs(Weapon akWeapon) Global Native", "Int Function GunSpreadTenths(Weapon akWeapon) Global Native", "Bool Function TriggerHeld() Global Native",
                  "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
         assert text in psc, text
     assert "String" not in psc and "afSpreadMult" in psc  # no native takes a string: 0.15.1's GunStat(Weapon, String) always read 0 in the game's script
     main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
-    for text in ('"FireGun"sv', '"GunClip"sv', '"GunIntervalMs"sv', '"GunReloadMs"sv', '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv',
+    for text in ('"FireGun"sv', '"GunClip"sv', '"GunIntervalMs"sv', '"GunReloadMs"sv', '"GunSpreadTenths"sv', '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv',
                  '"Version"sv', "RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult", "RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)",
                  "TESSpellCastEvent", "SkylandsGun_", "holder->AddEventSink(CastSink::Get())"):
         assert text in main, text  # the stub and the plugin's registrations say the same thing

@@ -105,3 +105,22 @@ def test_the_built_plugin_is_a_windows_dll_with_the_skse_entry_points():
         assert export in data
     for text in (b"SkylandsNative", b"TriggerHeld", b"TriggerPressed", b"FireGun", b"GunClip", b"GunIntervalMs", b"GunReloadMs", b"enemy cast listener registered", b"SetGunMode", b"Version", b"NPC R MagicNode [RMag]", b"attack handler hooked"):
         assert text in data
+
+
+def test_bl2_audio_probe_reports_without_changing_anything(tmp_path):
+    import sys
+
+    sys.path.insert(0, str(HERE))
+    import fake_bl2
+    from skylands_setup import audioprobe
+
+    fake_bl2.pandora_install(tmp_path / "bl2")
+    (tmp_path / "bl2" / "WwiseAudio").mkdir()
+    (tmp_path / "bl2" / "WwiseAudio" / "Weapons.pck").write_bytes(b"AKPK" + bytes(60))
+    (tmp_path / "bl2" / "WwiseAudio" / "x.bnk").write_bytes(b"BKHD" + bytes(60))
+    before = sorted(p.name for p in (tmp_path / "bl2").rglob("*"))
+    out = tmp_path / "work" / "report.txt"
+    assert audioprobe.main(["--bl2", str(tmp_path / "bl2"), "--out", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "Weapons.pck" in text and "AKPK" in text and "BKHD" in text and "File types" in text and "Packages with sound-looking names" in text
+    assert sorted(p.name for p in (tmp_path / "bl2").rglob("*")) == before  # nothing in the game folder changed

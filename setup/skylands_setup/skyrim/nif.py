@@ -134,9 +134,10 @@ def beam(color: tuple[int, int, int], texture: str, height: float = 140.0, width
     return b.encode()
 
 
-def tracer(color: tuple[int, int, int], texture: str, length: float = 90.0, width: float = 1.6) -> bytes:
+def tracer(color: tuple[int, int, int], texture: str, length: float = 90.0, width: float = 1.6, forward: bool = False) -> bytes:
     """A bullet tracer for a projectile: two crossed quads along +y (the way a projectile flies), the bright head at the
-    origin and the tail `length` behind it fading out, glowing (additive, emissive) in the given colour."""
+    origin and the tail `length` behind it fading out, glowing (additive, emissive) in the given colour. `forward` puts the fading
+    part ahead of the origin instead (a muzzle flash: it leaves the barrel in the way the bullet goes)."""
     b = NifBuilder()
     root = b.add("BSFadeNode", b"")
     b.s("SkylandsTracer")
@@ -144,7 +145,8 @@ def tracer(color: tuple[int, int, int], texture: str, length: float = 90.0, widt
     flags = VF_VERTEX | VF_UV | VF_NORMAL | VF_COLORS | VF_FULLPREC
     desc = vertex_desc(flags, 7, 4, 5, 6)
     for k, (dx, dz) in enumerate(((1.0, 0.0), (0.0, 1.0))):
-        corners = [(-dx, 0.0, -dz, 0.0, 1.0), (dx, 0.0, dz, 1.0, 1.0), (dx, -length, dz, 1.0, 0.0), (-dx, -length, -dz, 0.0, 0.0)]
+        far = length if forward else -length
+        corners = [(-dx, 0.0, -dz, 0.0, 1.0), (dx, 0.0, dz, 1.0, 1.0), (dx, far, dz, 1.0, 0.0), (-dx, far, -dz, 0.0, 0.0)]
         verts = b""
         for x, y, z, u, v in corners:
             verts += struct.pack("<3fI", x * width, y, z * width, 0)
@@ -157,7 +159,7 @@ def tracer(color: tuple[int, int, int], texture: str, length: float = 90.0, widt
         shader = b.add("BSEffectShaderProperty", b"")
         alpha = b.add("NiAlphaProperty", b"")
         shape = _net(b, f"Tracer{k}") + _av()
-        shape += struct.pack("<3ff", 0, -length / 2, 0, ((length / 2) ** 2 + width**2) ** 0.5)  # bounding sphere
+        shape += struct.pack("<3ff", 0, (length if forward else -length) / 2, 0, ((length / 2) ** 2 + width**2) ** 0.5)  # bounding sphere
         shape += struct.pack("<iii", -1, shader, alpha)
         shape += struct.pack("<Q", desc)
         shape += struct.pack("<HHI", 2, 4, data_size) + verts + tris
