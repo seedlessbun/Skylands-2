@@ -281,6 +281,17 @@ Other commands:
   `Check-BL2-Audio.bat --shots` runs the extraction alone. NOTHING is verified on real files: AKPK layout, HIRC object layouts (events/actions/sounds are found by
   scanning for ids), the Wwise event names (Play_... vs Ak_Play_...), the SNDR file-name style and the vgmstream download are all guesses with logging. Tests use
   synthetic packs (`tests/fake_wwise.py`, `tests/test_audio.py`).
+- 0.18.0 in game (TestBuild-91, SkylandsNative.log): the plugin fire loop works ("automatic fire: tick thread started", "player gun ... magazine 24 of 24"), the user
+  says the fire rate is right and the muzzle flash looks good ("muzzle flash: spawned"). No shot sound was heard (stand-in `WPNCrossbowFire` on the SMG; no log line
+  said whether the sound was handed to the plugin: suspects were a ghost script object with empty properties, or `PlayShot`). `Check-BL2-Audio.bat` report was the old one.
+- 0.19.0 (TestBuild-92, plugin 1.4.0, built next): (1) the muzzle flash is smaller by gun type: `generate.STAFF_FLASH_PERCENT` smg 75, assault_rifle 90; the numbers keyword
+  gained `_f<percent>`; the flash meshes are `Skylands\Flash_Staff_<element>_<percent>.nif`; the plugin reads `f` (`GunInfo.flash`). (2) BL2 reload sounds: three parts per
+  gun type x manufacturer (`bl2/audio.RELOAD_NAMES`: out = Reload_Eject / Clip_Out, in = Reload_Insert / Clip_In, end = Reload_Cock / End / Bolt ...), SNDRs
+  `SkylandsReload<Out|In|End>_<type>_<Mfr>`, script arrays `ReloadOut/ReloadIn/ReloadEnd` parallel to `Sounds`; `Load` hands them to the plugin with
+  `SetReloadSounds(Sound, Sound, Sound)`; the plugin plays them at 2%, 45% and 86% of the reload time (`BeginReload`/`ReloadSounds`). `extract_shot_sounds` keys:
+  `(kind, mfr)` = shot, `(kind, mfr, part)` = reload part. (3) script class `SkylandsStaffGun19` (18 retired), `STAFF_ID_SHIFT` 340: a ghost 18 with empty properties is the
+  likeliest reason no sound was heard. The plugin logs "shot sound set", "reload sounds set", "playing sound ... form found/missing" and "sound ...: handle built, valid, play".
+  UNCONFIRMED: everything about the Wwise extraction on the real files (read `skylands-setup.log` `audio:` lines), that the reload sounds line up with the animation-less reload.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
