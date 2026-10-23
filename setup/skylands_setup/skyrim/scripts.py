@@ -2182,13 +2182,17 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     load = Function(
         "Load",
         params=[("w", "Weapon")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("a", "Form"), ("b", "Form"), ("c", "Form"), ("d", "Form")],
         code=[
-            # remember the gun, pick its shot sound and hand the sound to the plugin
+            # remember the gun, pick its sounds and hand them to the plugin as Forms (a native with a Sound parameter never ran: no log line from it)
             ("assign", ("id", "Gun"), ("id", "w")),
             call("PickSound", ("id", "w")),
-            ("callstatic", ("id", "SkylandsNative"), ("id", "SetShotSound"), ("id", "::temp0"), ("id", "Cur")),
-            ("callstatic", ("id", "SkylandsNative"), ("id", "SetReloadSounds"), ("id", "::temp0"), ("id", "RelOut"), ("id", "RelIn"), ("id", "RelEnd")),
+            ("cast", ("id", "a"), ("id", "Cur")),
+            ("cast", ("id", "b"), ("id", "RelOut")),
+            ("cast", ("id", "c"), ("id", "RelIn")),
+            ("cast", ("id", "d"), ("id", "RelEnd")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "SetShotSound"), ("id", "::temp0"), ("id", "a")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "SetReloadSounds"), ("id", "::temp0"), ("id", "b"), ("id", "c"), ("id", "d")),
             ("return", None),
         ],
     )
@@ -2488,8 +2492,8 @@ def native_stub() -> Script:
             Function("MeasuredTenths", return_type="Int", flags=both),
             Function("ReloadMsNow", return_type="Int", flags=both),
             Function("SpreadNowTenths", return_type="Int", flags=both),
-            Function("SetShotSound", return_type="Bool", flags=both, params=[("akSound", "Sound")]),
-            Function("SetReloadSounds", return_type="Bool", flags=both, params=[("akOut", "Sound"), ("akIn", "Sound"), ("akEnd", "Sound")]),
+            Function("SetShotSound", return_type="Bool", flags=both, params=[("akSound", "Form")]),
+            Function("SetReloadSounds", return_type="Bool", flags=both, params=[("akOut", "Form"), ("akIn", "Form"), ("akEnd", "Form")]),
             Function("FireGun", return_type="Bool", flags=both,
                      params=[("akShooter", "Actor"), ("afRight", "Float"), ("afUp", "Float"), ("afForward", "Float"), ("afSpreadMult", "Float")]),
         ],

@@ -119,3 +119,9 @@ def test_an_action_laid_out_differently_is_still_followed(tmp_path):
     (root / "Audio_Banks.pck").write_bytes(F.pck([(1, F.bank(1, objs, {0x7000: F.pcm_wem()}))], []))
     out = audio.extract_shot_sounds(tmp_path / "bl2", tmp_path / "work", [("pistol", "Dahl")], lambda m: None, download=False)
     assert ("pistol", "Dahl") in out
+
+
+def test_sound_file_names_follow_the_style_of_the_copied_descriptor():
+    assert generate.sndr_prefix("Data\\Sound\\FX\\WPN\\Bash\\Axe\\WPN_Bash_Axe_") == "Data\\Sound\\"  # this install's vanilla style
+    assert generate.sndr_prefix("Sound\\FX\\WPN\\x_") == "Sound\\"
+    assert generate.sndr_prefix("FX\\WPN\\x_") == ""

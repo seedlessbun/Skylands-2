@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 140;  // 1.4.0
+	constexpr std::int32_t kVersion = 141;  // 1.4.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -716,7 +716,7 @@ namespace
 	std::int32_t SpreadNowTenths(RE::StaticFunctionTag*) { return g_spreadNowTenths.load(); }
 
 	// The sound the gun in the hand makes at every shot (a Sound the script picked for the gun); none to be silent
-	bool SetShotSound(RE::StaticFunctionTag*, RE::BGSSoundDescriptorForm* a_sound)
+	bool SetShotSound(RE::StaticFunctionTag*, RE::TESForm* a_sound)
 	{
 		g_shotSound = a_sound ? a_sound->GetFormID() : 0;
 		static std::atomic_int told{ 0 };
@@ -727,7 +727,7 @@ namespace
 	}
 
 	// The sounds of a reload (the magazine out, a new one in, the gun made ready); none to be silent
-	bool SetReloadSounds(RE::StaticFunctionTag*, RE::BGSSoundDescriptorForm* a_out, RE::BGSSoundDescriptorForm* a_in, RE::BGSSoundDescriptorForm* a_end)
+	bool SetReloadSounds(RE::StaticFunctionTag*, RE::TESForm* a_out, RE::TESForm* a_in, RE::TESForm* a_end)
 	{
 		g_reloadSound[0] = a_out ? a_out->GetFormID() : 0;
 		g_reloadSound[1] = a_in ? a_in->GetFormID() : 0;
@@ -807,7 +807,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 4, 0, 0 },
+	.Version = { 1, 4, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

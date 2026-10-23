@@ -239,7 +239,7 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     for text in (
             # the plugin knows a staff gun by its keyword (a native with no string parameter) and fires it; the script introduces the gun
             "Int c = SkylandsNative.GunClip(w)", "Return c > 0", "Self.Take(w)", "Self.Load(w)", "Gun = w", "Weapon Gun",
-            "SkylandsNative.SetShotSound(Cur)", "Cur = ShotSound", "While i < n", "If w.HasKeyword(k)", "Sound s = Sounds[i]", "Cur = s",
+            "SkylandsNative.SetShotSound(a)", "SkylandsNative.SetReloadSounds(b, c, d)", "Cur = ShotSound", "While i < n", "If w.HasKeyword(k)", "Sound s = Sounds[i]", "Cur = s",
             "Keyword[] Property SoundKeywords Auto", "Sound[] Property Sounds Auto", "Sound Property ShotSound Auto",
             "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "Weapon Property GiftA Auto", "Form f = GiftA as Form", "f = GiftB as Form",
             "Me.AddItem(f, 1, False)", "Me.GetEquippedObject(1)", "Self.Unknown(w)", "the plugin does not know this staff gun",
@@ -270,7 +270,7 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
                  "Int Function GunReloadMs(Weapon akWeapon) Global Native", "Int Function GunSpreadTenths(Weapon akWeapon) Global Native",
                  "Int Function Magazine() Global Native", "Int Function ShotsFired() Global Native", "Bool Function Reloading() Global Native", "Int Function RateTenths() Global Native",
                  "Int Function MeasuredTenths() Global Native", "Int Function ReloadMsNow() Global Native", "Int Function SpreadNowTenths() Global Native",
-                 "Bool Function SetShotSound(Sound akSound) Global Native", "Bool Function TriggerHeld() Global Native",
+                 "Bool Function SetShotSound(Form akSound) Global Native", "Bool Function TriggerHeld() Global Native",
                  "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
         assert text in psc, text
     assert "String" not in psc and "afSpreadMult" in psc  # no native takes a string: 0.15.1's GunStat(Weapon, String) always read 0 in the game's script

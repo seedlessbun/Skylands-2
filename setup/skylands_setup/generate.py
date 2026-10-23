@@ -590,6 +590,16 @@ def muzzle_light(view: esp.Plugin, m: "Masters", edid: str, rgb: tuple[int, int,
     return lt.form_id
 
 
+def sndr_prefix(style: str) -> str:
+    """What comes before FX\\... in the file names of the vanilla sound descriptor we copy (this install's read "Data\\Sound\\FX\\WPN\\...", others
+    "Sound\\FX\\...", others "FX\\..."): our files are named the same way."""
+    at = style.lower().find("fx\\")
+    return style[:at] if at > 0 else ""
+
+
+STAFF_INFO_BUILD = "0.19.1"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+
+
 class Armory:
     """The staff guns: every submachine gun and assault rifle variant of the crossbow set is turned into one IN PLACE (the same form id, so
     the loot lists, the form list of the beams, and every copy already lying in a saved game or carried by an enemy become staff guns;
@@ -671,7 +681,7 @@ class Armory:
         if not files or template is None:
             return None
         style = template.first("ANAM").rstrip(b"\0").decode("latin-1", errors="replace")
-        prefix = "Sound\\" if style.lower().startswith("sound\\") else ""
+        prefix = sndr_prefix(style)
         self.sound_dir.mkdir(parents=True, exist_ok=True)
         paths = []
         for f in files:
@@ -902,7 +912,7 @@ class Armory:
                 for part in RELOAD_PARTS:
                     reload_ids[part].append(0)
         gifts = [self.gifts.get(kind) or self.first_of.get(kind) or next(iter(self.first_of.values())) for kind in STAFF_KINDS]
-        info = (f"Build {STAFF_REV}. {self.count} staff guns (submachine guns and assault rifles) from the vanilla staff {self.base[0].edid}; "
+        info = (f"Build {STAFF_INFO_BUILD}. {self.count} staff guns (submachine guns and assault rifles) from the vanilla staff {self.base[0].edid}; "
                 f"each one's numbers are in its SkylandsGun_ keyword; tracers {len(self.tracers)}; shot sound {sound[1] if sound else 'none found'}; "
                 f"the SKSE plugin launches a bullet from the gun's muzzle when the attack button goes down, then one every interval while it is held.")
         props = [("ChargePerShot", esp.P_FLOAT, STAFF_CHARGE_PER_SHOT),
