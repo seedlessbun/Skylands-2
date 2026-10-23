@@ -251,6 +251,12 @@ Other commands:
   (`muzzle_light`, a LIGH copied from a vanilla light) and duration 0.05 s; UNCONFIRMED in game, and unconfirmed that a plugin-launched projectile
   shows it. Docs: `docs/gun-feel.md` (small details), `docs/staff-roadmap.md` (features from skse.md in order). Note: a careless slice in an edit once
   deleted the Armory class; edit `generate.py` with exact-match replaces and run the tests after each.
+- 0.17.0 in game: the game CRASHED on the first shot. Log: "gun mode on", "bullet origin (player): muzzle ... third person", then nothing. The only change in the
+  launch path was the muzzle flash on the bullet PROJ (flag 0x8 + `NAM1` model + muzzle light + duration), so it is the suspect (not proven). 0.17.1 (TestBuild-90,
+  plugin 1.2.2): `generate.STAFF_MUZZLE_FLASH = False` (no flag, no NAM1, no muzzle light, no flash mesh); the plugin logs "launching <id>'s bullet
+  (projectile <id>) from x y z" and "launched" around the first three launches. Never switch a PROJ feature on for plugin-launched projectiles without a test
+  that can fail safely. Also in that log: the install had only three plain vanilla staffs (all fire), so Shock/Corrosive/Slag bullets are built like plain
+  ones (no hit art); the AR shot sound is `WPNBowFireSD`; the setup log's staff info string still says "Build 0.15.0" (STAFF_REV, harmless).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

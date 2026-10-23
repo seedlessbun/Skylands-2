@@ -553,6 +553,7 @@ MGEF_RESIST_AT = 16
 PROJ_MUZZLE_LIGHT_AT, PROJ_MUZZLE_DURATION_AT = 20, 44
 STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, STAFF_FLASH_SECONDS = 26.0, 6.0, 0.05  # the muzzle flash: a short glowing burst ahead of the barrel
 STAFF_FLASH_LIGHT_RADIUS = 260
+STAFF_MUZZLE_FLASH = False  # 0.17.0 turned the projectile's muzzle flash on and the game crashed on the first shot the plugin launched: off until a safer way is tested
 STAFF_KINDS = ("smg", "assault_rifle")  # the gun types that are staff guns (the other types stay crossbows)
 STAFF_NPC_BURST_MAX = 6
 
@@ -702,14 +703,16 @@ class Armory:
         struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
         struct.pack_into("<II", pd, PROJ_LIGHT_AT, 0, 0)  # the donor's firelight and muzzle light
         struct.pack_into("<I", pd, PROJ_SOUND_AT, 0)  # the donor's flight sound
-        # the muzzle flash: our own glowing burst and a short light, shown for a moment where the bullet leaves
-        rgb = STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None])
-        flash = f"Skylands\\Flash_Staff_{(element or 'plain').lower()}.nif"
-        if flash not in self.tracers:
-            self.tracers[flash] = nif.tracer(rgb, BEAM_TEXTURE, STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, forward=True)
-        struct.pack_into("<I", pd, PROJ_MUZZLE_LIGHT_AT, muzzle_light(self.view, self.m, f"SkylandsMuzzleLight_{(element or 'plain').lower()}", rgb, STAFF_FLASH_LIGHT_RADIUS))
-        struct.pack_into("<f", pd, PROJ_MUZZLE_DURATION_AT, STAFF_FLASH_SECONDS)
-        flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] | PROJ_FLAG_MUZZLE_FLASH
+        flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] & ~PROJ_FLAG_MUZZLE_FLASH
+        flash = None
+        if STAFF_MUZZLE_FLASH:  # our own glowing burst and a short light, shown for a moment where the bullet leaves
+            rgb = STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None])
+            flash = f"Skylands\\Flash_Staff_{(element or 'plain').lower()}.nif"
+            if flash not in self.tracers:
+                self.tracers[flash] = nif.tracer(rgb, BEAM_TEXTURE, STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, forward=True)
+            struct.pack_into("<I", pd, PROJ_MUZZLE_LIGHT_AT, muzzle_light(self.view, self.m, f"SkylandsMuzzleLight_{(element or 'plain').lower()}", rgb, STAFF_FLASH_LIGHT_RADIUS))
+            struct.pack_into("<f", pd, PROJ_MUZZLE_DURATION_AT, STAFF_FLASH_SECONDS)
+            flags |= PROJ_FLAG_MUZZLE_FLASH
         explosion = 0
         if element is not None:  # the element's status effect, delivered by a silent explosion
             explosion = self._blast(kind, element, gt, shot)
@@ -720,7 +723,8 @@ class Armory:
         struct.pack_into("<I", pd, PROJ_EXPLOSION_AT, explosion)
         pr.set("DATA", bytes(pd))
         at = next(i for i, (sig, _) in enumerate(pr.subs) if sig == "DATA")
-        pr.subs.insert(at + 1, ("NAM1", esp.zstr(flash)))  # the muzzle flash model follows the data
+        if flash:
+            pr.subs.insert(at + 1, ("NAM1", esp.zstr(flash)))  # the muzzle flash model follows the data
         order = ["EDID", "VMAD", "OBND", "FULL", "MODL", "MODT", "MODC", "MODS", "DEST", "DSTD", "DSTF", "DATA", "NAM1", "NAM2", "VNAM"]
         pr.subs.sort(key=lambda sd: order.index(sd[0]) if sd[0] in order else 98)  # the order the game reads them in
         self.view.override(pr)

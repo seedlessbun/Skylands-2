@@ -18,7 +18,7 @@ installs them once (`Check-SKSE.bat` says what is missing; the installer logs th
 Papyrus class `SkylandsNative` (static functions; `Data/Scripts/SkylandsNative.pex`, written by the installer, declares them: SKSE binds a plugin's functions to the natives a script declares):
 | function | what it does |
 |---|---|
-| `Int Version()` | the plugin version (121 = 1.2.1) |
+| `Int Version()` | the plugin version (122 = 1.2.2) |
 | `Bool TriggerHeld()` | the attack button ("Right Attack/Block": keyboard, mouse or gamepad, as remapped) is down, and no menu is open |
 | `Bool TriggerPressed()` | the button went down since the last call (a tap shorter than a script poll is still seen) |
 | `Int GunClip(Weapon)`, `Int GunIntervalMs(Weapon)`, `Int GunReloadMs(Weapon)`, `Int GunSpreadTenths(Weapon)` | a staff gun's numbers, read from its keyword `SkylandsGun_c<clip>_i<ms>_r<ms>_s<tenths of a degree>_b<burst>` (editor ids of keywords are kept at run time, read from the keyword's own member): magazine, milliseconds between rounds, milliseconds of a reload. 0 for a weapon that is no Skylands staff gun, so `GunClip(w) > 0` is "is it a gun". No string parameters: a native that took a string key (0.15.1) always returned 0 to Papyrus on Skyrim 1.7.104. |

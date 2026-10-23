@@ -9,9 +9,11 @@
 * **Shot sound per gun type**: every staff gun carries a keyword `SkylandsSnd_<type>`; the script picks the sound whose keyword the gun
   has (`PickSound`). For now the sounds are Skyrim's own (submachine gun: a crossbow shot; assault rifle: a short bow shot, else the
   crossbow); the install log says which ("shot sound ..."). It is a stand-in.
-* **Muzzle flash**: the bullets' projectile record has Skyrim's muzzle-flash feature on, with our own glowing burst ahead of the barrel (one in
-  each element's colour, `Flash_Staff_*.nif`) and a short light of the same colour for 0.05 s. UNCONFIRMED in game: that a projectile the plugin
-  launches (not one the game cast) gets the flash at all.
+* **Muzzle flash**: tried in 0.17.0 through the projectile record's own muzzle-flash feature (flag on, our `Flash_Staff_*.nif`, a short light) and the
+  game CRASHED on the first bullet the plugin launched (`SkylandsNative.log` ends right after "bullet origin (player): muzzle"). Switched off in 0.17.1
+  (`generate.STAFF_MUZZLE_FLASH = False`; the code is kept). The plugin now logs "launching ..." / "launched" around the first three launches, so a
+  crash inside the game's launch call shows. A safer flash would be made by the plugin itself: place a short-lived light and glow mesh at the
+  muzzle node after each launch (no projectile feature involved).
 
 ## Borderlands sounds: not built yet, and why
 Borderlands 2 keeps its sound in its own format (Wwise banks and streamed `.wem` files, or Unreal sound objects in the packages; which one

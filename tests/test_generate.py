@@ -451,7 +451,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     assert rep["staff_gun"]["guns"] == len(rep["staff_guns"]) == rep["staff_converted"] > 0
     assert any("donor staff StaffFireball " in l for l in rep["model_log"]), rep["model_log"]  # never the scripted artifact (AAWabbajack sorts first)
     view = tmp_path / "out" / "Data" / "SkylandsGunModels.esp"
-    _, recs = read_plugin(view, {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST", "KYWD", "LVLI", "FLST", "EXPL"})
+    _, recs = read_plugin(view, {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST", "KYWD", "LVLI", "FLST", "EXPL", "LIGH"})
     by_id = {t: {r.form_id: r for r in rs} for t, rs in recs.items()}
     plain = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP", "LVLI", "FLST", "KYWD"})[1]
     # the staff guns ARE the crossbow SMGs and rifles: the same form ids, so the loot lists, the beams' form list, and every copy a saved
@@ -478,11 +478,9 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         proj = by_id["PROJ"][st.unpack_from("<I", md, 72)[0]]
         assert st.unpack_from("<I", md, 0)[0] & 0x1  # hostile: the AI aims a hostile staff spell at its enemies
         assert st.unpack_from("<f", md, 4)[0] == 0.0 and st.unpack_from("<I", md, 80)[0] == 1 and st.unpack_from("<I", md, 84)[0] == 2  # free, fire and forget, aimed
-        assert proj.first("MODL").rstrip(b"\0").startswith(b"Skylands\\Tracer_Staff_") and proj.first("NAM1").rstrip(b"\0").startswith(b"Skylands\\Flash_Staff_")  # our tracer, our muzzle flash (not the donor's fireball)
-        assert [s_ for s_, _ in proj.subrecords].index("MODL") < [s_ for s_, _ in proj.subrecords].index("DATA") < [s_ for s_, _ in proj.subrecords].index("NAM1")
-        pdat = proj.first("DATA")
-        assert st.unpack_from("<H", pdat, 0)[0] & 0x8 and st.unpack_from("<I", pdat, 20)[0] != 0 and 0.0 < st.unpack_from("<f", pdat, 44)[0] < 0.2  # muzzle flash on, with a light and a short duration
-        assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / proj.first("NAM1").rstrip(b"\0").decode().split("\\")[-1]).is_file()
+        assert proj.first("MODL").rstrip(b"\0").startswith(b"Skylands\\Tracer_Staff_") and proj.first("NAM1") is None  # our tracer, no donor fireball or muzzle flash
+        assert not st.unpack_from("<H", proj.first("DATA"), 0)[0] & 0x8 and st.unpack_from("<I", proj.first("DATA"), 20)[0] == 0  # no muzzle flash, no muzzle light: turning them on crashed the game on the first shot (0.17.0)
+        assert not any(r.edid.startswith("SkylandsMuzzleLight") for r in recs["LIGH"]) if "LIGH" in recs else True
         for at in (24, 36, 92, 108, 116):  # no casting light or art, enchant shader or art, dual casting art
             assert st.unpack_from("<I", md, at)[0] == 0
         kwda = w.first("KWDA")

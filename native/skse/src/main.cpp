@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 121;  // 1.2.1
+	constexpr std::int32_t kVersion = 122;  // 1.2.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -337,7 +337,16 @@ namespace
 		RE::Projectile::LaunchData data(shooter, origin, { pitch, heading }, spell);
 		data.castingSource = RE::MagicSystem::CastingSource::kRightHand;
 		RE::ProjectileHandle handle{};
+		static std::atomic_int launches{ 0 };
+		const bool tell = launches.fetch_add(1) < 3;  // the first launches are told before and after, so a crash inside the game's launch shows in the log
+		if (tell) {
+			SKSE::log::info("launching {:08X}'s bullet (projectile {:08X}) from {:.0f} {:.0f} {:.0f}", a_shooter,
+				spell->GetAVEffect()->data.projectileBase->GetFormID(), origin.x, origin.y, origin.z);
+		}
 		RE::Projectile::Launch(&handle, data);
+		if (tell) {
+			SKSE::log::info("launched");
+		}
 	}
 
 	void RunOnGameThread(std::function<void()> a_work)
@@ -498,7 +507,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 2, 1, 0 },
+	.Version = { 1, 2, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
