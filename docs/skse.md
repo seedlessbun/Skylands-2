@@ -18,10 +18,10 @@ installs them once (`Check-SKSE.bat` says what is missing; the installer logs th
 Papyrus class `SkylandsNative` (static functions; `Data/Scripts/SkylandsNative.pex`, written by the installer, declares them: SKSE binds a plugin's functions to the natives a script declares):
 | function | what it does |
 |---|---|
-| `Int Version()` | the plugin version (111 = 1.1.1) |
+| `Int Version()` | the plugin version (112 = 1.1.2) |
 | `Bool TriggerHeld()` | the attack button ("Right Attack/Block": keyboard, mouse or gamepad, as remapped) is down, and no menu is open |
 | `Bool TriggerPressed()` | the button went down since the last call (a tap shorter than a script poll is still seen) |
-| `Float GunStat(Weapon, String key)` | one of a staff gun's numbers, read from its keyword `SkylandsGun_c<clip>_i<ms>_r<ms>_s<tenths of a degree>_b<burst>` (editor ids of keywords are kept at run time): key `"clip"`, `"interval"` (s), `"reload"` (s), `"spread"` (degrees), `"burst"`; 0 for a weapon that is no Skylands staff gun, so `GunStat(w, "clip") > 0` is "is it a gun" |
+| `Int GunClip(Weapon)`, `Int GunIntervalMs(Weapon)`, `Int GunReloadMs(Weapon)` | a staff gun's numbers, read from its keyword `SkylandsGun_c<clip>_i<ms>_r<ms>_s<tenths of a degree>_b<burst>` (editor ids of keywords are kept at run time, read from the keyword's own member): magazine, milliseconds between rounds, milliseconds of a reload. 0 for a weapon that is no Skylands staff gun, so `GunClip(w) > 0` is "is it a gun". No string parameters: a native that took a string key (0.15.1) always returned 0 to Papyrus on Skyrim 1.7.104. |
 | `Bool FireGun(Actor, Float right, Float up, Float forward)` | launches the bullet of the gun in the actor's hands (the projectile of its enchantment's effect, `Projectile::Launch`) from the gun's own `SkylandsMuzzle` node (an empty NiNode the installer puts at the end of the barrel in the gun's mesh; the right hand's magic node `NPC R MagicNode [RMag]` follows the staff's tip and was where the bullets left from in 0.14.2), in the first-person skeleton in first person, aimed at the point the crosshair looks at 3000 units ahead (`Convergence` in the ini), within the gun's spread, offset in view space; no animation, no wind-up, no magicka. Runs on the game's thread a frame later. |
 
 **Enemies** (not a Papyrus function): the plugin listens for `TESSpellCastEvent`. When an enemy casts the enchantment of the gun it holds, the plugin

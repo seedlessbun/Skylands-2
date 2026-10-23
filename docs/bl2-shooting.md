@@ -75,7 +75,7 @@ Skyrim started through `skse64_loader.exe`. The installer checks all three and s
   crossbow rounds, a glowing tracer in the element's colour). Shared per gun type x element: the projectile; per gun: the effect
   (it carries the stats text), the enchantment and the weapon. The old trigger (a concentration cast for the casting pose) is gone:
   the plugin keeps the attack button from the game, so there is no pose to start.
-* A keyword per gun holds its numbers: `SkylandsGun_c<clip>_i<ms>_r<ms>_s<spread*10>_b<burst>`; the plugin reads them (`GunStat`).
+* A keyword per gun holds its numbers: `SkylandsGun_c<clip>_i<ms>_r<ms>_s<spread*10>_b<burst>`; the plugin reads them (`GunClip`).
 * The player's bullets are the script's. `SkylandsNative.TriggerPressed/TriggerHeld` (the plugin's listener for the "Right
   Attack/Block" input event: any device, any remapping) say when the button goes down and while it is held; `FireGun` launches
   the held gun's bullet with `Projectile::Launch` from the gun's own muzzle node, aimed at the crosshair 3000 units ahead,

@@ -546,7 +546,7 @@ class Armory:
     The player's gun is fired by the SKSE plugin from the attack button (script scripts.staff_gun, plugin FireGun), which keeps the
     game's own staff cast away. An enemy that holds one casts the enchantment as it would any staff and the plugin adds the rest of
     its burst (docs/enemy-ai.md). Each gun carries one keyword whose editor id holds its numbers (magazine, interval, reload, spread,
-    burst), SkylandsGun_c<clip>_i<ms>_r<ms>_s<tenths of a degree>_b<burst>, which the plugin reads (GunStat).
+    burst), SkylandsGun_c<clip>_i<ms>_r<ms>_s<tenths of a degree>_b<burst>, which the plugin reads (GunClip, GunIntervalMs, GunReloadMs).
     Everything is in the second plugin."""
 
     def __init__(self, view: esp.Plugin, m: "Masters", rounds: "Rounds", gunner: "Gunner", models, data_dir: Path, hold_turn, report: dict) -> None:

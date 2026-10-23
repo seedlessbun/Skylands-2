@@ -1,7 +1,7 @@
 // SkylandsNative: the SKSE plugin the Skylands guns use for what plain Papyrus cannot do.
 //
 //   TriggerHeld / TriggerPressed   the attack button ("Right Attack/Block": keyboard, mouse or gamepad, whatever the player mapped)
-//   GunStat / FireGun              a Skylands staff gun's numbers (from its keywords) and its bullet, launched from the gun's muzzle
+//   GunClip / GunIntervalMs / GunReloadMs / FireGun   a Skylands staff gun's numbers (from its keywords) and its bullet, launched from the gun's muzzle
 //                                  along the crosshair; no cast animation, no wind-up, no magicka. Enemies: the burst after the game's cast
 //
 // Papyrus class: SkylandsNative, static functions. Data/Scripts/SkylandsNative.pex (written by the installer, scripts.native_stub)
@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 111;  // 1.1.1
+	constexpr std::int32_t kVersion = 112;  // 1.1.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -406,29 +406,31 @@ namespace
 
 	// ---- Papyrus (continued) ---------------------------------------------------------------------------------------------
 
-	// One of a gun weapon's numbers: "clip", "interval" (seconds), "reload" (seconds), "spread" (degrees), "burst"; 0 when the weapon is no gun.
-	float GunStat(RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon, std::string_view a_key)
+	// The gun weapon's numbers, as plain integers (a Papyrus call with no string parameter: 0.15.1 read its numbers by a key string and the
+	// script always got 0). GunClip is 0 for a weapon that is no Skylands staff gun, so GunClip(w) > 0 is "is it a gun".
+	std::int32_t GunClip(RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)
 	{
 		GunInfo info{};
-		if (!GunOf(a_weapon, info)) {
-			return 0.0f;
+		const bool ok = GunOf(a_weapon, info);
+		static std::atomic_int told{ 0 };
+		if (told.fetch_add(1) < 6) {  // the first answers are told
+			SKSE::log::info("GunClip({:08X}) = {}", a_weapon ? a_weapon->GetFormID() : 0u, ok ? info.clip : 0);
 		}
-		if (a_key == "clip") {
-			return static_cast<float>(info.clip);
-		}
-		if (a_key == "interval") {
-			return info.interval;
-		}
-		if (a_key == "reload") {
-			return info.reload;
-		}
-		if (a_key == "spread") {
-			return info.spread;
-		}
-		if (a_key == "burst") {
-			return static_cast<float>(info.burst);
-		}
-		return 0.0f;
+		return ok ? info.clip : 0;
+	}
+
+	// Milliseconds between two rounds of an automatic gun
+	std::int32_t GunIntervalMs(RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)
+	{
+		GunInfo info{};
+		return GunOf(a_weapon, info) ? static_cast<std::int32_t>(info.interval * 1000.0f + 0.5f) : 0;
+	}
+
+	// Milliseconds a reload takes
+	std::int32_t GunReloadMs(RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)
+	{
+		GunInfo info{};
+		return GunOf(a_weapon, info) ? static_cast<std::int32_t>(info.reload * 1000.0f + 0.5f) : 0;
 	}
 
 	// The player's shot: launched on the game's own thread, a frame later (a Papyrus call may not touch the world from the script thread).
@@ -448,7 +450,9 @@ namespace
 		a_vm->RegisterFunction("SetGunMode"sv, "SkylandsNative"sv, SetGunMode);
 		a_vm->RegisterFunction("TriggerHeld"sv, "SkylandsNative"sv, TriggerHeld);
 		a_vm->RegisterFunction("TriggerPressed"sv, "SkylandsNative"sv, TriggerPressed);
-		a_vm->RegisterFunction("GunStat"sv, "SkylandsNative"sv, GunStat);
+		a_vm->RegisterFunction("GunClip"sv, "SkylandsNative"sv, GunClip);
+		a_vm->RegisterFunction("GunIntervalMs"sv, "SkylandsNative"sv, GunIntervalMs);
+		a_vm->RegisterFunction("GunReloadMs"sv, "SkylandsNative"sv, GunReloadMs);
 		a_vm->RegisterFunction("FireGun"sv, "SkylandsNative"sv, FireGun);
 		return true;
 	}
@@ -486,7 +490,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 1, 1, 0 },
+	.Version = { 1, 1, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

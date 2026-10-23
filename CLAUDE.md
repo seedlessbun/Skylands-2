@@ -196,7 +196,7 @@ Other commands:
   with the crossbow rounds, `Rounds.expl` now caches). The old concentration trigger and `trigger_donor` are gone (the plugin swallows the
   attack button, so no cast pose is needed). Each gun has a keyword `SkylandsGun_c<clip>_i<ms>_r<ms>_s<spread*10>_b<burst>` that the plugin
   parses (`GunStat`); the script `SkylandsStaffGun18` is generic (retire 17, `STAFF_ID_SHIFT` 300, gives two staff guns once as `GiftA/GiftB`).
-  Plugin API now: `Version, SetGunMode, TriggerHeld, TriggerPressed, GunStat(Weapon, String), FireGun(Actor, right, up, forward)`
+  Plugin API now: `Version, SetGunMode, TriggerHeld, TriggerPressed, GunClip, GunIntervalMs, GunReloadMs (Weapon -> Int), FireGun(Actor, right, up, forward)`
   (`FireBullet` removed). Enemies: a `TESSpellCastEvent` sink; when a non-player actor casts the enchantment of the gun in its hands the
   plugin launches `burst-1` more bullets from the muzzle, one per interval, at `currentCombatTarget` (2x spread). Notes in `docs/enemy-ai.md`.
   UNCONFIRMED in game: that the cast event arrives for NPC staff casts with the enchantment's id (the first eight casts are logged in
@@ -210,7 +210,7 @@ Other commands:
   hardened in 0.15.1: (1) the staff weapon kept the vanilla staff's equip slot "either hand", so with a gun in the right hand it went to the left;
   (2) the plugin read keyword editor ids through the VIRTUAL `GetFormEditorID` (a slot that may have moved on 1.7.104) and found no
   `SkylandsGun_` numbers, so `GunStat` read 0 and the script never armed.
-- 0.15.1 (TestBuild-86, plugin 1.1.1): `ETYP` of every staff gun is EQUP RightHand (0x00013F42, `STAFF_EQUIP_SLOT`); the plugin reads the
+- 0.15.1 (TestBuild-86, plugin 1.1.1; 0.15.2 / TestBuild-87 / plugin 1.1.2 follows): `ETYP` of every staff gun is EQUP RightHand (0x00013F42, `STAFF_EQUIP_SLOT`); the plugin reads the
   keyword's `formEditorID` member and logs "gun check <id>: N keywords [names] -> clip ..." for the first weapons it looks at; `Sync` also sets
   `LeftItemCharge`; the equip box says which hand holds the gun and the interval the plugin read; equipping the gifted SMG when the plugin
   does not know it says so on screen. If it still fails: read `SkylandsNative.log` ("gun check" lines) and the box.
@@ -219,6 +219,16 @@ Other commands:
   record itself in `SkylandsGunModels.esp` with the SAME form id (a staff weapon over the crossbow one; `Skylands.esp` still holds the crossbow
   and stays byte-identical), so the tier lists, the beams' FLST, every copy in a save and every gun an enemy carries are staff guns. Staff gun
   ids are therefore Skylands.esp's stable ids. The MGEF/ENCH are `Staff_<edid>` (second plugin, positional ids). Report key `staff_converted`.
+- 0.15.1 in game (log `SkylandsNative.log`): the plugin loaded, hooked the attack handler (slot 6), registered both listeners, and READ THE KEYWORDS
+  CORRECTLY ("gun check FE003C0A: 5 keywords [... SkylandsGun_c20_i170_r3600_s19_b4] -> clip 20 ..."), enemies cast and got their bursts
+  ("enemy FF000E38 cast FE004B17 holding gun FE003A99 (its enchantment FE004B17): a burst of 6", muzzle found in third person: the enemy side
+  works and enemies have and drop the staff SMGs). But "gun mode on" never appeared (only one "gun mode off" 7 ms after the first gun check), no
+  equip box, no charge bar, no rapid fire: Papyrus asked `GunStat(w, "clip")` and got 0 although the plugin had computed 20. It was the first native
+  with a STRING parameter (the `std::string_view` key); on this runtime it did not match. 0.15.2 (plugin 1.1.2) has no native with a string:
+  `GunClip(Weapon) Int`, `GunIntervalMs(Weapon) Int`, `GunReloadMs(Weapon) Int` (`GunStat` is gone; a test asserts the stub has no String). Never
+  add a string parameter to a native without a log proving it arrives. The plugin logs the first six `GunClip(...) = n` answers.
+  Also in 0.15.2: the Hunter finds a Skylands gun in EITHER hand (`HeldIn`/`GunHeld`, used by `Carrying` and `OwnDrop`): OwnDrop looked at the right hand
+  only, so a staff gun in the left hand was never dropped on the ground and never got a beam (beams are placed on guns lying loose in the world).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
