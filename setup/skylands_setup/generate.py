@@ -795,7 +795,7 @@ class Armory:
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}"
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}"
         self.kinds.add(kind)
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
         insert_ordered(w, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
@@ -848,6 +848,9 @@ class Armory:
         q.add("VMAD", esp.vmad([("SkylandsGunnerQuest", [("Ability", esp.P_OBJECT, ability.form_id)])], quest=True))
         q.add("FULL", esp.zstr("Skylands Staff Gun")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
         q.add("ANAM", esp.u32(0))
+        for word, rgb in (("plain", STAFF_TRACER_RGB[None]), *((n.lower(), STAFF_TRACER_RGB[n.lower()]) for n in ELEMENT_NAMES)):
+            # the muzzle flash meshes the plugin spawns at the barrel (one in each element's colour); they are not a projectile feature
+            self.tracers[f"Skylands\\Flash_Staff_{word}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, forward=True)
         self.report["staff_tracer"] = list(self.tracers.items())
         self.report["staff_gun"] = {"guns": self.count, "tracers": len(self.tracers)}
         self.log.append(f"Staff guns: {self.count} built; gifts {[hex(g) for g in gifts]}; {info}")

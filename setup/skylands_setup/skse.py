@@ -24,6 +24,8 @@ DEFAULT_INI = """; SkylandsNative settings
 [Skylands]
 ; how far ahead (game units) the bullets are aimed to cross the crosshair
 Convergence=3000
+; a short glowing flash at the muzzle with every bullet (1 on, 0 off)
+MuzzleFlash=1
 """
 
 

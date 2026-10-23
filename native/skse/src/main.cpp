@@ -12,12 +12,13 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 122;  // 1.2.2
+	constexpr std::int32_t kVersion = 130;  // 1.3.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
+	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
 	float g_convergence = 3000.0f;  // how far ahead the bullets are aimed to cross the crosshair (game units)
 
 	struct Vec3
@@ -47,7 +48,9 @@ namespace
 			}
 			std::string key = line.substr(0, eq);
 			std::erase_if(key, [](unsigned char c) { return std::isspace(c); });
-			if (key == "Convergence") {
+			if (key == "MuzzleFlash") {
+				g_flash = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "Convergence") {
 				try {
 					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
 				} catch (...) {
@@ -179,6 +182,7 @@ namespace
 		float reload{ 2.0f };    // seconds
 		float spread{ 2.0f };    // degrees
 		int   burst{ 1 };        // rounds per burst of an enemy
+		int   element{ 0 };      // 0 none, 1 fire, 2 shock, 3 corrosive, 4 slag (the colour of the muzzle flash)
 	};
 
 	std::mutex                                     g_gunLock;
@@ -223,6 +227,7 @@ namespace
 					case 'r': info.reload = value / 1000.0f; break;
 					case 's': info.spread = value / 10.0f; break;
 					case 'b': info.burst = (std::max)(1, value); break;
+					case 'e': info.element = value; break;
 					default: break;
 					}
 				}
@@ -255,20 +260,46 @@ namespace
 		return nullptr;
 	}
 
+	// A short glowing flash where the bullet leaves, spawned by the plugin itself (a temporary effect of our own flash mesh that the game removes after
+	// its lifetime). The projectile record's own muzzle-flash feature crashed the game on the first shot (0.17.0).
+	void SpawnFlash(RE::Actor* a_shooter, const RE::NiPoint3& a_at, float a_pitch, float a_heading, int a_element)
+	{
+		if (!g_flash || !a_shooter) {
+			return;
+		}
+		static const char* const names[] = { "plain", "fire", "shock", "corrosive", "slag" };
+		const auto cell = a_shooter->GetParentCell();
+		if (!cell) {
+			return;
+		}
+		RE::NiMatrix3 rotation;
+		rotation.SetEulerAnglesXYZ(a_pitch, 0.0f, a_heading);
+		const std::string model = std::string("Skylands\\Flash_Staff_") + names[std::clamp(a_element, 0, 4)] + ".nif";
+		static std::atomic_int spawned{ 0 };
+		const bool tell = spawned.fetch_add(1) < 3;
+		if (tell) {
+			SKSE::log::info("muzzle flash: spawning {}", model);
+		}
+		RE::BSTempEffectParticle::Spawn(cell, 0.06f, model.c_str(), rotation, a_at, 1.0f, 0, nullptr);
+		if (tell) {
+			SKSE::log::info("muzzle flash: spawned");
+		}
+	}
+
 	// Launches the held gun's bullet. The player's bullets cross the crosshair (a_target null); an enemy's go at a_target's chest.
-	// a_spread is in degrees; right, up and forward move the start in the view's own axes.
-	void Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward, float a_spreadMult)
+	// right, up and forward move the start in the view's own axes; spreadMult scales the gun's spread (the player's accuracy relics).
+	bool Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward, float a_spreadMult, RE::NiPoint3* a_originOut = nullptr)
 	{
 		const auto shooter = RE::TESForm::LookupByID<RE::Actor>(a_shooter);
 		GunInfo    info{};
 		const auto weapon = HeldGun(shooter, info);
 		if (!weapon || shooter->IsDead()) {
-			return;
+			return false;
 		}
 		const auto spell = weapon->formEnchanting;
 		if (!spell->GetAVEffect() || !spell->GetAVEffect()->data.projectileBase) {
 			SKSE::log::warn("gun {:08X}: its enchantment has no projectile", weapon->GetFormID());
-			return;
+			return false;
 		}
 		const auto target = a_targetId ? RE::TESForm::LookupByID<RE::Actor>(a_targetId) : nullptr;
 		const bool npc = !shooter->IsPlayerRef();
@@ -347,6 +378,11 @@ namespace
 		if (tell) {
 			SKSE::log::info("launched");
 		}
+		if (a_originOut) {
+			*a_originOut = origin;
+		}
+		SpawnFlash(shooter, origin, pitch, heading, info.element);
+		return true;
 	}
 
 	void RunOnGameThread(std::function<void()> a_work)
@@ -413,6 +449,184 @@ namespace
 		}
 	};
 
+	// ---- the player's automatic fire -----------------------------------------------------------------------------------
+	//
+	// The firing loop lives here, not in a Papyrus script: a Papyrus Utility.Wait in a loop took about twice the time it was asked to (the rate
+	// measured in 0.17.0 was about half the set one). A small thread asks the game thread for a tick every few milliseconds; the tick, while a
+	// Skylands gun is in the hand ("gun mode"), looks at the trigger, fires rounds when they are due by the clock, counts the magazine (kept
+	// per gun), reloads, sets the charge bar and plays the shot sound. The player's relics are the actor values Variable06 (fire rate),
+	// Variable07 (reload speed) and Variable08 (accuracy), each a percentage; they are read at every shot.
+
+	using Clock = std::chrono::steady_clock;
+
+	constexpr float kChargePerShot = 100.0f;
+	constexpr float kOffsetForward = 12.0f;  // where the bullet starts, ahead of the muzzle node along the aim (game units)
+
+	struct PlayerGun
+	{
+		RE::FormID            weapon{ 0 };
+		GunInfo               info{};
+		int                   mag{ 0 };
+		bool                  reloading{ false };
+		Clock::time_point     nextShot{};
+		Clock::time_point     reloadUntil{};
+		Clock::time_point     holdStart{};
+		int                   holdShots{ 0 };
+		bool                  wasHeld{ false };
+		std::unordered_map<RE::FormID, int> mags;  // rounds left in each gun that was put away
+	};
+
+	PlayerGun                g_gun;
+	std::atomic_bool         g_tickQueued{ false };
+	std::atomic_int          g_mag{ 0 };
+	std::atomic_int          g_shots{ 0 };
+	std::atomic_bool         g_reloading{ false };
+	std::atomic_int          g_rateTenths{ 0 };      // the rate the gun is set to, relics included, in tenths of a round a second
+	std::atomic_int          g_measuredTenths{ 0 };  // the rate actually fired since the trigger went down
+	std::atomic_int          g_reloadMs{ 0 };
+	std::atomic_int          g_spreadNowTenths{ 0 };
+	std::atomic<RE::FormID>  g_shotSound{ 0 };
+
+	// A relic bonus in percent as a divisor: 0 is 1.0, 50 is 1.5; never below 0.2
+	float Relic(RE::PlayerCharacter* a_player, RE::ActorValue a_value)
+	{
+		const float percent = a_player->AsActorValueOwner()->GetActorValue(a_value);
+		return (std::max)(0.2f, 1.0f + percent * 0.01f);
+	}
+
+	void SetBar(RE::PlayerCharacter* a_player, int a_mag)
+	{
+		g_mag = a_mag;
+		a_player->AsActorValueOwner()->SetActorValue(RE::ActorValue::kRightItemCharge, static_cast<float>(a_mag) * kChargePerShot);
+	}
+
+	void PlayShot(const RE::NiPoint3& a_at)
+	{
+		const auto id = g_shotSound.load();
+		if (!id) {
+			return;
+		}
+		const auto form = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(id);
+		const auto manager = RE::BSAudioManager::GetSingleton();
+		if (!form || !manager) {
+			return;
+		}
+		RE::BSSoundHandle handle;
+		manager->GetSoundHandle(handle, form);  // the form is itself a BSISoundDescriptor (it forwards to its soundDescriptor)
+		handle.SetPosition(a_at);
+		handle.Play();
+	}
+
+	void Tick()
+	{
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		if (!g_gunMode.load() || !player || !player->Is3DLoaded() || MenuOpen()) {
+			g_gun.wasHeld = false;
+			return;
+		}
+		GunInfo    info{};
+		const auto weapon = HeldGun(player, info);
+		if (!weapon) {
+			g_gun.wasHeld = false;
+			return;
+		}
+		const auto now = Clock::now();
+		if (weapon->GetFormID() != g_gun.weapon) {  // another gun than before: its numbers, and the rounds it had (a fresh one is full)
+			if (g_gun.weapon) {
+				g_gun.mags[g_gun.weapon] = g_gun.mag;
+			}
+			g_gun.weapon = weapon->GetFormID();
+			g_gun.info = info;
+			const auto kept = g_gun.mags.find(g_gun.weapon);
+			g_gun.mag = kept != g_gun.mags.end() ? kept->second : info.clip;
+			g_gun.reloading = g_gun.mag <= 0;
+			g_gun.reloadUntil = now + std::chrono::milliseconds(static_cast<int>(info.reload * 1000.0f));
+			g_gun.nextShot = now;
+			g_gun.wasHeld = false;
+			SetBar(player, g_gun.mag);
+			SKSE::log::info("player gun {:08X}: magazine {} of {}, interval {:.3f}, reload {:.1f}, spread {:.1f}", g_gun.weapon, g_gun.mag, info.clip,
+				info.interval, info.reload, info.spread);
+		}
+		const float rate = Relic(player, RE::ActorValue::kVariable06);
+		const float quick = Relic(player, RE::ActorValue::kVariable07);
+		const float accuracy = Relic(player, RE::ActorValue::kVariable08);
+		const float gap = g_gun.info.interval / rate;
+		g_rateTenths = static_cast<int>(10.0f / gap + 0.5f);
+		g_reloadMs = static_cast<int>(g_gun.info.reload / quick * 1000.0f + 0.5f);
+		g_spreadNowTenths = static_cast<int>(g_gun.info.spread / accuracy * 10.0f + 0.5f);
+
+		if (g_gun.reloading) {
+			g_reloading = true;
+			if (now >= g_gun.reloadUntil) {
+				g_gun.reloading = false;
+				g_gun.mag = g_gun.info.clip;
+				SetBar(player, g_gun.mag);
+				g_reloading = false;
+			}
+			return;
+		}
+		g_reloading = false;
+		if (!g_held.load()) {
+			g_gun.wasHeld = false;
+			return;
+		}
+		if (!g_gun.wasHeld) {  // the trigger went down
+			g_gun.wasHeld = true;
+			g_gun.holdStart = now;
+			g_gun.holdShots = 0;
+			if (g_gun.nextShot > now + std::chrono::milliseconds(static_cast<int>(gap * 1000.0f))) {
+				g_gun.nextShot = now;
+			}
+		}
+		int fired = 0;
+		const auto step = std::chrono::microseconds(static_cast<long long>(gap * 1000000.0f));
+		while (now >= g_gun.nextShot && g_gun.mag > 0 && fired < 3) {
+			RE::NiPoint3 at{};
+			if (!Launch(player->GetFormID(), 0, 0.0f, 0.0f, kOffsetForward, 1.0f / accuracy, &at)) {
+				break;
+			}
+			PlayShot(at);
+			--g_gun.mag;
+			++g_gun.holdShots;
+			++fired;
+			++g_shots;
+			g_gun.nextShot = (now - g_gun.nextShot > step * 3) ? now + step : g_gun.nextShot + step;
+		}
+		if (fired) {
+			SetBar(player, g_gun.mag);
+			const double seconds = std::chrono::duration<double>(now - g_gun.holdStart).count();
+			g_measuredTenths = (g_gun.holdShots >= 3 && seconds >= 0.3) ? static_cast<int>((g_gun.holdShots - 1) / seconds * 10.0 + 0.5) : 0;
+		}
+		if (g_gun.mag <= 0) {
+			g_gun.reloading = true;
+			g_gun.reloadUntil = now + std::chrono::milliseconds(static_cast<int>(g_reloadMs.load()));
+			g_reloading = true;
+		}
+	}
+
+	// A thread asks for a tick a few milliseconds apart (the game thread runs it once the task queue comes round, a frame at a time; a tick still
+	// waiting is not asked for again).
+	void StartPump()
+	{
+		static std::atomic_bool started{ false };
+		if (started.exchange(true)) {
+			return;
+		}
+		std::thread([]() {
+			for (;;) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(4));
+				if (!g_gunMode.load() || g_tickQueued.exchange(true)) {
+					continue;
+				}
+				RunOnGameThread([]() {
+					Tick();
+					g_tickQueued = false;
+				});
+			}
+		}).detach();
+		SKSE::log::info("automatic fire: tick thread started");
+	}
+
 	// ---- Papyrus (continued) ---------------------------------------------------------------------------------------------
 
 	// The gun weapon's numbers, as plain integers (a Papyrus call with no string parameter: 0.15.1 read its numbers by a key string and the
@@ -449,6 +663,22 @@ namespace
 		return GunOf(a_weapon, info) ? static_cast<std::int32_t>(info.spread * 10.0f + 0.5f) : 0;
 	}
 
+	// What the player's gun is doing (the plugin fires it; Papyrus only shows it)
+	std::int32_t Magazine(RE::StaticFunctionTag*) { return g_mag.load(); }
+	std::int32_t ShotsFired(RE::StaticFunctionTag*) { return g_shots.load(); }
+	bool         Reloading(RE::StaticFunctionTag*) { return g_reloading.load(); }
+	std::int32_t RateTenths(RE::StaticFunctionTag*) { return g_rateTenths.load(); }
+	std::int32_t MeasuredTenths(RE::StaticFunctionTag*) { return g_measuredTenths.load(); }
+	std::int32_t ReloadMsNow(RE::StaticFunctionTag*) { return g_reloadMs.load(); }
+	std::int32_t SpreadNowTenths(RE::StaticFunctionTag*) { return g_spreadNowTenths.load(); }
+
+	// The sound the gun in the hand makes at every shot (a Sound the script picked for the gun); none to be silent
+	bool SetShotSound(RE::StaticFunctionTag*, RE::BGSSoundDescriptorForm* a_sound)
+	{
+		g_shotSound = a_sound ? a_sound->GetFormID() : 0;
+		return true;
+	}
+
 	// The player's shot: launched on the game's own thread, a frame later (a Papyrus call may not touch the world from the script thread).
 	bool FireGun(RE::StaticFunctionTag*, RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult)
 	{
@@ -471,6 +701,14 @@ namespace
 		a_vm->RegisterFunction("GunReloadMs"sv, "SkylandsNative"sv, GunReloadMs);
 		a_vm->RegisterFunction("GunSpreadTenths"sv, "SkylandsNative"sv, GunSpreadTenths);
 		a_vm->RegisterFunction("FireGun"sv, "SkylandsNative"sv, FireGun);
+		a_vm->RegisterFunction("Magazine"sv, "SkylandsNative"sv, Magazine);
+		a_vm->RegisterFunction("ShotsFired"sv, "SkylandsNative"sv, ShotsFired);
+		a_vm->RegisterFunction("Reloading"sv, "SkylandsNative"sv, Reloading);
+		a_vm->RegisterFunction("RateTenths"sv, "SkylandsNative"sv, RateTenths);
+		a_vm->RegisterFunction("MeasuredTenths"sv, "SkylandsNative"sv, MeasuredTenths);
+		a_vm->RegisterFunction("ReloadMsNow"sv, "SkylandsNative"sv, ReloadMsNow);
+		a_vm->RegisterFunction("SpreadNowTenths"sv, "SkylandsNative"sv, SpreadNowTenths);
+		a_vm->RegisterFunction("SetShotSound"sv, "SkylandsNative"sv, SetShotSound);
 		return true;
 	}
 
@@ -478,6 +716,7 @@ namespace
 	{
 		if (a_message->type == SKSE::MessagingInterface::kDataLoaded) {
 			AttackHook::Install();
+			StartPump();
 			if (const auto holder = RE::ScriptEventSourceHolder::GetSingleton()) {
 				holder->AddEventSink(CastSink::Get());
 				SKSE::log::info("enemy cast listener registered");
@@ -507,7 +746,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 2, 2, 0 },
+	.Version = { 1, 3, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

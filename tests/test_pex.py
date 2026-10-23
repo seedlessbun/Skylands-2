@@ -237,36 +237,27 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     assert "ScriptName SkylandsStaffGun18 Extends ActiveMagicEffect" in psc
     assert "Skipped inoperative" not in psc
     for text in (
-            # SKSE: the plugin of Skylands (the attack button, the gun's numbers, the bullet launch) and SKSE's own charge and version calls
-            "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireGun(Me, OffsetRight, OffsetUp, OffsetForward, sm)",
-            "SkylandsNative.GunClip(w)", "SkylandsNative.GunIntervalMs(w)", "SkylandsNative.GunReloadMs(w)",
-            "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "WornObject.SetItemCharge(Me, 1, 0, v)", "WornObject.GetItemCharge(Me, 1, 0)", "Me.SetActorValue(\"RightItemCharge\", v)",
+            # the plugin knows a staff gun by its keyword (a native with no string parameter) and fires it; the script introduces the gun
+            "Int c = SkylandsNative.GunClip(w)", "Return c > 0", "Self.Take(w)", "Self.Load(w)", "Gun = w", "Weapon Gun",
+            "SkylandsNative.SetShotSound(Cur)", "Cur = ShotSound", "While i < n", "If w.HasKeyword(k)", "Sound s = Sounds[i]", "Cur = s",
+            "Keyword[] Property SoundKeywords Auto", "Sound[] Property Sounds Auto", "Sound Property ShotSound Auto",
+            "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "Weapon Property GiftA Auto", "Form f = GiftA as Form", "f = GiftB as Form",
+            "Me.AddItem(f, 1, False)", "Me.GetEquippedObject(1)", "Self.Unknown(w)", "the plugin does not know this staff gun",
             # the plugin keeps the right attack button from the game while a gun is in the hand (no animation); the player's controls stay on
             "SkylandsNative.SetGunMode(True)", "SkylandsNative.SetGunMode(False)", "Me.DrawWeapon()", "Self.Grip()", "Self.Let()", "Self.Heal()",
-            "Game.EnablePlayerControls(False, True, False, False, False, False, False, False, 0)", "ControlsOff = False", "If !ControlsOff",
-            "SKSE.GetVersion()",
-            # one script for every gun: whichever staff gun is put on is the Gun, a different one starts with a full magazine, the same one keeps its rounds
-            "Int c = SkylandsNative.GunClip(w)", "Return c > 0", "Self.Take(w)", "Self.Load(w)", "Self.Fresh(w)", "If w == Gun", "Gun = w",
-            "Interval = fi", "ReloadTime = fr", "MagSize = n", "Mag = n", "Weapon Gun", "fi *= 0.001",
-            # the loop: a press fires at once, the button held fires one every Interval, nothing while reloading or with the gun away
-            "Bool pressed = SkylandsNative.TriggerPressed()", "Bool go = Self.Pull()", "While go", "Float gap = Self.Boost(Interval, \"Variable06\")", "Utility.Wait(gap)", "Float sm = Self.Boost(1.0, \"Variable08\")", "Float rt = Self.Boost(ReloadTime, \"Variable07\")", "Utility.Wait(rt)",
-            "Float Function Boost(Float base, String av)", "Me.GetActorValue(av)", "Float r = base / v", "v = Self.AtLeast(v)", "If v < 0.2",
-            "go = SkylandsNative.TriggerHeld() && Self.Pull()", "Bool more = Mag > 1", "Return Armed && !Reloading",
-            # the magazine, the gauge, the reload (a delay with the gauge empty, then full) and the messages
-            "Mag -= 1", "Int r = Fired % 10", "If r == 0 && Verbose", "v *= ChargePerShot", "Mag = MagSize",
-            "Staff gun: reloading", "Staff gun: reloaded", "Me.AddItem(f, 1, False)", "Form f = GiftA as Form", "f = GiftB as Form",
-            "Me.GetEquippedObject(1)", "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
-            "ObjectReference ref = Me as ObjectReference", "Cur.Play(ref)", "Cur = ShotSound", "While i < n", "If w.HasKeyword(k)", "Sound s = Sounds[i]", "Cur = s", "Keyword[] Property SoundKeywords Auto", "Sound[] Property Sounds Auto",
-            # every ten shots the magazine and what the gun is doing now: fire rate (commanded and measured), reload, spread, relic bonuses included
-            "SkylandsNative.GunSpreadTenths(Gun)", "Float Function Measured()", "String Function Fmt1(Float x)", "HoldStart = Utility.GetCurrentRealTime()", "HoldShots += 1",
-            "/s (measured ", "/s), reload ", " s, spread ", " deg",
-            "Me.SetActorValue(\"LeftItemCharge\", v)", "Self.Unknown(w)", "the plugin does not know this staff gun", "; the gun is in the ", "Weapon Property GiftA Auto", "Float Property ChargePerShot Auto", "Sound Property ShotSound Auto", "Float Property OffsetForward Auto"):
+            "Game.EnablePlayerControls(False, True, False, False, False, False, False, False, 0)", "ControlsOff = False", "If !ControlsOff", "SKSE.GetVersion()",
+            # what the plugin reports: the box on the first equip, then every ten shots the numbers, and when a reload starts and ends
+            "Int v = SkylandsNative.Magazine()", "String hand = \"NOT the right hand\"", "; the gun is in the ", "; the plugin fires it. ",
+            "Int n = SkylandsNative.ShotsFired()", "Int t = n / 10", "If t == Told", "Told = t", "Self.TellIf()", "Self.Tell()",
+            "SkylandsNative.RateTenths()", "SkylandsNative.MeasuredTenths()", "SkylandsNative.ReloadMsNow()", "SkylandsNative.SpreadNowTenths()",
+            "Staff gun: magazine ", "/s (measured ", "/s), reload ", " s, spread ", " deg", "String Function Tenths(Int n)", "Int tenth = n % 10",
+            "Bool r = SkylandsNative.Reloading()", "WasReloading = r", "Staff gun: reloading", "Staff gun: reloaded", "next = 0.25", "Self.Watch()"):
         assert text in psc, text
-    # what the old single-gun script kept in properties is the plugin's now; the workarounds of plain Papyrus are gone
-    assert "DisablePlayerControls" not in psc  # 0.14.3 switched the fighting controls off; the plugin swallows the attack button instead
-    for text in ("Property BulletSpell", "Property StaffGun", "Property MagSize", "Property Interval", "Property ReloadTime", "Property Spread",
-                 "FireBullet", "RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "Aim", "UnequipItem", "EquipItem",
-                 "Input.", "GetWeaponType", "Burst", "Fill"):
+    # the fire loop is the plugin's now: 0.17.0's script loop (Utility.Wait between shots) fired at about half the rate it was set to
+    for text in ("Utility.Wait(gap)", "Utility.Wait(Interval)", "Utility.Wait(rt)", "FireGun", "TriggerHeld", "TriggerPressed", "Boost", "Measured()",
+                 "RightItemCharge", "SetItemCharge", "WeaponSpeedMult", "Property BulletSpell", "Property StaffGun", "Property MagSize",
+                 "RegisterForAnimationEvent", "OnAnimationEvent", "GetAnimationVariableBool", "UnequipItem", "EquipItem", "Input.", "GetWeaponType",
+                 "DisablePlayerControls", "GunStat"):
         assert text not in psc, text
 
 
@@ -276,14 +267,17 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     assert "ScriptName SkylandsNative\n" in psc
     for text in ("Bool Function FireGun(Actor akShooter, Float afRight, Float afUp, Float afForward, Float afSpreadMult) Global Native",
                  "Int Function GunClip(Weapon akWeapon) Global Native", "Int Function GunIntervalMs(Weapon akWeapon) Global Native",
-                 "Int Function GunReloadMs(Weapon akWeapon) Global Native", "Int Function GunSpreadTenths(Weapon akWeapon) Global Native", "Bool Function TriggerHeld() Global Native",
+                 "Int Function GunReloadMs(Weapon akWeapon) Global Native", "Int Function GunSpreadTenths(Weapon akWeapon) Global Native",
+                 "Int Function Magazine() Global Native", "Int Function ShotsFired() Global Native", "Bool Function Reloading() Global Native", "Int Function RateTenths() Global Native",
+                 "Int Function MeasuredTenths() Global Native", "Int Function ReloadMsNow() Global Native", "Int Function SpreadNowTenths() Global Native",
+                 "Bool Function SetShotSound(Sound akSound) Global Native", "Bool Function TriggerHeld() Global Native",
                  "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
         assert text in psc, text
     assert "String" not in psc and "afSpreadMult" in psc  # no native takes a string: 0.15.1's GunStat(Weapon, String) always read 0 in the game's script
     main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
-    for text in ('"FireGun"sv', '"GunClip"sv', '"GunIntervalMs"sv', '"GunReloadMs"sv', '"GunSpreadTenths"sv', '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv',
+    for text in ('"FireGun"sv', '"GunClip"sv', '"GunIntervalMs"sv', '"GunReloadMs"sv', '"GunSpreadTenths"sv', '"Magazine"sv', '"ShotsFired"sv', '"Reloading"sv', '"RateTenths"sv', '"MeasuredTenths"sv', '"ReloadMsNow"sv', '"SpreadNowTenths"sv', '"SetShotSound"sv', "BSTempEffectParticle::Spawn", "Variable06", '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv',
                  '"Version"sv', "RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult", "RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)",
-                 "TESSpellCastEvent", "SkylandsGun_", "holder->AddEventSink(CastSink::Get())"):
+                 "TESSpellCastEvent", "SkylandsGun_", "holder->AddEventSink(CastSink::Get())", "RE::ActorValue::kVariable06", "RE::ActorValue::kVariable07", "RE::ActorValue::kVariable08", "StartPump();"):
         assert text in main, text  # the stub and the plugin's registrations say the same thing
     assert "GunStat" not in main
 

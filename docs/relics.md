@@ -20,8 +20,8 @@ Any of these changes the value, and the guns follow at the next shot (no reload 
 * a **script**: `Game.GetPlayer().ModActorValue("Variable06", 25.0)` (or `SetActorValue`);
 * the console, to try it: `player.modav variable06 50` (and `player.modav variable06 -50` takes it back).
 
-Where each stat applies: the bonus changes the wait in the hold loop (`Boost` in `scripts.staff_gun`), the reload wait, and the spread
-multiplier handed to the plugin's `FireGun(..., spreadMult)`. Enemies do not use relics.
+Where each stat applies: since 0.18.0 the plugin fires the player's gun and reads the three actor values itself at every tick: the gap between two rounds,
+the reload time and the spread (`Relic()` in `native/skse/src/main.cpp`). Enemies do not use relics.
 
 ## The gun's own stats
 Each gun's rolled stats set its numbers (they are the ones its description tells): its fire rate (rounds per second) is its rate of

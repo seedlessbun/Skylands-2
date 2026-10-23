@@ -257,6 +257,22 @@ Other commands:
   (projectile <id>) from x y z" and "launched" around the first three launches. Never switch a PROJ feature on for plugin-launched projectiles without a test
   that can fail safely. Also in that log: the install had only three plain vanilla staffs (all fire), so Shock/Corrosive/Slag bullets are built like plain
   ones (no hit art); the AR shot sound is `WPNBowFireSD`; the setup log's staff info string still says "Build 0.15.0" (STAFF_REV, harmless).
+- 0.17.1 in game: no crash (flash off); no flash, no sound (sound is a stand-in only until BL2 audio is extracted: the user is happy to wait); MEASURED fire rate
+  about HALF the set one, varying with the gun. Cause: the Papyrus hold loop (`Utility.Wait(gap)` per shot, 0.17.0) runs at about half speed (Wait + the VM's
+  scheduling); not fixable in Papyrus. Audio report (`work\bl2-audio-report.txt`, 8900 lines): BL2 sound = Wwise (`Audio_Banks.pck`, `Audio_Streaming.pck`, magic `AKPK`,
+  one pair per DLC) with event objects in the packages (`Ak_Play_Wep_SMG_Dahl_Shot_Short/Long/Release`, `Ak_Play_Wep_Rifle_<Mfr>_Shot...`, banks `Akb_Wep_SMGs` etc.);
+  the extraction plan is in `docs/gun-feel.md` (read AKPK/BKHD/HIRC, decode wem with a downloaded tool, make Skyrim sound records).
+- 0.18.0 (TestBuild-91, plugin 1.3.0): the plugin fires the player's gun. A thread asks the game thread for a `Tick()` every 4 ms while `SetGunMode(true)`;
+  the tick reads the trigger, fires rounds when due by `steady_clock` (up to 3 per tick), keeps the magazine PER GUN (map by weapon form id), reloads, sets
+  `RightItemCharge` (100 a round), plays the gun's shot sound (`SetShotSound`, `BSAudioManager::GetSoundHandle`) and applies the relic actor values
+  `Variable06/07/08` (`Relic()`); the script no longer loops (it introduces the gun, hands over the sound, shows the box, and every 0.25 s asks `Magazine/
+  ShotsFired/Reloading/RateTenths/MeasuredTenths/ReloadMsNow/SpreadNowTenths` for the ten-shot message and the reload notices). New natives are all ints/bool/Sound (no
+  strings). `FireGun` stays but is unused. The gun keyword gained `_e<0..4>` (element index) for the flash colour. Muzzle flash from the plugin:
+  `SpawnFlash` -> `BSTempEffectParticle::Spawn(cell, 0.06, "Skylands\\Flash_Staff_<element>.nif", matrix, pos, 1, 0, nullptr)` after each launch, `MuzzleFlash=1` in the ini
+  (installer-written). UNCONFIRMED in game: the tick thread + task approach (a thread queues one task at a time; do not queue from inside a task - SKSE's queue
+  semantics when a task adds a task are not known), that the measured rate now matches, the flash (appearance, direction: `SetEulerAnglesXYZ(pitch, 0, heading)`),
+  that `RightItemCharge` set from C++ moves the bar, the sound handle path. If the game hangs or the rate is wrong read the log: "automatic fire: tick thread started",
+  "player gun <id>: magazine ...", "muzzle flash: spawning/spawned".
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

@@ -494,7 +494,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         assert parts[2] == f"i{round(max(0.05, 1.0 / max(1.0, sts['fire_rate'])) * 1000)}" and parts[3] == f"r{round(max(0.3, sts['reload']) * 1000)}", (numbers, sts)
         assert abs(int(parts[4][1:]) - row.spread_deg * sts["spread_mult"] * 10) <= 1.0, (numbers, sts)  # the accuracy roll narrows or widens the spread
         assert st.unpack("<H", w.first("EAMT"))[0] == int(parts[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
-        assert str(row.burst) == parts[-1][1:]
+        assert str(row.burst) == parts[-2][1:] and parts[-1] in ("e0", "e1", "e2", "e3", "e4")  # burst for enemies, element for the muzzle flash colour
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
     # the bullets: a plain gun's carries nothing of the donor fire, an elemental one's carries only its element; nothing explodes in view;
@@ -547,6 +547,8 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     assert all(n not in vm for n in (b"BulletSpell", b"MagSize", b"AimPoint"))  # the gun's own numbers are not the script's
     for name in ("SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsNative"):
         assert (tmp_path / "out" / "Data" / "Scripts" / f"{name}.pex").is_file()
+    for word in ("plain", "fire", "shock", "corrosive", "slag"):  # the muzzle flash meshes the plugin spawns, one per element colour
+        assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"Flash_Staff_{word}.nif").read_bytes().startswith(b"Gamebryo File Format")
     for mesh in ("Tracer_Staff_fire.nif",):  # one per element the fake game has
         assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / mesh).read_bytes().startswith(b"Gamebryo File Format")
 
