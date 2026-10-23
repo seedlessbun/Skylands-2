@@ -53,6 +53,30 @@ def shot_events(kind: str, manufacturer: str) -> list[str]:
     return out
 
 
+RELOAD_PARTS = ("out", "in", "end")  # a reload is three sounds: the magazine comes out, a new one goes in, the gun is made ready
+RELOAD_NAMES = {  # per gun type: the suffixes of the Borderlands events (after Ak_Play_Wep_<Type>_<Manufacturer>_) that stand for each part, best first
+    "smg": {"out": ("Reload_Eject", "Reload_Start", "Clip_Out", "Unload"),
+            "in": ("Reload_Insert", "Reload_Var2_Insert", "Clip_In", "Load"),
+            "end": ("Reload_Cock", "Reload_End", "Reload_Lock", "Reload_Hit", "Reload_Var2_End", "Reload_Catch")},
+    "assault_rifle": {"out": ("Reload_Clip_Out", "Anim_Reload_02_Clip_Eject", "Clip_Out", "Unload", "Reload_Start"),
+                      "in": ("Reload_Clip_In", "Anim_Reload_02_Clip_Insert_01", "Clip_In", "Load", "Reload"),
+                      "end": ("Reload_Bolt", "Reload_Cock", "Anim_Reload_02_Cock", "Reload_End", "Reload_Clip_End", "Reload_Clip_Hit", "Reload_Hammerback",
+                              "Bolt_Close", "Clip_Hit")},
+}
+TYPE_WORDS = {"smg": "SMG", "assault_rifle": "Rifle"}
+
+
+def reload_events(kind: str, manufacturer: str, part: str) -> list[str]:
+    """Borderlands 2's event names for one part of a reload of a gun type from a manufacturer, best first."""
+    word = TYPE_WORDS.get(kind)
+    if word is None:
+        return []
+    out = []
+    for m in MANUFACTURER_NAMES.get(manufacturer, (manufacturer,)):
+        out += [f"Ak_Play_Wep_{word}_{m}_{n}" for n in RELOAD_NAMES[kind][part]]
+    return out
+
+
 # ---- decoding -------------------------------------------------------------------------------------------------------------
 
 def find_decoder(work: Path) -> list[str] | None:
@@ -213,55 +237,67 @@ def _extract(bl2: Path, work: Path, wanted, say, download: bool, out: dict) -> d
         return out
     wav_dir = work / "audio" / "wav"
     wav_dir.mkdir(parents=True, exist_ok=True)
-    decoder = find_decoder(work)
+    decoder_box = [find_decoder(work), download]
     report: dict = {}
     for kind, manufacturer in sorted(set(wanted)):
-        key = f"{kind}_{manufacturer}"
-        chosen = None
-        for event in shot_events(kind, manufacturer):
-            for name, ident in wwise.event_ids(event):
-                found = sounds.event_sounds(ident)
-                if found:
-                    chosen = (event, name, ident, found)
-                    break
-            if chosen:
-                break
-        if not chosen:
-            tried = [f"{e} ({[hex(i) for _n, i in wwise.event_ids(e)][:2]})" for e in shot_events(kind, manufacturer)[:2]]
-            say(f"  audio: {key}: no event found; tried {', '.join(tried)}")
-            report[key] = "no event"
-            continue
-        event, name, ident, found = chosen
-        media = []
-        for obj in found:
-            m = sounds.media_of(obj)
-            if m is not None and m not in media:
-                media.append(m)
-        say(f"  audio: {key}: event {event} as '{name}' ({ident:08X}) -> {len(found)} sound objects, {len(media)} audio files {[f'{m:08X}' for m in media[:6]]}")
-        files: list[Path] = []
-        for m in media[:VARIANTS * 2]:
-            if len(files) >= VARIANTS:
-                break
-            path = wav_dir / f"{key}_{m:08X}.wav"
-            if not path.is_file():
-                wem = sounds.audio(m)
-                if wem is None:
-                    say(f"  audio: {key}: audio file {m:08X} is not in the packs")
-                    continue
-                if decoder is None and download:
-                    decoder = find_decoder(work) or download_decoder(work, say)
-                    download = False
-                wav = decode(wem, work, f"{key}_{m:08X}", decoder, say)
-                if wav is None:
-                    continue
-                path.write_bytes(wav)
-            files.append(path)
-        if files:
-            out[(kind, manufacturer)] = files
-        report[key] = [p.name for p in files]
-    say(f"  audio: {sum(len(v) for v in out.values())} shot sounds made for {len(out)} of {len(set(wanted))} gun type x manufacturer pairs")
+        jobs = [("shot", shot_events(kind, manufacturer), (kind, manufacturer))]
+        jobs += [(part, reload_events(kind, manufacturer, part), (kind, manufacturer, part)) for part in RELOAD_PARTS]
+        for part, events, out_key in jobs:
+            if not events:
+                continue
+            key = f"{kind}_{manufacturer}" + ("" if part == "shot" else f"_reload_{part}")
+            files = _one(sounds, key, events, wav_dir, work, say, decoder_box)
+            if files:
+                out[out_key] = files
+            report[key] = [p.name for p in files] or "no event"
+    shots = [k for k in out if len(k) == 2]
+    say(f"  audio: {sum(len(v) for v in out.values())} sound files made: shots for {len(shots)} of {len(set(wanted))} gun type x manufacturer pairs, "
+        f"{len(out) - len(shots)} reload parts")
     (work / "audio" / "report.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
     return out
+
+
+def _one(sounds: wwise.Sounds, key: str, events: list[str], wav_dir: Path, work: Path, say, decoder_box: list) -> list[Path]:
+    """The WAV files (up to VARIANTS) of the first of `events` that leads to audio. decoder_box = [decoder or None, may still download]."""
+    chosen = None
+    for event in events:
+        for name, ident in wwise.event_ids(event):
+            found = sounds.event_sounds(ident)
+            if found:
+                chosen = (event, name, ident, found)
+                break
+        if chosen:
+            break
+    if not chosen:
+        tried = [f"{e} ({[hex(i) for _n, i in wwise.event_ids(e)][:2]})" for e in events[:2]]
+        say(f"  audio: {key}: no event found; tried {', '.join(tried)}")
+        return []
+    event, name, ident, found = chosen
+    media = []
+    for obj in found:
+        m = sounds.media_of(obj)
+        if m is not None and m not in media:
+            media.append(m)
+    say(f"  audio: {key}: event {event} as '{name}' ({ident:08X}) -> {len(found)} sound objects, {len(media)} audio files {[f'{m:08X}' for m in media[:6]]}")
+    files: list[Path] = []
+    for m in media[:VARIANTS * 2]:
+        if len(files) >= VARIANTS:
+            break
+        path = wav_dir / f"{key}_{m:08X}.wav"
+        if not path.is_file():
+            wem = sounds.audio(m)
+            if wem is None:
+                say(f"  audio: {key}: audio file {m:08X} is not in the packs")
+                continue
+            if decoder_box[0] is None and decoder_box[1]:
+                decoder_box[0] = find_decoder(work) or download_decoder(work, say)
+                decoder_box[1] = False
+            wav = decode(wem, work, f"{key}_{m:08X}", decoder_box[0], say)
+            if wav is None:
+                continue
+            path.write_bytes(wav)
+        files.append(path)
+    return files
 
 
 def slug(text: str) -> str:

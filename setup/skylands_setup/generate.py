@@ -466,8 +466,8 @@ STAFF_DONOR = {"fire": r"fire", "shock": r"lightning|spark|shock", "corrosive": 
 MGEF_PROJECTILE_AT, MGEF_COST_AT = 72, 4
 ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
 STAFF_REV = "0.15.0"
-STAFF_SCRIPT = "SkylandsStaffGun18"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
-STAFF_ID_SHIFT = 300  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+STAFF_SCRIPT = "SkylandsStaffGun19"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
+STAFF_ID_SHIFT = 340  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 PROJ_FLAG_MUZZLE_FLASH = 0x8
 PROJ_LIGHT_AT, PROJ_SOUND_AT, PROJ_SOUND_COUNTDOWN_AT = 16, 40, 56
@@ -552,6 +552,8 @@ STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH = 45.0, 0.8  # half the size of the firs
 MGEF_RESIST_AT = 16
 PROJ_MUZZLE_LIGHT_AT, PROJ_MUZZLE_DURATION_AT = 20, 44
 STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, STAFF_FLASH_SECONDS = 26.0, 6.0, 0.05  # the muzzle flash: a short glowing burst ahead of the barrel
+STAFF_FLASH_PERCENT = {"smg": 75, "assault_rifle": 90}  # the muzzle flash's size by gun type, in percent of the first flash (the user asked for 25% and 10% smaller)
+RELOAD_PARTS = ("out", "in", "end")  # the magazine comes out, a new one goes in, the gun is made ready (bl2/audio.py RELOAD_PARTS)
 STAFF_FLASH_LIGHT_RADIUS = 260
 STAFF_MUZZLE_FLASH = False  # 0.17.0 turned the projectile's muzzle flash on and the game crashed on the first shot the plugin launched: off until a safer way is tested
 STAFF_KINDS = ("smg", "assault_rifle")  # the gun types that are staff guns (the other types stay crossbows)
@@ -658,9 +660,10 @@ class Armory:
                 self.log.append("Staff guns: no standard vanilla sound descriptor to copy; the Borderlands shot sounds cannot be attached")
         return self._template or None
 
-    def _shot_sndr(self, kind: str, manufacturer: str) -> int | None:
-        """The sound descriptor for the Borderlands shot of one gun type and manufacturer (its WAV files are copied to Data\\Sound\\FX\\Skylands)."""
-        key = (kind, manufacturer)
+    def _shot_sndr(self, kind: str, manufacturer: str, part: str = "shot") -> int | None:
+        """The sound descriptor for the Borderlands shot of one gun type and manufacturer, or (part out, in or end) one part of its reload
+        (its WAV files are copied to Data\\Sound\\FX\\Skylands)."""
+        key = (kind, manufacturer) if part == "shot" else (kind, manufacturer, part)
         if key in self.sndr:
             return self.sndr[key]
         files = self.shot_sounds.get(key)
@@ -674,7 +677,7 @@ class Armory:
         for f in files:
             (self.sound_dir / Path(f).name).write_bytes(Path(f).read_bytes())
             paths.append(f"{prefix}FX\\Skylands\\{Path(f).name}")
-        edid = f"SkylandsShot_{kind}_{re.sub('[^A-Za-z0-9]+', '_', manufacturer)}"
+        edid = f"Skylands{'Shot' if part == 'shot' else 'Reload' + part.capitalize()}_{kind}_{re.sub('[^A-Za-z0-9]+', '_', manufacturer)}"
         subs, placed = [], False
         for sig, d in template.subrecords:
             if sig == "EDID":
@@ -688,7 +691,7 @@ class Armory:
         rec = esp.Rec("SNDR", self.view.new_id(f"SNDR:{edid}"), subs)
         self.view.override(rec)
         self.sndr[key] = rec.form_id
-        self.log.append(f"Staff guns: {kind} {manufacturer} shot sound {edid}: {len(paths)} files, e.g. {paths[0]}")
+        self.log.append(f"Staff guns: {kind} {manufacturer} {part} sound {edid}: {len(paths)} files, e.g. {paths[0]}")
         return rec.form_id
 
     def _element_donor(self, element: str | None):
@@ -850,11 +853,12 @@ class Armory:
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}"
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}"
         self.kinds.add(kind)
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
         mfr = g.get("manufacturer", "")
-        if self._shot_sndr(kind, mfr) is not None:  # this gun type from this manufacturer has its own Borderlands shot sound
+        own = [self._shot_sndr(kind, mfr), *(self._shot_sndr(kind, mfr, part) for part in RELOAD_PARTS)]
+        if any(x is not None for x in own):  # this gun type from this manufacturer has its own Borderlands shot or reload sounds
             ids.append(self._keyword(f"SkylandsSnd_{kind}_{re.sub('[^A-Za-z0-9]+', '_', mfr)}"))
         insert_ordered(w, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
         insert_ordered(w, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)
@@ -883,21 +887,28 @@ class Armory:
             return
         sound = staff_shot_sound(m, self.log, "smg")
         snd_kw, snd_ids = [], []
-        for (kind, mfr), sndr in sorted(self.sndr.items()):  # the Borderlands shot of a gun type and manufacturer, tried before the stand-ins
+        reload_ids: dict[str, list[int]] = {part: [] for part in RELOAD_PARTS}  # parallel to snd_ids: the three parts of the reload (0: silent)
+        stand_in = {kind: staff_shot_sound(m, self.log, kind) for kind in sorted(self.kinds)}
+        for kind, mfr in sorted({k[:2] for k in self.sndr}):  # the Borderlands sounds of a gun type and manufacturer, tried before the stand-ins
             snd_kw.append(self._keyword(f"SkylandsSnd_{kind}_{re.sub('[^A-Za-z0-9]+', '_', mfr)}"))
-            snd_ids.append(sndr)
+            snd_ids.append(self.sndr.get((kind, mfr)) or (stand_in[kind][0] if stand_in.get(kind) else 0))
+            for part in RELOAD_PARTS:
+                reload_ids[part].append(self.sndr.get((kind, mfr, part), 0))
         for kind in sorted(self.kinds):  # one shot sound per gun type, found by the gun's SkylandsSnd_<type> keyword
-            found = staff_shot_sound(m, self.log, kind)
+            found = stand_in[kind]
             if found:
                 snd_kw.append(self._keyword(f"SkylandsSnd_{kind}"))
                 snd_ids.append(found[0])
+                for part in RELOAD_PARTS:
+                    reload_ids[part].append(0)
         gifts = [self.gifts.get(kind) or self.first_of.get(kind) or next(iter(self.first_of.values())) for kind in STAFF_KINDS]
         info = (f"Build {STAFF_REV}. {self.count} staff guns (submachine guns and assault rifles) from the vanilla staff {self.base[0].edid}; "
                 f"each one's numbers are in its SkylandsGun_ keyword; tracers {len(self.tracers)}; shot sound {sound[1] if sound else 'none found'}; "
                 f"the SKSE plugin launches a bullet from the gun's muzzle when the attack button goes down, then one every interval while it is held.")
         props = [("ChargePerShot", esp.P_FLOAT, STAFF_CHARGE_PER_SHOT),
                  ("OffsetRight", esp.P_FLOAT, STAFF_OFFSET[0]), ("OffsetUp", esp.P_FLOAT, STAFF_OFFSET[1]), ("OffsetForward", esp.P_FLOAT, STAFF_OFFSET[2]),
-                 ("ShotSound", esp.P_OBJECT, sound[0] if sound else 0), ("SoundKeywords", esp.P_OBJECT_ARRAY, snd_kw), ("Sounds", esp.P_OBJECT_ARRAY, snd_ids), ("GiftA", esp.P_OBJECT, gifts[0]), ("GiftB", esp.P_OBJECT, gifts[1]),
+                 ("ShotSound", esp.P_OBJECT, sound[0] if sound else 0), ("SoundKeywords", esp.P_OBJECT_ARRAY, snd_kw), ("Sounds", esp.P_OBJECT_ARRAY, snd_ids),
+                 ("ReloadOut", esp.P_OBJECT_ARRAY, reload_ids["out"]), ("ReloadIn", esp.P_OBJECT_ARRAY, reload_ids["in"]), ("ReloadEnd", esp.P_OBJECT_ARRAY, reload_ids["end"]), ("GiftA", esp.P_OBJECT, gifts[0]), ("GiftB", esp.P_OBJECT, gifts[1]),
                  ("SpeedMult", esp.P_FLOAT, STAFF_SPEED_MULT), ("Info", esp.P_STRING, info), ("Verbose", esp.P_BOOL, True)]
         fx = script_effect(self.view, m.need("MGEF", "AbWeaknessFireConstant"), "SkylandsStaffGunFx", "Skylands Staff Gun", STAFF_SCRIPT, props)
         assert fx == self.fx_id
@@ -909,9 +920,11 @@ class Armory:
         q.add("VMAD", esp.vmad([("SkylandsGunnerQuest", [("Ability", esp.P_OBJECT, ability.form_id)])], quest=True))
         q.add("FULL", esp.zstr("Skylands Staff Gun")).add("DNAM", struct.pack("<HBBII", QUEST_START_GAME_ENABLED, 50, 0, 0, 0))
         q.add("ANAM", esp.u32(0))
-        for word, rgb in (("plain", STAFF_TRACER_RGB[None]), *((n.lower(), STAFF_TRACER_RGB[n.lower()]) for n in ELEMENT_NAMES)):
-            # the muzzle flash meshes the plugin spawns at the barrel (one in each element's colour); they are not a projectile feature
-            self.tracers[f"Skylands\\Flash_Staff_{word}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, forward=True)
+        for percent in sorted(set(STAFF_FLASH_PERCENT.values())):
+            for word, rgb in (("plain", STAFF_TRACER_RGB[None]), *((n.lower(), STAFF_TRACER_RGB[n.lower()]) for n in ELEMENT_NAMES)):
+                # the muzzle flash meshes the plugin spawns at the barrel (one in each element's colour and each size); they are not a projectile feature
+                self.tracers[f"Skylands\\Flash_Staff_{word}_{percent}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, STAFF_FLASH_LENGTH * percent / 100, STAFF_FLASH_WIDTH * percent / 100,
+                                                                                        forward=True)
         self.report["staff_tracer"] = list(self.tracers.items())
         self.report["staff_gun"] = {"guns": self.count, "tracers": len(self.tracers)}
         self.log.append(f"Staff guns: {self.count} built; gifts {[hex(g) for g in gifts]}; {info}")
@@ -1384,7 +1397,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             (out_data / "Scripts" / f"{STAFF_SCRIPT}.pex").write_bytes(pex.write(scripts.staff_gun(STAFF_SCRIPT)))
             (out_data / "Scripts" / "SkylandsStaffGun.pex").write_bytes(pex.write(scripts.retired("SkylandsStaffGun")))  # earlier revisions' name
             (out_data / "Scripts" / "SkylandsNative.pex").write_bytes(pex.write(scripts.native_stub()))  # the declarations of the SKSE plugin's functions
-            for old_name in ("SkylandsStaffGun17", "SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14", "SkylandsStaffGun15", "SkylandsStaffGun16"):
+            for old_name in ("SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsStaffGun11", "SkylandsStaffGun12", "SkylandsStaffGun13", "SkylandsStaffGun14", "SkylandsStaffGun15", "SkylandsStaffGun16"):
                 (out_data / "Scripts" / f"{old_name}.pex").write_bytes(pex.write(scripts.retired(old_name)))
     for mesh_path, mesh_bytes in report.pop("staff_tracer", []):  # the mesh bytes are not part of the report
         (out_data / "Meshes" / Path(*mesh_path.split("\\"))).write_bytes(mesh_bytes)

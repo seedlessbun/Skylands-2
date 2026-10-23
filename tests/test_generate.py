@@ -494,7 +494,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         assert parts[2] == f"i{round(max(0.05, 1.0 / max(1.0, sts['fire_rate'])) * 1000)}" and parts[3] == f"r{round(max(0.3, sts['reload']) * 1000)}", (numbers, sts)
         assert abs(int(parts[4][1:]) - row.spread_deg * sts["spread_mult"] * 10) <= 1.0, (numbers, sts)  # the accuracy roll narrows or widens the spread
         assert st.unpack("<H", w.first("EAMT"))[0] == int(parts[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
-        assert str(row.burst) == parts[-2][1:] and parts[-1] in ("e0", "e1", "e2", "e3", "e4")  # burst for enemies, element for the muzzle flash colour
+        assert str(row.burst) == parts[-3][1:] and parts[-2] in ("e0", "e1", "e2", "e3", "e4") and parts[-1] == f"f{generate.STAFF_FLASH_PERCENT[kind]}"  # burst for enemies, element for the muzzle flash colour, flash size
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
     # the bullets: a plain gun's carries nothing of the donor fire, an elemental one's carries only its element; nothing explodes in view;
@@ -538,17 +538,20 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     assert any(r.edid == "SkylandsStaffGunQuest" for r in recs["QUST"]) and any(r.edid == "SkylandsStaffGunAbility" for r in recs["SPEL"])
     fx = read_plugin(view, {"MGEF"})[1]["MGEF"]
     vm = next(r for r in fx if r.edid == "SkylandsStaffGunFx").first("VMAD")
-    assert b"SkylandsStaffGun18" in vm and all(n in vm for n in (b"GiftA", b"GiftB", b"ChargePerShot", b"OffsetForward", b"ShotSound", b"SpeedMult"))
+    assert b"SkylandsStaffGun19" in vm and all(n in vm for n in (b"GiftA", b"GiftB", b"ChargePerShot", b"OffsetForward", b"ShotSound", b"SpeedMult"))
     assert b"SoundKeywords" in vm and b"Sounds" in vm
     snd = [r for r in recs["KYWD"] if r.edid.startswith("SkylandsSnd_")]
     assert {r.edid for r in snd} == {"SkylandsSnd_smg", "SkylandsSnd_assault_rifle"}  # one shot sound per gun type, chosen by this keyword
     assert all(any(st.unpack("<I", w.first("KWDA")[i:i + 4])[0] in {r.form_id for r in snd} for i in range(0, len(w.first("KWDA")), 4)) for w in staff)
     assert any("smg shot sound WPNCrossbowFire" in l for l in rep["model_log"]) and any("assault_rifle shot sound WPNBowFireShort" in l for l in rep["model_log"]), rep["model_log"]
     assert all(n not in vm for n in (b"BulletSpell", b"MagSize", b"AimPoint"))  # the gun's own numbers are not the script's
-    for name in ("SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsNative"):
+    for name in ("SkylandsStaffGun19", "SkylandsStaffGun18", "SkylandsStaffGun17", "SkylandsNative"):
         assert (tmp_path / "out" / "Data" / "Scripts" / f"{name}.pex").is_file()
-    for word in ("plain", "fire", "shock", "corrosive", "slag"):  # the muzzle flash meshes the plugin spawns, one per element colour
-        assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"Flash_Staff_{word}.nif").read_bytes().startswith(b"Gamebryo File Format")
+    for word in ("plain", "fire", "shock", "corrosive", "slag"):  # the muzzle flash meshes the plugin spawns, one per element colour and size
+        for percent in (75, 90):  # submachine guns 25% smaller, assault rifles 10% smaller
+            assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"Flash_Staff_{word}_{percent}.nif").read_bytes().startswith(b"Gamebryo File Format")
+    keys = {r.edid: r for r in recs["KYWD"]}
+    assert any(k.endswith("_f75") for k in keys) and any(k.endswith("_f90") for k in keys), "each gun's flash size is in its numbers keyword"
     for mesh in ("Tracer_Staff_fire.nif",):  # one per element the fake game has
         assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / mesh).read_bytes().startswith(b"Gamebryo File Format")
 

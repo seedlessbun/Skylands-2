@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 130;  // 1.3.0
+	constexpr std::int32_t kVersion = 140;  // 1.4.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -183,6 +183,7 @@ namespace
 		float spread{ 2.0f };    // degrees
 		int   burst{ 1 };        // rounds per burst of an enemy
 		int   element{ 0 };      // 0 none, 1 fire, 2 shock, 3 corrosive, 4 slag (the colour of the muzzle flash)
+		int   flash{ 100 };      // the size of the muzzle flash in percent (the flash mesh's file name carries it)
 	};
 
 	std::mutex                                     g_gunLock;
@@ -228,6 +229,7 @@ namespace
 					case 's': info.spread = value / 10.0f; break;
 					case 'b': info.burst = (std::max)(1, value); break;
 					case 'e': info.element = value; break;
+					case 'f': info.flash = value; break;
 					default: break;
 					}
 				}
@@ -262,7 +264,7 @@ namespace
 
 	// A short glowing flash where the bullet leaves, spawned by the plugin itself (a temporary effect of our own flash mesh that the game removes after
 	// its lifetime). The projectile record's own muzzle-flash feature crashed the game on the first shot (0.17.0).
-	void SpawnFlash(RE::Actor* a_shooter, const RE::NiPoint3& a_at, float a_pitch, float a_heading, int a_element)
+	void SpawnFlash(RE::Actor* a_shooter, const RE::NiPoint3& a_at, float a_pitch, float a_heading, int a_element, int a_percent)
 	{
 		if (!g_flash || !a_shooter) {
 			return;
@@ -274,7 +276,7 @@ namespace
 		}
 		RE::NiMatrix3 rotation;
 		rotation.SetEulerAnglesXYZ(a_pitch, 0.0f, a_heading);
-		const std::string model = std::string("Skylands\\Flash_Staff_") + names[std::clamp(a_element, 0, 4)] + ".nif";
+		const std::string model = std::string("Skylands\\Flash_Staff_") + names[std::clamp(a_element, 0, 4)] + "_" + std::to_string(a_percent) + ".nif";
 		static std::atomic_int spawned{ 0 };
 		const bool tell = spawned.fetch_add(1) < 3;
 		if (tell) {
@@ -381,7 +383,7 @@ namespace
 		if (a_originOut) {
 			*a_originOut = origin;
 		}
-		SpawnFlash(shooter, origin, pitch, heading, info.element);
+		SpawnFlash(shooter, origin, pitch, heading, info.element, info.flash);
 		return true;
 	}
 
@@ -470,6 +472,8 @@ namespace
 		bool                  reloading{ false };
 		Clock::time_point     nextShot{};
 		Clock::time_point     reloadUntil{};
+		Clock::time_point     reloadStart{};
+		int                   reloadPart{ 3 };  // the next part of the reload sound to play (3: all played)
 		Clock::time_point     holdStart{};
 		int                   holdShots{ 0 };
 		bool                  wasHeld{ false };
@@ -486,6 +490,7 @@ namespace
 	std::atomic_int          g_reloadMs{ 0 };
 	std::atomic_int          g_spreadNowTenths{ 0 };
 	std::atomic<RE::FormID>  g_shotSound{ 0 };
+	std::atomic<RE::FormID>  g_reloadSound[3]{ 0, 0, 0 };  // the three parts of a reload: magazine out, magazine in, gun made ready
 
 	// A relic bonus in percent as a divisor: 0 is 1.0, 50 is 1.5; never below 0.2
 	float Relic(RE::PlayerCharacter* a_player, RE::ActorValue a_value)
@@ -500,21 +505,55 @@ namespace
 		a_player->AsActorValueOwner()->SetActorValue(RE::ActorValue::kRightItemCharge, static_cast<float>(a_mag) * kChargePerShot);
 	}
 
-	void PlayShot(const RE::NiPoint3& a_at)
+	void PlaySound(RE::FormID id, const RE::NiPoint3& a_at)
 	{
-		const auto id = g_shotSound.load();
 		if (!id) {
 			return;
 		}
 		const auto form = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(id);
 		const auto manager = RE::BSAudioManager::GetSingleton();
+		static std::atomic_int told{ 0 };
+		if (told.fetch_add(1) < 8) {
+			SKSE::log::info("playing sound {:08X}: form {}, audio manager {}", id, form ? "found" : "missing", manager ? "found" : "missing");
+		}
 		if (!form || !manager) {
 			return;
 		}
 		RE::BSSoundHandle handle;
-		manager->GetSoundHandle(handle, form);  // the form is itself a BSISoundDescriptor (it forwards to its soundDescriptor)
+		const bool built = manager->GetSoundHandle(handle, form);  // the form is itself a BSISoundDescriptor (it forwards to its soundDescriptor)
 		handle.SetPosition(a_at);
-		handle.Play();
+		const bool played = handle.Play();
+		if (told.load() <= 8) {
+			SKSE::log::info("sound {:08X}: handle built {}, valid {}, play {}", id, built, handle.IsValid(), played);
+		}
+	}
+
+	void PlayShot(const RE::NiPoint3& a_at) { PlaySound(g_shotSound.load(), a_at); }
+
+	// A reload begins: its three sounds are played at fixed shares of the time it takes (the magazine out at once, the new one in at about half,
+	// the gun made ready near the end).
+	void BeginReload(Clock::time_point a_now, int a_ms)
+	{
+		g_gun.reloading = true;
+		g_gun.reloadStart = a_now;
+		g_gun.reloadUntil = a_now + std::chrono::milliseconds(a_ms);
+		g_gun.reloadPart = 0;
+	}
+
+	void ReloadSounds(RE::PlayerCharacter* a_player, Clock::time_point a_now)
+	{
+		static constexpr float share[3] = { 0.02f, 0.45f, 0.86f };
+		const double total = std::chrono::duration<double>(g_gun.reloadUntil - g_gun.reloadStart).count();
+		const double passed = std::chrono::duration<double>(a_now - g_gun.reloadStart).count();
+		while (g_gun.reloadPart < 3 && passed >= total * share[g_gun.reloadPart]) {
+			const auto id = g_reloadSound[g_gun.reloadPart].load();
+			static std::atomic_int told{ 0 };
+			if (told.fetch_add(1) < 6) {
+				SKSE::log::info("reload sound part {}: {:08X}", g_gun.reloadPart, id);
+			}
+			PlaySound(id, a_player->GetPosition());
+			++g_gun.reloadPart;
+		}
 	}
 
 	void Tick()
@@ -539,8 +578,11 @@ namespace
 			g_gun.info = info;
 			const auto kept = g_gun.mags.find(g_gun.weapon);
 			g_gun.mag = kept != g_gun.mags.end() ? kept->second : info.clip;
-			g_gun.reloading = g_gun.mag <= 0;
-			g_gun.reloadUntil = now + std::chrono::milliseconds(static_cast<int>(info.reload * 1000.0f));
+			g_gun.reloading = false;
+			g_gun.reloadPart = 3;
+			if (g_gun.mag <= 0) {
+				BeginReload(now, static_cast<int>(info.reload * 1000.0f));
+			}
 			g_gun.nextShot = now;
 			g_gun.wasHeld = false;
 			SetBar(player, g_gun.mag);
@@ -557,6 +599,7 @@ namespace
 
 		if (g_gun.reloading) {
 			g_reloading = true;
+			ReloadSounds(player, now);
 			if (now >= g_gun.reloadUntil) {
 				g_gun.reloading = false;
 				g_gun.mag = g_gun.info.clip;
@@ -598,9 +641,9 @@ namespace
 			g_measuredTenths = (g_gun.holdShots >= 3 && seconds >= 0.3) ? static_cast<int>((g_gun.holdShots - 1) / seconds * 10.0 + 0.5) : 0;
 		}
 		if (g_gun.mag <= 0) {
-			g_gun.reloading = true;
-			g_gun.reloadUntil = now + std::chrono::milliseconds(static_cast<int>(g_reloadMs.load()));
+			BeginReload(now, g_reloadMs.load());
 			g_reloading = true;
+			ReloadSounds(player, now);
 		}
 	}
 
@@ -676,6 +719,23 @@ namespace
 	bool SetShotSound(RE::StaticFunctionTag*, RE::BGSSoundDescriptorForm* a_sound)
 	{
 		g_shotSound = a_sound ? a_sound->GetFormID() : 0;
+		static std::atomic_int told{ 0 };
+		if (told.fetch_add(1) < 6) {
+			SKSE::log::info("shot sound set: {:08X}", g_shotSound.load());
+		}
+		return true;
+	}
+
+	// The sounds of a reload (the magazine out, a new one in, the gun made ready); none to be silent
+	bool SetReloadSounds(RE::StaticFunctionTag*, RE::BGSSoundDescriptorForm* a_out, RE::BGSSoundDescriptorForm* a_in, RE::BGSSoundDescriptorForm* a_end)
+	{
+		g_reloadSound[0] = a_out ? a_out->GetFormID() : 0;
+		g_reloadSound[1] = a_in ? a_in->GetFormID() : 0;
+		g_reloadSound[2] = a_end ? a_end->GetFormID() : 0;
+		static std::atomic_int told{ 0 };
+		if (told.fetch_add(1) < 6) {
+			SKSE::log::info("reload sounds set: out {:08X}, in {:08X}, end {:08X}", g_reloadSound[0].load(), g_reloadSound[1].load(), g_reloadSound[2].load());
+		}
 		return true;
 	}
 
@@ -709,6 +769,7 @@ namespace
 		a_vm->RegisterFunction("ReloadMsNow"sv, "SkylandsNative"sv, ReloadMsNow);
 		a_vm->RegisterFunction("SpreadNowTenths"sv, "SkylandsNative"sv, SpreadNowTenths);
 		a_vm->RegisterFunction("SetShotSound"sv, "SkylandsNative"sv, SetShotSound);
+		a_vm->RegisterFunction("SetReloadSounds"sv, "SkylandsNative"sv, SetReloadSounds);
 		return true;
 	}
 
@@ -746,7 +807,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 3, 0, 0 },
+	.Version = { 1, 4, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

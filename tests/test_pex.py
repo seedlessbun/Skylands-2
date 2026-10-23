@@ -233,8 +233,8 @@ def test_gunner_scripts_decompile(tmp_path):
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
 def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
-    psc = decompile(tmp_path, scripts.staff_gun("SkylandsStaffGun18"), "SkylandsStaffGun18")
-    assert "ScriptName SkylandsStaffGun18 Extends ActiveMagicEffect" in psc
+    psc = decompile(tmp_path, scripts.staff_gun("SkylandsStaffGun19"), "SkylandsStaffGun19")
+    assert "ScriptName SkylandsStaffGun19 Extends ActiveMagicEffect" in psc
     assert "Skipped inoperative" not in psc
     for text in (
             # the plugin knows a staff gun by its keyword (a native with no string parameter) and fires it; the script introduces the gun
