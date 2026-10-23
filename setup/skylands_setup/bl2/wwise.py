@@ -253,19 +253,26 @@ class Sounds:
         return out
 
     def event_sounds(self, event_id: int) -> list[Obj]:
-        """Every sound a play action of the event leads to."""
+        """Every sound a play action of the event leads to. If the strict reading (action type at byte 4, target at byte 6) finds nothing the
+        actions are read loosely: any sound or container named anywhere in an action counts."""
         ev = self.first(event_id, (HIRC_EVENT,))
         if ev is None:
             return []
+        actions = [a for a in (self.first(i, (HIRC_ACTION,)) for i in contains_ids(ev.body, self.objs)) if a is not None]
         out: list[Obj] = []
-        for action_id in contains_ids(ev.body, self.objs):
-            act = self.first(action_id, (HIRC_ACTION,))
-            if act is None or len(act.body) < 10:
+        for act in actions:
+            if len(act.body) < 10:
                 continue
             kind, target = struct.unpack_from("<HI", act.body, 4)
-            if kind >> 8 != ACTION_PLAY:
-                continue
-            out += self.sounds_under(target)
+            if kind >> 8 == ACTION_PLAY:
+                out += self.sounds_under(target)
+        if out:
+            return out
+        for act in actions:
+            for target in contains_ids(act.body, self.objs):
+                o = self.first(target)
+                if o is not None and o.type in (HIRC_SOUND, *HIRC_CONTAINERS):
+                    out += self.sounds_under(target)
         return out
 
 

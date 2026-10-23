@@ -96,3 +96,13 @@ def test_the_staff_guns_get_the_borderlands_shot_sound(tmp_path):
     vm = next(r for r in recs["MGEF"] if r.edid == "SkylandsStaffGunFx").first("VMAD")
     assert kw.form_id.to_bytes(4, "little") in vm and snd.form_id.to_bytes(4, "little") in vm  # the script's lists name the keyword and the sound
     assert any("smg Dahl shot sound SkylandsShot_smg_Dahl" in l for l in rep["model_log"]), rep["model_log"]
+
+
+def test_an_action_laid_out_differently_is_still_followed(tmp_path):
+    root = tmp_path / "bl2" / "WillowGame" / "CookedPCConsole"
+    root.mkdir(parents=True)
+    odd_action = F.obj(3, 1, bytes([9, 9]) + bytes(6) + struct.pack("<I", 2))  # the target is not where the strict reading looks
+    objs = [F.event(wwise.fnv1("Ak_Play_Wep_Pistol_Dahl_Shot"), [1]), odd_action, F.sound(2, 0x7000)]
+    (root / "Audio_Banks.pck").write_bytes(F.pck([(1, F.bank(1, objs, {0x7000: F.pcm_wem()}))], []))
+    out = audio.extract_shot_sounds(tmp_path / "bl2", tmp_path / "work", [("pistol", "Dahl")], lambda m: None, download=False)
+    assert ("pistol", "Dahl") in out
