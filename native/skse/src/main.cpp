@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 112;  // 1.1.2
+	constexpr std::int32_t kVersion = 120;  // 1.2.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -257,7 +257,7 @@ namespace
 
 	// Launches the held gun's bullet. The player's bullets cross the crosshair (a_target null); an enemy's go at a_target's chest.
 	// a_spread is in degrees; right, up and forward move the start in the view's own axes.
-	void Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward)
+	void Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward, float a_spreadMult)
 	{
 		const auto shooter = RE::TESForm::LookupByID<RE::Actor>(a_shooter);
 		GunInfo    info{};
@@ -324,7 +324,7 @@ namespace
 		float      heading = std::atan2(aim.x, aim.y);
 
 		// the spread: a random direction inside a cone (an enemy's is twice the player's)
-		const float spread = info.spread * (npc ? 2.0f : 1.0f);
+		const float spread = info.spread * (npc ? 2.0f : (std::max)(0.0f, a_spreadMult));  // relics may tighten the player's spread
 		if (spread > 0.0f) {
 			static thread_local std::mt19937 rng{ std::random_device{}() };
 			std::uniform_real_distribution<float> unit(0.0f, 1.0f);
@@ -396,7 +396,7 @@ namespace
 							return;
 						}
 						const auto target = who->GetActorRuntimeData().currentCombatTarget.get();
-						Launch(shooter, target ? target->GetFormID() : 0, 0.0f, 0.0f, 0.0f);
+						Launch(shooter, target ? target->GetFormID() : 0, 0.0f, 0.0f, 0.0f, 1.0f);
 					});
 				}
 			}).detach();
@@ -434,13 +434,13 @@ namespace
 	}
 
 	// The player's shot: launched on the game's own thread, a frame later (a Papyrus call may not touch the world from the script thread).
-	bool FireGun(RE::StaticFunctionTag*, RE::Actor* a_shooter, float a_right, float a_up, float a_forward)
+	bool FireGun(RE::StaticFunctionTag*, RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult)
 	{
 		if (!a_shooter) {
 			return false;
 		}
 		const auto shooter = a_shooter->GetFormID();
-		RunOnGameThread([=]() { Launch(shooter, 0, a_right, a_up, a_forward); });
+		RunOnGameThread([=]() { Launch(shooter, 0, a_right, a_up, a_forward, a_spreadMult); });
 		return true;
 	}
 
@@ -490,7 +490,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 1, 2, 0 },
+	.Version = { 1, 2, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

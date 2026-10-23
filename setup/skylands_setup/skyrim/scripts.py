@@ -1095,7 +1095,7 @@ def watcher() -> Script:
         code=[
             ("callmethod", ("id", "NoteEntrance"), ("id", "::Owner_var"), NONE),
             ("iadd", ("id", "Ticks"), ("id", "Ticks"), ("int", 1)),
-            ("imod", ("id", "::temp0"), ("id", "Ticks"), ("int", 4)),
+            ("imod", ("id", "::temp0"), ("id", "Ticks"), ("int", 2)),
             ("cmp_eq", ("id", "::temp1"), ("id", "::temp0"), ("int", 0)),
             ("jmpf", ("id", "::temp1"), ("lbl", "end")),
             call("Scan"),
@@ -1239,7 +1239,7 @@ def watcher() -> Script:
             ("callmethod", ("id", "GetPositionZ"), ("id", "Me"), ("id", "z")),
             ("assign", ("id", "tries"), ("int", 0)),
             ("label", "loop"),
-            ("cmp_lt", ("id", "::temp0"), ("id", "tries"), ("int", 3)),
+            ("cmp_lt", ("id", "::temp0"), ("id", "tries"), ("int", 8)),
             ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             ("callstatic", ("id", "Game"), ("id", "FindRandomReferenceOfAnyTypeInList"), ("id", "r"),
              ("id", "::GunList_var"), ("id", "x"), ("id", "y"), ("id", "z"), ("id", "::ScanRadius_var")),
@@ -2050,6 +2050,12 @@ def gunner_quest() -> Script:
                   functions=[on_init, on_update])
 
 
+# The player's relic variables: actor values of the player that any ability, relic or enchantment can fortify (or a script can set); the
+# staff gun script reads them every shot. Percent, 0 = no change. (Variable01..10 are the game's spare actor values; Variable10 shows the
+# gun stats effect.)
+RELIC_FIRE_RATE, RELIC_RELOAD, RELIC_ACCURACY = "Variable06", "Variable07", "Variable08"
+
+
 def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     """SkylandsStaffGun extends ActiveMagicEffect: the player's side of every Skylands staff gun (SkylandsGunModels.esp).
 
@@ -2263,13 +2269,15 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     hold = Function(
         "Hold",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("go", "Bool")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("go", "Bool"), ("gap", "Float")],
         code=[
-            # the first bullet leaves at once; then, while the attack button is still down, one more every Interval seconds
+            # the first bullet leaves at once; then, while the attack button is still down, one more every Interval seconds (a relic's
+            # fire rate bonus shortens it)
             call("Pull", dest=("id", "go")),
             ("label", "hloop"),
             ("jmpf", ("id", "go"), ("lbl", "hdone")),
-            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "Interval")),
+            ("callmethod", ("id", "Boost"), SELF, ("id", "gap"), ("id", "Interval"), ("str", RELIC_FIRE_RATE)),
+            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "gap")),
             ("callstatic", ("id", "SkylandsNative"), ("id", "TriggerHeld"), ("id", "go")),
             ("jmpf", ("id", "go"), ("lbl", "again")),
             call("Pull", dest=("id", "go")),
@@ -2298,11 +2306,13 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     fire = Function(
         "Fire",
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ref", "ObjectReference"), ("n", "Int")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ref", "ObjectReference"), ("n", "Int"), ("sm", "Float")],
         code=[
-            # the plugin launches the held gun's bullet from its muzzle, along the crosshair, within the gun's spread
+            # the plugin launches the held gun's bullet from its muzzle, along the crosshair, within the gun's spread (a relic's accuracy
+            # bonus narrows it)
+            ("callmethod", ("id", "Boost"), SELF, ("id", "sm"), ("float", 1.0), ("str", RELIC_ACCURACY)),
             ("callstatic", ("id", "SkylandsNative"), ("id", "FireGun"), ("id", "::temp0"), ("id", "Me"),
-             ("id", "::OffsetRight_var"), ("id", "::OffsetUp_var"), ("id", "::OffsetForward_var")),
+             ("id", "::OffsetRight_var"), ("id", "::OffsetUp_var"), ("id", "::OffsetForward_var"), ("id", "sm")),
             ("cast", T0, ("id", "::ShotSound_var")),
             ("jmpf", T0, ("lbl", "silent")),
             # an Actor passed where an ObjectReference is wanted fails ("Type mismatch for argument 1")
@@ -2481,17 +2491,49 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
     )
     reload_ = Function(
         "Reload",
-        locals=[("::nonevar", "None"), ("msg", "String")],
+        locals=[("::nonevar", "None"), ("msg", "String"), ("rt", "Float")],
         code=[
-            # the staff stays in the hand; the gauge is empty for the reload time, then it is full, as a gun's magazine is
+            # the staff stays in the hand; the gauge is empty for the reload time (a relic's reload bonus shortens it), then it is full,
+            # as a gun's magazine is
             ("assign", ("id", "Reloading"), ("bool", True)),
             *notify(("str", "Staff gun: reloading")),
-            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "ReloadTime")),
+            ("callmethod", ("id", "Boost"), SELF, ("id", "rt"), ("id", "ReloadTime"), ("str", RELIC_RELOAD)),
+            ("callstatic", ("id", "Utility"), ("id", "Wait"), NONE, ("id", "rt")),
             ("assign", ("id", "Mag"), ("id", "MagSize")),
             call("Sync"),
             ("assign", ("id", "Reloading"), ("bool", False)),
             *notify(("str", "Staff gun: reloaded")),
             ("return", None),
+        ],
+    )
+    atleast = Function(
+        "AtLeast",
+        return_type="Float",
+        params=[("v", "Float")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            # a divisor never gets below 0.2 (a relic cannot make a gun fire five times as fast as its stats, or divide by nothing)
+            ("cmp_lt", T0, ("id", "v"), ("float", 0.2)),
+            ("jmpf", T0, ("lbl", "ok")),
+            ("return", ("float", 0.2)),
+            ("label", "ok"),
+            ("return", ("id", "v")),
+        ],
+    )
+    boost = Function(
+        "Boost",
+        return_type="Float",
+        params=[("base", "Float"), ("av", "String")],
+        locals=[("::nonevar", "None"), ("v", "Float"), ("r", "Float")],
+        code=[
+            # base divided by (1 + the player's bonus in percent / 100): the bonus is an actor value of the player's, so any ability, relic
+            # or enchantment that fortifies it (or a script that sets it) changes how every gun behaves. A bonus of 50 is 1.5 times faster.
+            ("callmethod", ("id", "GetActorValue"), ("id", "Me"), ("id", "v"), ("id", "av")),
+            ("fmul", ("id", "v"), ("id", "v"), ("float", 0.01)),
+            ("fadd", ("id", "v"), ("id", "v"), ("float", 1.0)),
+            ("callmethod", ("id", "AtLeast"), SELF, ("id", "v"), ("id", "v")),
+            ("fdiv", ("id", "r"), ("id", "base"), ("id", "v")),
+            ("return", ("id", "r")),
         ],
     )
     return Script(
@@ -2505,7 +2547,7 @@ def staff_gun(name: str = "SkylandsStaffGun") -> Script:
         auto_properties=[("GiftA", "Weapon"), ("GiftB", "Weapon"), ("SpeedMult", "Float"), ("ChargePerShot", "Float"),
                          ("OffsetRight", "Float"), ("OffsetUp", "Float"), ("OffsetForward", "Float"), ("ShotSound", "Sound"),
                          ("Info", "String"), ("Verbose", "Bool")],
-        functions=[on_start, on_load, start, resume, is_gun, on_equipped, unknown, take, fresh, load, on_unequipped, on_update, poll, hold, pull, fire, ready,
+        functions=[on_start, on_load, start, resume, is_gun, on_equipped, unknown, take, fresh, load, on_unequipped, on_update, poll, hold, pull, fire, ready, atleast, boost,
                    arm, grip, heal, let, speed, count, tell, sync, reload_],
     )
 
@@ -2527,7 +2569,7 @@ def native_stub() -> Script:
             Function("GunIntervalMs", return_type="Int", flags=both, params=[("akWeapon", "Weapon")]),
             Function("GunReloadMs", return_type="Int", flags=both, params=[("akWeapon", "Weapon")]),
             Function("FireGun", return_type="Bool", flags=both,
-                     params=[("akShooter", "Actor"), ("afRight", "Float"), ("afUp", "Float"), ("afForward", "Float")]),
+                     params=[("akShooter", "Actor"), ("afRight", "Float"), ("afUp", "Float"), ("afForward", "Float"), ("afSpreadMult", "Float")]),
         ],
     )
 

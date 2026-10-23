@@ -117,7 +117,7 @@ WATCHER = {
     "tick": """Function PlayerTick()
   Owner.NoteEntrance()
   Ticks += 1
-  If Ticks % 4 == 0
+  If Ticks % 2 == 0
     Self.Scan()
     Owner.Sweep()
     Self.Rare()
@@ -238,7 +238,7 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
     assert "Skipped inoperative" not in psc
     for text in (
             # SKSE: the plugin of Skylands (the attack button, the gun's numbers, the bullet launch) and SKSE's own charge and version calls
-            "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireGun(Me, OffsetRight, OffsetUp, OffsetForward)",
+            "SkylandsNative.TriggerPressed()", "SkylandsNative.TriggerHeld()", "SkylandsNative.FireGun(Me, OffsetRight, OffsetUp, OffsetForward, sm)",
             "SkylandsNative.GunClip(w)", "SkylandsNative.GunIntervalMs(w)", "SkylandsNative.GunReloadMs(w)",
             "Int v = SKSE.GetPluginVersion(\"SkylandsNative\")", "Native = v > 0", "WornObject.SetItemCharge(Me, 1, 0, v)", "WornObject.GetItemCharge(Me, 1, 0)", "Me.SetActorValue(\"RightItemCharge\", v)",
             # the plugin keeps the right attack button from the game while a gun is in the hand (no animation); the player's controls stay on
@@ -249,10 +249,11 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
             "Int c = SkylandsNative.GunClip(w)", "Return c > 0", "Self.Take(w)", "Self.Load(w)", "Self.Fresh(w)", "If w == Gun", "Gun = w",
             "Interval = fi", "ReloadTime = fr", "MagSize = n", "Mag = n", "Weapon Gun", "fi *= 0.001",
             # the loop: a press fires at once, the button held fires one every Interval, nothing while reloading or with the gun away
-            "Bool pressed = SkylandsNative.TriggerPressed()", "Bool go = Self.Pull()", "While go", "Utility.Wait(Interval)",
+            "Bool pressed = SkylandsNative.TriggerPressed()", "Bool go = Self.Pull()", "While go", "Float gap = Self.Boost(Interval, \"Variable06\")", "Utility.Wait(gap)", "Float sm = Self.Boost(1.0, \"Variable08\")", "Float rt = Self.Boost(ReloadTime, \"Variable07\")", "Utility.Wait(rt)",
+            "Float Function Boost(Float base, String av)", "Me.GetActorValue(av)", "Float r = base / v", "v = Self.AtLeast(v)", "If v < 0.2",
             "go = SkylandsNative.TriggerHeld() && Self.Pull()", "Bool more = Mag > 1", "Return Armed && !Reloading",
             # the magazine, the gauge, the reload (a delay with the gauge empty, then full) and the messages
-            "Mag -= 1", "Int r = Fired % 10", "If r == 0 && Verbose", "v *= ChargePerShot", "Utility.Wait(ReloadTime)", "Mag = MagSize",
+            "Mag -= 1", "Int r = Fired % 10", "If r == 0 && Verbose", "v *= ChargePerShot", "Mag = MagSize",
             "Staff gun: reloading", "Staff gun: reloaded", "Me.AddItem(f, 1, False)", "Form f = GiftA as Form", "f = GiftB as Form",
             "Me.GetEquippedObject(1)", "Me.SetActorValue(\"WeaponSpeedMult\", SpeedMult)", "Me.SetActorValue(\"WeaponSpeedMult\", 1.0)",
             "ObjectReference ref = Me as ObjectReference", "ShotSound.Play(ref)",
@@ -270,15 +271,15 @@ def test_staff_gun_script_decompiles_to_the_intended_logic(tmp_path):
 def test_native_stub_declares_the_plugins_functions(tmp_path):
     psc = decompile(tmp_path, scripts.native_stub(), "SkylandsNative")
     assert "ScriptName SkylandsNative\n" in psc
-    for text in ("Bool Function FireGun(Actor akShooter, Float afRight, Float afUp, Float afForward) Global Native",
+    for text in ("Bool Function FireGun(Actor akShooter, Float afRight, Float afUp, Float afForward, Float afSpreadMult) Global Native",
                  "Int Function GunClip(Weapon akWeapon) Global Native", "Int Function GunIntervalMs(Weapon akWeapon) Global Native",
                  "Int Function GunReloadMs(Weapon akWeapon) Global Native", "Bool Function TriggerHeld() Global Native",
                  "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
         assert text in psc, text
-    assert "String" not in psc  # no native takes a string: 0.15.1's GunStat(Weapon, String) always read 0 in the game's script
+    assert "String" not in psc and "afSpreadMult" in psc  # no native takes a string: 0.15.1's GunStat(Weapon, String) always read 0 in the game's script
     main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
     for text in ('"FireGun"sv', '"GunClip"sv', '"GunIntervalMs"sv', '"GunReloadMs"sv', '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv',
-                 '"Version"sv', "RE::Actor* a_shooter, float a_right, float a_up, float a_forward", "RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)",
+                 '"Version"sv', "RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult", "RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)",
                  "TESSpellCastEvent", "SkylandsGun_", "holder->AddEventSink(CastSink::Get())"):
         assert text in main, text  # the stub and the plugin's registrations say the same thing
     assert "GunStat" not in main

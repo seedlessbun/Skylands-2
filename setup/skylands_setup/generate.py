@@ -482,7 +482,7 @@ ENIT_CAST_AT, ENIT_CHARGE_AT, MGEF_CASTING_AT = 8, 24, 80
 STAFF_SPEED_MULT = 3.0  # the player's weapon speed while the staff gun is in the hand (a guess: it may or may not speed up a cast)
 
 
-def staff_donor(m: "Masters", element: str | None, log: list[str]):
+def staff_donor(m: "Masters", element: str | None, log: list[str], strict: bool = False):
     """A vanilla staff whose spell flies a projectile: (weapon, enchantment, effect record, projectile record). Only plain
     ones: a damaging value-modifier effect that is fired and forgotten at an aim, with no script anywhere in the chain (the
     quest artifacts such as the Wabbajack are scripted and are never copied). Preferred by the element's art, else any
@@ -514,6 +514,9 @@ def staff_donor(m: "Masters", element: str | None, log: list[str]):
         log.append("Staff gun: no plain vanilla staff with a projectile spell was found; the staff gun is not built")
         return None
     found.sort(key=lambda t: t[:2])
+    if strict and found[0][0] != 0:  # only a staff of the element itself will do (its hit art is the element's)
+        log.append(f"Staff gun: no plain vanilla {element} staff with a projectile spell was found; the {element} bullets get no hit art")
+        return None
     _, _, w, ench, mg, pj = found[0]
     log.append(f"Staff gun: donor staff {w.edid} (animation type {w.first('DNAM')[0]}), enchantment {ench.edid}, effect {mg.edid}, projectile {pj.edid}"
                f" (of {len(found)} plain staffs)")
@@ -533,6 +536,9 @@ def staff_shot_sound(m: "Masters", log: list[str]):
 
 
 STAFF_EQUIP_SLOT = 0x00013F42  # Skyrim.esm EQUP RightHand: a staff gun goes in the right hand whatever the hands hold (a vanilla staff is "either hand", and went to the left with a gun in the right)
+STAFF_BULLET_SPEED = 1.25  # the bullets fly this much faster than the Borderlands speed / 3 (the user asked for +25%)
+STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH = 45.0, 0.8  # half the size of the first tracer (90 long, 1.6 wide)
+MGEF_RESIST_AT = 16
 STAFF_KINDS = ("smg", "assault_rifle")  # the gun types that are staff guns (the other types stay crossbows)
 STAFF_NPC_BURST_MAX = 6
 
@@ -559,6 +565,8 @@ class Armory:
         self.keywords: dict[str, int] = {}
         self.bullets: dict[tuple, tuple] = {}
         self.donors: dict[object, tuple | None] = {}
+        self.strict: dict[object, tuple | None] = {}
+        self.blasts: dict[tuple, int] = {}
         self.tracers: dict[str, bytes] = {}
         self.count = 0
         for i in range(STAFF_ID_SHIFT):
@@ -582,34 +590,77 @@ class Armory:
             self.donors[element] = staff_donor(self.m, element, self.log)
         return self.donors[element]
 
+    def _element_donor(self, element: str | None):
+        """A vanilla staff of the element itself (None for a plain gun, or when the game has none)."""
+        if element is None:
+            return None
+        if element not in self.strict:
+            self.strict[element] = staff_donor(self.m, element, self.log, strict=True)
+        return self.strict[element]
+
+    def _blast(self, kind: str, element: str, gt, shot) -> int:
+        """The element's hit on whoever a bullet strikes: an explosion with NO art, sound or light (nothing is seen to explode), that carries
+        the element's status effect and a little splash damage."""
+        if (kind, element) in self.blasts:
+            return self.blasts[(kind, element)]
+        default_radius, frac = SPLASH.get(kind, (80.0, 0.3))
+        radius = float(shot.explosion_radius) if shot and getattr(shot, "explosion_radius", None) else default_radius
+        dmg = max(5, round(float(gt.base_damage) * frac / 5) * 5)
+        edid = f"SkylandsStaffBlast_{kind}_{element}"
+        donor = self.rounds.donor(element)
+        r = esp.Rec("EXPL", self.view.new_id(f"EXPL:{edid}"), [])
+        if donor is not None:
+            r.subs = [(sig, d) for sig, d in donor.subrecords if sig not in ("EDID", "EITM", "MODL", "MODT", "MODS", "MNAM")]
+            r.subs.insert(0, ("EDID", esp.zstr(edid)))
+            data = bytearray(donor.first("DATA"))
+        else:
+            r.add("EDID", esp.zstr(edid)).add("OBND", struct.pack("<6h", 0, 0, 0, 0, 0, 0))
+            data = bytearray(52)
+            struct.pack_into("<I", data, 48, 1)
+        struct.pack_into("<5I", data, 0, 0, 0, 0, 0, 0)  # light, two sounds, impact data set, placed object: none
+        struct.pack_into("<fff", data, EXPL_FORCE_AT, 30.0, float(dmg), radius)
+        struct.pack_into("<f", data, 36, 0.0)  # image space radius
+        r.set("DATA", bytes(data))
+        if self.rounds.enchants.get(element) is not None:
+            insert_ordered(r, "EITM", esp.u32(self.rounds.enchants[element].form_id), EXPL_ORDER)
+        self.view.override(r)
+        self.blasts[(kind, element)] = r.form_id
+        return r.form_id
+
     def _keyword(self, edid: str) -> int:
         if edid not in self.keywords:
             self.keywords[edid] = self.view.new("KYWD", edid).form_id
         return self.keywords[edid]
 
     def _bullet(self, kind: str, element: str | None, gt, shot):
-        """The projectile and effect of one gun type x element, shared by its guns: (projectile id, the effect record's parts)."""
+        """The projectile and effect of one gun type x element, shared by its guns: (projectile id, the effect record's parts).
+        A plain gun's bullet carries no element at all (no hit art, shader, impact, sound, keyword or resist: the donor staff's fire is stripped);
+        an elemental gun's bullet is made from a staff of that element and carries only that one element's hit; nothing explodes visibly."""
         key = (kind, element)
         if key in self.bullets:
             return self.bullets[key]
-        donor = self._donor(element) or self._donor(None)
+        elem_donor = self._element_donor(element)
+        plain = elem_donor is None
+        donor = elem_donor or self._donor(None)
         _, _, d_mgef, d_proj = donor
         edid = f"SkylandsStaffBullet_{kind}_{(element or 'plain').lower()}"
         mesh = f"Skylands\\Tracer_Staff_{(element or 'plain').lower()}.nif"
         if mesh not in self.tracers:
-            self.tracers[mesh] = nif.tracer(STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None]), BEAM_TEXTURE)
+            self.tracers[mesh] = nif.tracer(STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None]), BEAM_TEXTURE,
+                                            STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH)
         pr = esp.Rec("PROJ", self.view.new_id(f"PROJ:{edid}"), [(sig, d) for sig, d in d_proj.subrecords if sig not in ("VMAD", "MODT", "NAM1", "NAM2")])
         pr.set("EDID", esp.zstr(edid))
         pr.set("MODL", esp.zstr(mesh))  # the glowing tracer (nif.tracer) instead of the donor's fireball
         pd = bytearray(d_proj.first("DATA"))
-        speed = float(shot.speed_bl2 if shot else 20000) * BL2_TO_SKYRIM_SPEED
+        speed = float(shot.speed_bl2 if shot else 20000) * BL2_TO_SKYRIM_SPEED * STAFF_BULLET_SPEED
         struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0, speed)
         struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
+        struct.pack_into("<II", pd, PROJ_LIGHT_AT, 0, 0)  # the donor's firelight and muzzle light
+        struct.pack_into("<I", pd, PROJ_SOUND_AT, 0)  # the donor's flight sound
         flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] & ~PROJ_FLAG_MUZZLE_FLASH
         explosion = 0
-        if element is not None:  # the same blast as the crossbow rounds of this type and element (Rounds.expl caches it)
-            radius = float(shot.explosion_radius) if shot and getattr(shot, "explosion_radius", None) else None
-            explosion = self.rounds.expl(kind, element, float(gt.base_damage), radius)
+        if element is not None:  # the element's status effect, delivered by a silent explosion
+            explosion = self._blast(kind, element, gt, shot)
             flags |= 0x2
         else:
             flags &= ~0x2
@@ -621,7 +672,13 @@ class Armory:
         struct.pack_into("<f", md, MGEF_COST_AT, 0.0)
         struct.pack_into("<II", md, MGEF_PROJECTILE_AT, pr.form_id, 0)  # projectile, explosion (the projectile carries its own)
         quiet_art(md, hit=False)
-        parts = ([(sig, d) for sig, d in d_mgef.subrecords if sig not in ("DNAM", "VMAD", "DATA", "EDID")], bytes(md))
+        drop = ("DNAM", "VMAD", "DATA", "EDID")
+        if plain:  # no element: nothing of the donor's fire stays on the hit
+            quiet_art(md, hit=True)
+            struct.pack_into("<I", md, MGEF_IMPACT_DATA_AT, 0)
+            struct.pack_into("<I", md, MGEF_RESIST_AT, 0xFFFFFFFF)  # no resistance applies
+            drop += ("SNDD", "KSIZ", "KWDA")
+        parts = ([(sig, d) for sig, d in d_mgef.subrecords if sig not in drop], bytes(md))
         self.bullets[key] = (pr.form_id, parts)
         return self.bullets[key]
 
@@ -635,6 +692,15 @@ class Armory:
         donor = self._donor(element) or self._donor(None)
         _, d_ench, d_mgef, _ = donor
         proj_id, (mparts, mdata) = self._bullet(kind, element, gt, shot)
+        row = self.gunner.rows[self.gunner.index[(kind, g.get("manufacturer", ""))]] if (kind, g.get("manufacturer", "")) in self.gunner.index \
+            else self.gunner.rows[KINDS.index(kind)]
+        magazine = int(clip or row["clip"])
+        # the gun's own rolled stats set its rate of fire, its reload and its accuracy (they are the numbers its description tells)
+        interval = max(0.05, 1.0 / max(1.0, float(st["fire_rate"])))
+        reload_s = max(0.3, float(st["reload"]))
+        spread = float(row["spread"]) * float(st.get("spread_mult", 1.0))
+        burst = max(1, min(STAFF_NPC_BURST_MAX, int(row["burst"])))
+        text = f"{text} Accuracy: shots spread {spread:.1f} degrees."
         # the effect: this gun's own copy of the bullet effect, which carries its stats text (the crossbow guns show theirs the same way)
         mg = esp.Rec("MGEF", self.view.new_id(f"MGEF:Staff_{edid}"), [("EDID", esp.zstr(f"Staff_{edid}"))])
         mg.subs += [(sig, d) for sig, d in mparts]
@@ -665,16 +731,11 @@ class Armory:
         insert_ordered(w, "FULL", esp.zstr(name), WEAP_ORDER)
         insert_ordered(w, "EITM", esp.u32(en.form_id), WEAP_ORDER)
         w.set("ETYP", esp.u32(STAFF_EQUIP_SLOT)) if w.get("ETYP") is not None else insert_ordered(w, "ETYP", esp.u32(STAFF_EQUIP_SLOT), WEAP_ORDER)
-        row = self.gunner.rows[self.gunner.index[(kind, g.get("manufacturer", ""))]] if (kind, g.get("manufacturer", "")) in self.gunner.index \
-            else self.gunner.rows[KINDS.index(kind)]
-        magazine = int(clip or row["clip"])
-        interval = max(0.06, float(row["interval"]))
-        burst = max(1, min(STAFF_NPC_BURST_MAX, int(row["burst"])))
         insert_ordered(w, "EAMT", u16(min(65535, round(magazine * STAFF_CHARGE_PER_SHOT))), WEAP_ORDER)  # the charge gauge is the magazine
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(float(row['reload']) * 1000)}_s{round(float(row['spread']) * 10)}_b{burst}"
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}"
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers)]
         insert_ordered(w, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
         insert_ordered(w, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)

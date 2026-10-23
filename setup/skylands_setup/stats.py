@@ -39,11 +39,14 @@ def roll(edid: str, gt, rr, has_element: bool, mods: dict | None = None) -> dict
     # Animation speed grows with fire rate (steeply) and falls with reload time (gently).
     speed = (rate / RATE_REF) ** 0.6 * (RELOAD_REF / reload) ** 0.4
     speed = round(min(SPEED_MAX, max(SPEED_MIN, speed)), 3)
+    # accuracy (the staff guns' shot spread): a good roll and an accurate part set tighten it. Drawn last so no earlier number moves.
+    quality = rnd.uniform(rr.stat_lo, rr.stat_hi)
+    spread_mult = min(1.6, max(0.5, (1.3 - 0.6 * quality) / max(0.5, mods.get("accuracy", 1.0))))
     return {
         "fire_rate": round(rate, 2), "reload": round(reload, 2), "speed": speed,
         "crit_damage": max(1, round(crit)), "element_mult": round(element, 3),
         "damage_mult": round(mods.get("damage", 1.0), 3), "clip_mult": round(mods.get("clip", 1.0), 3),
-        "boosted": boosted, "boost": round(boost, 2) if boosted else None,
+        "boosted": boosted, "boost": round(boost, 2) if boosted else None, "spread_mult": round(spread_mult, 3),
     }
 
 

@@ -229,6 +229,18 @@ Other commands:
   add a string parameter to a native without a log proving it arrives. The plugin logs the first six `GunClip(...) = n` answers.
   Also in 0.15.2: the Hunter finds a Skylands gun in EITHER hand (`HeldIn`/`GunHeld`, used by `Carrying` and `OwnDrop`): OwnDrop looked at the right hand
   only, so a staff gun in the left hand was never dropped on the ground and never got a beam (beams are placed on guns lying loose in the world).
+- 0.16.0 (TestBuild-88, plugin 1.2.0), user requests after 0.15.2 ("things are looking good"): (1) beams: some staff guns were slow/missing; the Hunter's
+  player scan now runs every 4 s (was 8) with 8 tries (was 3) (`Scan`/`PlayerTick`); unconfirmed that this was the cause. (2) bullets: a plain gun's
+  bullet has NO element (the fire donor's hit art, hit shader, impact data, resist (set to -1), sounds (`SNDD`) and keywords are stripped, the PROJ's
+  firelight and flight sound are zeroed; this was the "fire explosion on every weapon"); an elemental gun's bullet comes from a staff of its own
+  element only (`staff_donor(..., strict=True)`; else it is built like a plain one) and carries that element's hit art; the element's status effect
+  rides on a SILENT explosion (`Armory._blast`: no model, light, sound, impact data or placed object); the "second element on top" was the explosion
+  of the crossbow rounds (`Rounds.expl`, fire art) plus the donor's fire hit art. Tracer half size (`STAFF_TRACER_LENGTH/WIDTH` 45 x 0.8), bullet
+  speed x1.25 (`STAFF_BULLET_SPEED`). (3) gun stats drive firing: the keyword numbers come from the rolled stats (interval = 1/fire_rate, reload =
+  stats reload, spread = type spread x `spread_mult`; `stats.roll` draws `spread_mult` LAST so no crossbow number moves); the MGEF text says the spread.
+  (4) relics: the player's actor values `Variable06/07/08` = fire rate / reload / accuracy bonus in percent, read by the script's `Boost` every
+  shot (`FireGun` got a spread multiplier argument); `docs/relics.md`. The relic items themselves, and damage/magazine bonuses, are not built.
+  UNCONFIRMED in game: all of it (bullets look, the hit art, the actor values being usable on this runtime, beams).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

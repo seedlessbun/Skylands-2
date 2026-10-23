@@ -436,7 +436,8 @@ def staff_bl2(tmp_path):
     bl2["rarities"] = [{"min": lvl, "max": lvl, "rgb": [lvl * 40, 100, 50]} for lvl in range(1, 7)]
     g0 = bl2["weapons"]["guns"][0]  # the fake game has pistols only
     bl2["weapons"]["guns"] += [{**g0, "type": "smg", "elements": ["Fire"], "balance": g0["balance"] + "_smg"},
-                               {**g0, "type": "assault_rifle", "elements": [], "balance": g0["balance"] + "_ar"}]
+                               {**g0, "type": "assault_rifle", "elements": [], "balance": g0["balance"] + "_ar"},
+                               {**g0, "type": "smg", "elements": [], "slots": {}, "balance": g0["balance"] + "_smg_plain"}]
     return bl2
 
 
@@ -450,7 +451,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     assert rep["staff_gun"]["guns"] == len(rep["staff_guns"]) == rep["staff_converted"] > 0
     assert any("donor staff StaffFireball " in l for l in rep["model_log"]), rep["model_log"]  # never the scripted artifact (AAWabbajack sorts first)
     view = tmp_path / "out" / "Data" / "SkylandsGunModels.esp"
-    _, recs = read_plugin(view, {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST", "KYWD", "LVLI", "FLST"})
+    _, recs = read_plugin(view, {"WEAP", "ENCH", "MGEF", "PROJ", "SPEL", "QUST", "KYWD", "LVLI", "FLST", "EXPL"})
     by_id = {t: {r.form_id: r for r in rs} for t, rs in recs.items()}
     plain = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP", "LVLI", "FLST", "KYWD"})[1]
     # the staff guns ARE the crossbow SMGs and rifles: the same form ids, so the loot lists, the beams' form list, and every copy a saved
@@ -487,11 +488,45 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         numbers = next(n for n in names if n and n.startswith("SkylandsGun_"))
         kind = "smg" if "_smg_" in w.edid else "assault_rifle"
         row = S.SHOOTING[kind]
-        assert numbers.split("_")[2] == f"i{round(max(0.06, row.fire_interval) * 1000)}" and numbers.split("_")[3] == f"r{round(row.reload * 1000)}", numbers
-        assert st.unpack("<H", w.first("EAMT"))[0] == int(numbers.split("_")[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
-        assert str(row.burst) == numbers.split("_")[-1][1:]
+        sts = rep["stats"][w.edid]  # the rolled stats of the gun: its description tells them, and they are what it does
+        parts = numbers.split("_")
+        assert parts[2] == f"i{round(max(0.05, 1.0 / max(1.0, sts['fire_rate'])) * 1000)}" and parts[3] == f"r{round(max(0.3, sts['reload']) * 1000)}", (numbers, sts)
+        assert abs(int(parts[4][1:]) - row.spread_deg * sts["spread_mult"] * 10) <= 1.0, (numbers, sts)  # the accuracy roll narrows or widens the spread
+        assert st.unpack("<H", w.first("EAMT"))[0] == int(parts[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
+        assert str(row.burst) == parts[-1][1:]
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
+    # the bullets: a plain gun's carries nothing of the donor fire, an elemental one's carries only its element; nothing explodes in view;
+    # half the old size, a quarter faster
+    from skylands_setup.skyrim import nifread
+
+    seen = set()
+    for pj in recs["PROJ"]:
+        if not pj.edid.startswith("SkylandsStaffBullet_"):
+            continue
+        kind, element = pj.edid[len("SkylandsStaffBullet_"):].rsplit("_", 1)
+        seen.add(element)
+        pd = pj.first("DATA")
+        assert abs(st.unpack_from("<f", pd, 8)[0] - S.SHOOTING[kind].speed_bl2 / 3 * 1.25) < 1.0  # +25% projectile speed
+        assert st.unpack_from("<II", pd, 16) == (0, 0) and st.unpack_from("<I", pd, 40)[0] == 0  # no firelight, no flight sound
+        mg = next(m for m in recs["MGEF"] if st.unpack_from("<I", m.first("DATA"), 72)[0] == pj.form_id and m.edid.startswith("Staff_"))
+        md = mg.first("DATA")
+        assert st.unpack_from("<I", md, 76)[0] == 0
+        if element == "plain":
+            assert not st.unpack_from("<H", pd, 0)[0] & 0x2 and st.unpack_from("<I", pd, 36)[0] == 0  # no explosion at all
+            assert st.unpack_from("<III", md, 32)[0] == 0 and st.unpack_from("<I", md, 96)[0] == 0 and st.unpack_from("<I", md, 100)[0] == 0
+            assert st.unpack_from("<I", md, 16)[0] == 0xFFFFFFFF  # no fire resistance applies
+            assert mg.first("KWDA") is None and mg.first("SNDD") is None
+        else:
+            assert st.unpack_from("<H", pd, 0)[0] & 0x2  # the element rides on a silent explosion
+            blast = by_id["EXPL"][st.unpack_from("<I", pd, 36)[0]]
+            assert blast.edid.startswith("SkylandsStaffBlast_") and blast.first("MODL") is None
+            assert st.unpack_from("<5I", blast.first("DATA"), 0) == (0, 0, 0, 0, 0)  # no light, sound, impact art or placed object
+            assert st.unpack_from("<I", md, 96)[0] != 0  # the one element's hit art stays
+        tracer = tmp_path / "out" / "Data" / "Meshes" / Path(*pj.first("MODL").rstrip(b"\0").decode().split("\\"))
+        ys = [p[1] for p in nifread.world_points(tracer.read_bytes())]
+        assert abs((max(ys) - min(ys)) - 45.0) < 1.0  # half the first tracer's 90
+    assert {"plain", "fire"} <= seen, seen  # both kinds of bullet were checked
     # the loot lists of Skylands.esp hold these very ids, so they drop (and enemies carry them) as staff guns
     tiers = [r for r in plain["LVLI"] if r.edid.startswith("SkylandsGuns_")]
     listed = {st.unpack_from("<I", d, 4)[0] for r in tiers for s_, d in r.subrecords if s_ == "LVLO"}
