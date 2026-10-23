@@ -600,8 +600,12 @@ class Armory:
     burst), SkylandsGun_c<clip>_i<ms>_r<ms>_s<tenths of a degree>_b<burst>, which the plugin reads (GunClip, GunIntervalMs, GunReloadMs).
     Everything is in the second plugin."""
 
-    def __init__(self, view: esp.Plugin, m: "Masters", rounds: "Rounds", gunner: "Gunner", models, data_dir: Path, hold_turn, report: dict) -> None:
+    def __init__(self, view: esp.Plugin, m: "Masters", rounds: "Rounds", gunner: "Gunner", models, data_dir: Path, hold_turn, report: dict,
+                 shot_sounds: dict | None = None, sound_dir: Path | None = None) -> None:
         self.view, self.m, self.rounds, self.gunner, self.models, self.report = view, m, rounds, gunner, models, report
+        self.shot_sounds = shot_sounds or {}  # {(gun type, manufacturer): [WAV files]} extracted from Borderlands 2
+        self.sound_dir = sound_dir
+        self.sndr: dict[tuple[str, str], int] = {}
         self.log = report["model_log"]
         self.ok = False
         self.by_rarity: dict[int, list[int]] = {}
@@ -635,6 +639,57 @@ class Armory:
         if element not in self.donors:
             self.donors[element] = staff_donor(self.m, element, self.log)
         return self.donors[element]
+
+    def _sound_template(self):
+        """A vanilla standard sound descriptor with a category and an output model, to copy (weapon sounds first)."""
+        if getattr(self, "_template", None) is None:
+            best = None
+            for r in self.m.by_type.get("SNDR", {}).values():
+                cnam = r.first("CNAM")
+                if not cnam or struct.unpack("<I", cnam[:4])[0] != 0x1EEF540A or not r.first("ANAM") or not (r.first("GNAM") and r.first("ONAM")):
+                    continue
+                key = (0 if re.search(r"wpn|crossbow|bow", r.edid or "", re.I) else 1, len(r.edid or ""), r.edid or "")
+                if best is None or key < best[0]:
+                    best = (key, r)
+            self._template = best[1] if best else False
+            if best:
+                self.log.append(f"Staff guns: sound descriptors copied from {best[1].edid} (file name style {best[1].first('ANAM')[:40]!r})")
+            else:
+                self.log.append("Staff guns: no standard vanilla sound descriptor to copy; the Borderlands shot sounds cannot be attached")
+        return self._template or None
+
+    def _shot_sndr(self, kind: str, manufacturer: str) -> int | None:
+        """The sound descriptor for the Borderlands shot of one gun type and manufacturer (its WAV files are copied to Data\\Sound\\FX\\Skylands)."""
+        key = (kind, manufacturer)
+        if key in self.sndr:
+            return self.sndr[key]
+        files = self.shot_sounds.get(key)
+        template = self._sound_template() if files and self.sound_dir is not None else None
+        if not files or template is None:
+            return None
+        style = template.first("ANAM").rstrip(b"\0").decode("latin-1", errors="replace")
+        prefix = "Sound\\" if style.lower().startswith("sound\\") else ""
+        self.sound_dir.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for f in files:
+            (self.sound_dir / Path(f).name).write_bytes(Path(f).read_bytes())
+            paths.append(f"{prefix}FX\\Skylands\\{Path(f).name}")
+        edid = f"SkylandsShot_{kind}_{re.sub('[^A-Za-z0-9]+', '_', manufacturer)}"
+        subs, placed = [], False
+        for sig, d in template.subrecords:
+            if sig == "EDID":
+                subs.append(("EDID", esp.zstr(edid)))
+            elif sig == "ANAM":
+                if not placed:
+                    subs += [("ANAM", esp.zstr(p)) for p in paths]
+                    placed = True
+            else:
+                subs.append((sig, d))
+        rec = esp.Rec("SNDR", self.view.new_id(f"SNDR:{edid}"), subs)
+        self.view.override(rec)
+        self.sndr[key] = rec.form_id
+        self.log.append(f"Staff guns: {kind} {manufacturer} shot sound {edid}: {len(paths)} files, e.g. {paths[0]}")
+        return rec.form_id
 
     def _element_donor(self, element: str | None):
         """A vanilla staff of the element itself (None for a plain gun, or when the game has none)."""
@@ -798,6 +853,9 @@ class Armory:
         numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}"
         self.kinds.add(kind)
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
+        mfr = g.get("manufacturer", "")
+        if self._shot_sndr(kind, mfr) is not None:  # this gun type from this manufacturer has its own Borderlands shot sound
+            ids.append(self._keyword(f"SkylandsSnd_{kind}_{re.sub('[^A-Za-z0-9]+', '_', mfr)}"))
         insert_ordered(w, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
         insert_ordered(w, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)
         mesh = self.models.model_for(g, built, rr.id, color, edid, self.hold) if self.models is not None else None
@@ -825,6 +883,9 @@ class Armory:
             return
         sound = staff_shot_sound(m, self.log, "smg")
         snd_kw, snd_ids = [], []
+        for (kind, mfr), sndr in sorted(self.sndr.items()):  # the Borderlands shot of a gun type and manufacturer, tried before the stand-ins
+            snd_kw.append(self._keyword(f"SkylandsSnd_{kind}_{re.sub('[^A-Za-z0-9]+', '_', mfr)}"))
+            snd_ids.append(sndr)
         for kind in sorted(self.kinds):  # one shot sound per gun type, found by the gun's SkylandsSnd_<type> keyword
             found = staff_shot_sound(m, self.log, kind)
             if found:
@@ -1019,7 +1080,7 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
              gun_models: str = "off", model_sources: dict | None = None, model_spin: float = 0.0, model_pitch: float = 0.0, model_calibrate: bool = False,
              model_scale: float = 1.0, shooting: str = "off",
-             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> dict:
+             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), shot_sounds: dict | None = None) -> dict:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
@@ -1074,7 +1135,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         gunner = Gunner(view, shots, bl2["weapons"]["guns"])
         make_gunner(view, m, rounds, gunner, bolts.form_id)
         if shooting == "staff":  # submachine guns and assault rifles are staff guns (the other types stay crossbows)
-            armory = Armory(view, m, rounds, gunner, models, data_dir, staff_turn, report)
+            armory = Armory(view, m, rounds, gunner, models, data_dir, staff_turn, report, shot_sounds, out_data / "Sound" / "FX" / "Skylands")
     if shooting in ("bullets", "both"):
         tune_bolts(view, m, bolts, report["model_log"])
 

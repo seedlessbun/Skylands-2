@@ -197,8 +197,11 @@ def build_full(root: Path) -> Path:
             record("NPC_", 0x7002, [sub("EDID", z("EncBandit03Boss1HNordM")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24)])]
     extra.append(group("NPC_", npcs))
     lv = struct.pack("<HHIHH", 1, 0, 0x1234, 1, 0)
-    extra.append(group("SNDR", [record("SNDR", 0x9100, [sub("EDID", z("WPNCrossbowFire"))]), record("SNDR", 0x9101, [sub("EDID", z("WPNCrossbowReload"))]),
-                                record("SNDR", 0x9102, [sub("EDID", z("WPNBowFireShort"))])]))
+    def sndr(form_id, edid):
+        return record("SNDR", form_id, [sub("EDID", z(edid)), sub("CNAM", struct.pack("<I", 0x1EEF540A)), sub("GNAM", struct.pack("<I", 0x3E00)),
+                                        sub("ANAM", z("fx\\wpn\\crossbow\\" + edid.lower() + ".wav")), sub("ONAM", struct.pack("<I", 0x3F00))])
+
+    extra.append(group("SNDR", [sndr(0x9100, "WPNCrossbowFire"), sndr(0x9101, "WPNCrossbowReload"), sndr(0x9102, "WPNBowFireShort")]))
     extra.append(group("LVLI", [record("LVLI", 0x8000, [sub("EDID", z("LootBanditChestBossBase")), sub("LVLD", b"\x00"), sub("LVLF", b"\x01"),
                                                         sub("LLCT", b"\x01"), sub("LVLO", lv)])]))
     # a vanilla-style staff: animation type 8, an enchantment whose effect flies a projectile (the staff-type gun copies it)

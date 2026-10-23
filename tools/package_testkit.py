@@ -55,7 +55,7 @@ setlocal
 cd /d "%~dp0"
 set "PYTHONPATH=%~dp0app"
 echo Looking at how Borderlands 2 stores its sound (changes nothing; a few minutes) ...
-"%~dp0python\python.exe" -X utf8 -m skylands_setup bl2audio --out "%~dp0work\bl2-audio-report.txt" %*
+"%~dp0python\python.exe" -X utf8 -m skylands_setup bl2audio --shots --out "%~dp0work\bl2-audio-report.txt" %*
 echo.
 echo Send work\bl2-audio-report.txt back to Claude.
 pause

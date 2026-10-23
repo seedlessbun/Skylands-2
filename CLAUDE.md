@@ -273,6 +273,14 @@ Other commands:
   semantics when a task adds a task are not known), that the measured rate now matches, the flash (appearance, direction: `SetEulerAnglesXYZ(pitch, 0, heading)`),
   that `RightItemCharge` set from C++ moves the bar, the sound handle path. If the game hangs or the rate is wrong read the log: "automatic fire: tick thread started",
   "player gun <id>: magazine ...", "muzzle flash: spawning/spawned".
+- 0.19.0 (no build sent yet; the user will test TestBuild-91 first and then asks for one build with audio + fire rate + flash): BL2 shot sounds. `bl2/wwise.py` (AKPK
+  tables scored by magic numbers, bank chunk walker fallback, HIRC objects, FNV-1 event ids, id-scanning links event -> action -> sound / container -> audio id),
+  `bl2/audio.py` (event names per type/manufacturer, PCM read directly, else vgmstream-cli downloaded into `work\vgmstream`, mono 16-bit 44.1 kHz WAV into
+  `work\audio\wav`), `generate.Armory._shot_sndr` (SNDR copied from a vanilla standard descriptor, ANAM = `FX\Skylands\x.wav` in the template's style, files
+  copied to `Data\Sound\FX\Skylands`), keyword `SkylandsSnd_<type>_<Mfr>` tried before the per-type stand-in; `build.py --bl2-sounds auto|off` (staff mode, auto);
+  `Check-BL2-Audio.bat --shots` runs the extraction alone. NOTHING is verified on real files: AKPK layout, HIRC object layouts (events/actions/sounds are found by
+  scanning for ids), the Wwise event names (Play_... vs Ak_Play_...), the SNDR file-name style and the vgmstream download are all guesses with logging. Tests use
+  synthetic packs (`tests/fake_wwise.py`, `tests/test_audio.py`).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

@@ -120,7 +120,7 @@ def test_bl2_audio_probe_reports_without_changing_anything(tmp_path):
     (tmp_path / "bl2" / "WwiseAudio" / "x.bnk").write_bytes(b"BKHD" + bytes(60))
     before = sorted(p.name for p in (tmp_path / "bl2").rglob("*"))
     out = tmp_path / "work" / "report.txt"
-    assert audioprobe.main(["--bl2", str(tmp_path / "bl2"), "--out", str(out)]) == 0
+    assert audioprobe.main(["--bl2", str(tmp_path / "bl2"), "--out", str(out), "--shots"]) == 0
     text = out.read_text(encoding="utf-8")
-    assert "Weapons.pck" in text and "AKPK" in text and "BKHD" in text and "File types" in text and "Packages with sound-looking names" in text
+    assert "Weapons.pck" in text and "AKPK" in text and "BKHD" in text and "File types" in text and "Packages with sound-looking names" in text and "Weapon shot sounds" in text
     assert sorted(p.name for p in (tmp_path / "bl2").rglob("*")) == before  # nothing in the game folder changed

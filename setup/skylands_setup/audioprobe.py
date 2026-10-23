@@ -44,6 +44,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="skylands bl2audio")
     ap.add_argument("--bl2")
     ap.add_argument("--out", default="BL2-Audio-Report.txt")
+    ap.add_argument("--shots", action="store_true", help="also try the weapon shot sounds for every gun type and manufacturer: find the events, follow them to the audio, decode to WAV (work\\audio)")
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out_path = Path(a.out)
@@ -108,6 +109,17 @@ def main(argv: list[str]) -> int:
             print(f"  {i}/{len(upks)} packages", flush=True)
     say(f"{budget['packages']} of {len(upks)} packages have sound-looking names ({time.time() - t0:.0f} s)")
     save()
+    if a.shots:
+        from . import generate
+        from .bl2 import audio
+
+        say("")
+        say("Weapon shot sounds (the same code the installer runs):")
+        mfrs = sorted({"Bandit", "Dahl", "Hyperion", "Jakobs", "Maliwan", "Tediore", "Torgue", "Vladof"})
+        wanted = [(k, m) for k in generate.STAFF_KINDS for m in mfrs]
+        made = audio.extract_shot_sounds(bl2, out_path.parent, wanted, say)
+        say(f"{len(made)} gun type x manufacturer pairs have a sound: {sorted(made)}")
+        save()
     say("")
     say(f"Report written to {out_path}. Send it to Claude.")
     return 0

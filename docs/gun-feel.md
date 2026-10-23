@@ -29,17 +29,25 @@
     rocket launchers (`Reload_*`, `_Shot`).
 So the Borderlands shot sounds exist per weapon type and per manufacturer, as the plan assumed.
 
-What is left to build, in order:
-1. **Read the packs.** AKPK has a table of banks and of streamed files; a bank (`BKHD`) holds an `HIRC` section that links an event (named by a hash
-   of its name) to actions, to sounds and to the audio file ids. Reading that gives, for `Ak_Play_Wep_SMG_Dahl_Shot_Short`, the audio file(s)
-   behind it. (Not started; needs one more look at a bank on the real install, which the next probe version can write out: the first bytes of
-   each bank and the event table of `Akb_Wep_SMGs`.)
-2. **Decode them.** Wwise audio is mostly Vorbis in Wwise's own packing (`.wem`). The installer would download a free decoder during setup (as it does UModel for
-   meshes) and write plain `.wav` files into `Data\Sound\FX\Skylands\`. Nothing from Borderlands is shipped.
-3. **Attach them.** A sound descriptor per weapon type and manufacturer in `SkylandsGunModels.esp` (Skyrim sound records pointing at those `.wav` files),
-   chosen by the `SkylandsSnd_<key>` keyword mechanism already in place (the plugin plays the sound at each shot; the script hands it the descriptor).
-   The held-fire loop sound of automatic guns needs care: the BL2 start/loop/tail structure does not map onto one sound per round; the first
-   version would use the `Short` shot per round.
+What is built (0.19.0, untested against the real files; written to log everything so the first test shows what to fix):
+1. **Read the packs** (`bl2/wwise.py`): the AKPK tables are read in the layouts the format is believed to have and the one whose entries show the right magic
+   numbers (BKHD for banks, RIFF for streamed sounds) is used; if the bank table cannot be trusted the banks are found by their chunk headers. A bank's HIRC
+   objects are indexed; an event is found by the hash of its name (tried as the Unreal name, without `Ak_`, as `Play_...`, without `Ak_Play_`), followed
+   through its play actions to the sound (or the sounds in a random / switch container), whose audio file id is found among the known ids; the file is inside
+   the bank (DIDX/DATA) or streamed (`Audio_Streaming.pck`). Links between objects are found by looking for the ids themselves, not by parsing per-version structures.
+2. **Decode** (`bl2/audio.py`): PCM audio is read directly; anything else (Wwise Vorbis) goes through **vgmstream-cli**, downloaded into the work folder on the
+   first run (`work\vgmstream`), or put there by hand (`vgmstream-cli.exe` from https://github.com/vgmstream/vgmstream/releases). The result is made mono, 16-bit,
+   44.1 kHz, peak-normalised, into `work\audio\wav`.
+3. **Attach** (`generate.Armory`): per (gun type, manufacturer) a sound descriptor copied from a vanilla standard one (category and output model kept, the file
+   names replaced with ours: `Data\Sound\FX\Skylands\*.wav`, up to four variants played at random), a keyword `SkylandsSnd_<type>_<Manufacturer>` on the guns, and the
+   script's lists try those before the stand-in per gun type. The held-fire loop of the Borderlands automatic guns is not used: the `Shot_Short` sound is the
+   per-round sound (SMG `Ak_Play_Wep_SMG_<M>_Shot_Short`, rifle `Ak_Play_Wep_Rifle_<M>_Shot_Short` or `_Shot`; manufacturer `Bandit` is `BT` in the SMG names).
+`Check-BL2-Audio.bat` now also runs steps 1 and 2 for every SMG / rifle manufacturer without installing anything and writes what it found, event by event, into
+`work\bl2-audio-report.txt` (the WAV files are in `work\audio\wav`); the installer runs the same code and logs the same lines under "audio:".
+What can fail, and what the log line will say: the pack layout (`layout [...] magic match`), no event of that name (`no event found; tried ...`: the real Wwise
+names differ from the Unreal ones), an event with no sound (`0 sound objects`: the container layout), an audio file not in the packs, the decoder missing or
+failing (`needs the decoder tool` / `the decoder returned ...`), a sound record that the game does not play (the WAV exists but is silent: the file name
+style or format).
 
 ## Small details that would make the guns feel better (nothing here is built)
 Sound

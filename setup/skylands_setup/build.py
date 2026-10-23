@@ -197,6 +197,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--gun-scale", type=float, default=1.0, help="make every gun model this many times bigger or smaller")
     ap.add_argument("--gun-attach", default="auto", choices=["auto", "sockets", "none"],
                     help="how Borderlands 2 gun parts are placed on the body (native/umodel methods)")
+    ap.add_argument("--bl2-sounds", default="auto", choices=["auto", "off"],
+                    help="staff guns: take each gun's shot sound from Borderlands 2's Wwise packs (decoded with vgmstream, downloaded into the work folder); off keeps Skyrim's stand-ins")
     ap.add_argument("--stage-only", action="store_true", help="build into the work folder without installing")
     a = ap.parse_args(argv)
     done = Path(a.done)
@@ -266,7 +268,15 @@ def main(argv: list[str]) -> int:
                 else:
                     say("UModel was not found and could not be downloaded. Download it from https://www.gildor.org/en/projects/umodel (the Windows zip), "
                         "unzip it and put umodel.exe (or umodel_64.exe) in the work folder next to this log, then run this installer again.")
-        report = generate.generate(data, sky, stage, formids=ids, gun_models=a.gun_models, model_sources=sources,
+        shot_sounds = None
+        if a.gun_shooting == "staff" and a.bl2_sounds == "auto":
+            from .bl2 import audio
+
+            wanted = sorted({(g["type"], g.get("manufacturer", "")) for g in data.get("weapons", {}).get("guns", [])
+                             if g["type"] in generate.STAFF_KINDS and g.get("manufacturer")})
+            say(f"Looking for the Borderlands 2 shot sounds of {len(wanted)} gun type x manufacturer pairs ...")
+            shot_sounds = audio.extract_shot_sounds(bl2, work, wanted, say)
+        report = generate.generate(data, sky, stage, formids=ids, shot_sounds=shot_sounds, gun_models=a.gun_models, model_sources=sources,
                                    model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")))
         for src in sources.values():
             say(src.summary())
