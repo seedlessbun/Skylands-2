@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 141;  // 1.4.1
+	constexpr std::int32_t kVersion = 142;  // 1.4.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -383,7 +383,10 @@ namespace
 		if (a_originOut) {
 			*a_originOut = origin;
 		}
-		SpawnFlash(shooter, origin, pitch, heading, info.element, info.flash);
+		// the flash sits on the muzzle itself: the bullet starts a_forward ahead of it, and the flash is moved back past that (and a little more, since
+		// the mesh begins a hair in front of its origin), so there is no gap between the barrel and the flash
+		const float back = a_forward + 5.0f;
+		SpawnFlash(shooter, { origin.x - aim.x * back, origin.y - aim.y * back, origin.z - aim.z * back }, pitch, heading, info.element, info.flash);
 		return true;
 	}
 
@@ -807,7 +810,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 4, 1, 0 },
+	.Version = { 1, 4, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
