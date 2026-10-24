@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 151;  // 1.5.1
+	constexpr std::int32_t kVersion = 152;  // 1.5.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -22,8 +22,8 @@ namespace
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
 	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
 	float g_aimWalk = 0.7f;   // the walking speed's share while fully aimed (ini: AimWalk)
-	float g_aimForward = 38.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
-	float g_aimDown = 9.0f;      // ... this far below it (ini: AimDown)
+	float g_aimForward = 30.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
+	float g_aimDown = 6.0f;      // ... this far below it (ini: AimDown)
 	float g_aimRight = 0.0f;     // ... and this far to the right (ini: AimRight)
 	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
@@ -553,6 +553,7 @@ namespace
 		Clock::time_point last{};
 		RE::NiPointer<RE::NiAVObject> gun;      // the first-person weapon's root node (a child of the hand's WEAPON node), moved while aimed
 		RE::NiPoint3      gunBase{};            // its own local position, put back at the end
+		RE::NiMatrix3     gunBaseRot{};         // ... and its own local rotation
 		bool              centerTold{ false };
 	};
 	AimState g_aim;
@@ -584,6 +585,39 @@ namespace
 			m.entry[2][0] * v.x + m.entry[2][1] * v.y + m.entry[2][2] * v.z };
 	}
 
+	RE::NiMatrix3 MatMul(const RE::NiMatrix3& a, const RE::NiMatrix3& b)
+	{
+		RE::NiMatrix3 r{};
+		for (int i = 0; i < 3; ++i) {
+			for (int j = 0; j < 3; ++j) {
+				r.entry[i][j] = a.entry[i][0] * b.entry[0][j] + a.entry[i][1] * b.entry[1][j] + a.entry[i][2] * b.entry[2][j];
+			}
+		}
+		return r;
+	}
+
+	RE::NiMatrix3 Transposed(const RE::NiMatrix3& m)
+	{
+		RE::NiMatrix3 r{};
+		for (int i = 0; i < 3; ++i) {
+			for (int j = 0; j < 3; ++j) {
+				r.entry[i][j] = m.entry[j][i];
+			}
+		}
+		return r;
+	}
+
+	// The rotation by `angle` radians about the unit vector `a`
+	RE::NiMatrix3 Turn(const Vec3& a, float angle)
+	{
+		const float c = std::cos(angle), sn = std::sin(angle), t = 1.0f - c;
+		RE::NiMatrix3 r{};
+		r.entry[0][0] = c + t * a.x * a.x;       r.entry[0][1] = t * a.x * a.y - sn * a.z; r.entry[0][2] = t * a.x * a.z + sn * a.y;
+		r.entry[1][0] = t * a.x * a.y + sn * a.z; r.entry[1][1] = c + t * a.y * a.y;       r.entry[1][2] = t * a.y * a.z - sn * a.x;
+		r.entry[2][0] = t * a.x * a.z - sn * a.y; r.entry[2][1] = t * a.y * a.z + sn * a.x; r.entry[2][2] = c + t * a.z * a.z;
+		return r;
+	}
+
 	// The first-person gun is moved so its muzzle sits just below the crosshair, ahead of the eye (the hand's animation still drives the arm; only the weapon's
 	// own node moves, from its place in the hand to the place in front of the camera, by blend). The muzzle's place in the weapon's own axes does not change when
 	// the weapon is moved, so the node's new local position is worked out from the hand's (unmoved) transform: no step depends on the last one.
@@ -604,6 +638,7 @@ namespace
 				if (std::string_view(node->parent->name.c_str()) == "WEAPON") {
 					g_aim.gun.reset(node);
 					g_aim.gunBase = node->local.translate;
+					g_aim.gunBaseRot = node->local.rotate;
 					break;
 				}
 			}
@@ -616,25 +651,61 @@ namespace
 		if (!gun || !gun->parent) {
 			return;
 		}
+		// the view: the camera node itself (the eye vector is the head's, which is not quite the camera), its forward axis found as the one of its
+		// three axes that points along the look direction
 		RE::NiPoint3 eye{}, look{};
 		a_player->GetEyeVector(eye, look, true);
-		const Vec3 dir = Norm({ look.x, look.y, look.z });
+		Vec3         dir = Norm({ look.x, look.y, look.z });
+		RE::NiPoint3 origin = eye;
+		if (const auto& cam = camera->cameraRoot) {
+			origin = cam->world.translate;
+			int   best = 0;
+			float bestDot = 0.0f;
+			for (int c = 0; c < 3; ++c) {
+				const float d = cam->world.rotate.entry[0][c] * dir.x + cam->world.rotate.entry[1][c] * dir.y + cam->world.rotate.entry[2][c] * dir.z;
+				if (std::fabs(d) > std::fabs(bestDot)) {
+					best = c;
+					bestDot = d;
+				}
+			}
+			const float sign = bestDot < 0.0f ? -1.0f : 1.0f;
+			dir = Norm({ sign * cam->world.rotate.entry[0][best], sign * cam->world.rotate.entry[1][best], sign * cam->world.rotate.entry[2][best] });
+			static bool told = false;
+			if (!told) {
+				told = true;
+				SKSE::log::info("aim: camera at {:.0f} {:.0f} {:.0f} (eye {:.0f} {:.0f} {:.0f}), forward axis {} (agreement {:.3f})", origin.x, origin.y, origin.z, eye.x, eye.y, eye.z, best,
+					std::fabs(bestDot));
+			}
+		}
 		const Vec3 right = Norm(Cross(dir, { 0.0f, 0.0f, 1.0f }));
 		const Vec3 up = Cross(right, dir);
 		const float b = g_aim.blend;
-		const RE::NiPoint3 target{ eye.x + dir.x * g_aimForward + right.x * g_aimRight - up.x * g_aimDown,
-			eye.y + dir.y * g_aimForward + right.y * g_aimRight - up.y * g_aimDown, eye.z + dir.z * g_aimForward + right.z * g_aimRight - up.z * g_aimDown };
-		const float scale = gun->world.scale > 1e-4f ? gun->world.scale : 1.0f;
-		const RE::NiPoint3 offset{ muzzle->world.translate.x - gun->world.translate.x, muzzle->world.translate.y - gun->world.translate.y,
-			muzzle->world.translate.z - gun->world.translate.z };
-		const RE::NiPoint3 rel = MulT(gun->world.rotate, { offset.x / scale, offset.y / scale, offset.z / scale });  // the muzzle in the weapon's own axes
-		const RE::NiPoint3 back = Mul(gun->world.rotate, { rel.x * scale, rel.y * scale, rel.z * scale });
-		const RE::NiPoint3 rootWorld{ target.x - back.x, target.y - back.y, target.z - back.z };
+		const RE::NiPoint3 target{ origin.x + dir.x * g_aimForward + right.x * g_aimRight - up.x * g_aimDown,
+			origin.y + dir.y * g_aimForward + right.y * g_aimRight - up.y * g_aimDown, origin.z + dir.z * g_aimForward + right.z * g_aimRight - up.z * g_aimDown };
 		const auto&        parent = gun->parent->world;
 		const float        ps = parent.scale > 1e-4f ? parent.scale : 1.0f;
+		const float        scale = gun->world.scale > 1e-4f ? gun->world.scale : 1.0f;
+		// the muzzle in the weapon's own axes (this does not change when the weapon is moved or turned)
+		const RE::NiPoint3 offset{ muzzle->world.translate.x - gun->world.translate.x, muzzle->world.translate.y - gun->world.translate.y,
+			muzzle->world.translate.z - gun->world.translate.z };
+		const RE::NiPoint3 rel = MulT(gun->world.rotate, { offset.x / scale, offset.y / scale, offset.z / scale });
+		// where the weapon would point at rest (from the hand, not from where it was last put), and the turn that makes the barrel (root to muzzle) point along the view
+		const RE::NiMatrix3 baseWorld = MatMul(parent.rotate, g_aim.gunBaseRot);
+		const RE::NiPoint3  barrel = Mul(baseWorld, rel);
+		const Vec3          from = Norm({ barrel.x, barrel.y, barrel.z });
+		const float         dot = std::clamp(from.x * dir.x + from.y * dir.y + from.z * dir.z, -1.0f, 1.0f);
+		const Vec3          axis = Cross(from, dir);
+		const float         axisLen = std::sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+		RE::NiMatrix3       world = baseWorld;
+		if (axisLen > 1e-5f) {
+			world = MatMul(Turn({ axis.x / axisLen, axis.y / axisLen, axis.z / axisLen }, std::acos(dot) * b), baseWorld);
+		}
+		const RE::NiPoint3 back = Mul(world, { rel.x * scale, rel.y * scale, rel.z * scale });
+		const RE::NiPoint3 rootWorld{ target.x - back.x, target.y - back.y, target.z - back.z };
 		const RE::NiPoint3 local = MulT(parent.rotate, { (rootWorld.x - parent.translate.x) / ps, (rootWorld.y - parent.translate.y) / ps, (rootWorld.z - parent.translate.z) / ps });
 		gun->local.translate = { g_aim.gunBase.x + (local.x - g_aim.gunBase.x) * b, g_aim.gunBase.y + (local.y - g_aim.gunBase.y) * b,
 			g_aim.gunBase.z + (local.z - g_aim.gunBase.z) * b };
+		gun->local.rotate = MatMul(Transposed(parent.rotate), world);
 	}
 
 	void ReleaseAim(RE::PlayerCharacter* a_player)
@@ -646,11 +717,12 @@ namespace
 		g_aim.blend = 0.0f;
 		SetFov(g_aim.baseFov);
 		if (a_player && g_aim.walkApplied != 0.0f) {
-			a_player->AsActorValueOwner()->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kSpeedMult, -g_aim.walkApplied);
+			a_player->AsActorValueOwner()->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kSpeedMult, g_aim.walkApplied);  // walkApplied is what was taken off: give it back
 		}
 		g_aim.walkApplied = 0.0f;
 		if (g_aim.gun) {
 			g_aim.gun->local.translate = g_aim.gunBase;
+			g_aim.gun->local.rotate = g_aim.gunBaseRot;
 			g_aim.gun.reset();
 		}
 		SKSE::log::info("aim ended: field of view back to {:.1f}, walking speed back to {:.0f}", g_aim.baseFov, g_aim.baseWalk);
@@ -685,7 +757,7 @@ namespace
 		SetFov(2.0f * std::atan(half) * 180.0f / std::numbers::pi_v<float>);
 		const float taken = g_aim.baseWalk * (1.0f - g_aimWalk) * g_aim.blend;  // taken off the walking speed (added back exactly by ReleaseAim)
 		if (taken != g_aim.walkApplied) {
-			a_player->AsActorValueOwner()->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kSpeedMult, g_aim.walkApplied - taken);
+			a_player->AsActorValueOwner()->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kSpeedMult, g_aim.walkApplied - taken);  // more taken: negative
 			g_aim.walkApplied = taken;
 		}
 		CenterGun(a_player, false);
@@ -1011,7 +1083,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 5, 1, 0 },
+	.Version = { 1, 5, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

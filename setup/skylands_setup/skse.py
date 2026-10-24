@@ -34,8 +34,8 @@ AimWalk=0.7
 AimRate=7
 ; the gun moves to the middle of the screen while aimed (1 on, 0 off); where its muzzle sits: ahead of the eye, below it, to the right of it (game units)
 AimCenter=1
-AimForward=38
-AimDown=9
+AimForward=30
+AimDown=6
 AimRight=0
 """
 
