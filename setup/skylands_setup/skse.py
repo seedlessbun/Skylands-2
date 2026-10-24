@@ -32,6 +32,11 @@ AimSpread=0.5
 AimWalk=0.7
 ; how quickly the aim comes up and goes down (whole aims a second, 1 to 30)
 AimRate=7
+; the gun moves to the middle of the screen while aimed (1 on, 0 off); where its muzzle sits: ahead of the eye, below it, to the right of it (game units)
+AimCenter=1
+AimForward=38
+AimDown=9
+AimRight=0
 """
 
 

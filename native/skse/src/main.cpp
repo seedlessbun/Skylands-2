@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 150;  // 1.5.0
+	constexpr std::int32_t kVersion = 151;  // 1.5.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -22,6 +22,10 @@ namespace
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
 	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
 	float g_aimWalk = 0.7f;   // the walking speed's share while fully aimed (ini: AimWalk)
+	float g_aimForward = 38.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
+	float g_aimDown = 9.0f;      // ... this far below it (ini: AimDown)
+	float g_aimRight = 0.0f;     // ... and this far to the right (ini: AimRight)
+	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
 	float g_convergence = 3000.0f;  // how far ahead the bullets are aimed to cross the crosshair (game units)
 
@@ -60,6 +64,14 @@ namespace
 					(key == "AimSpread" ? g_aimSpread : key == "AimWalk" ? g_aimWalk : g_aimRate) = std::clamp(v, key == "AimRate" ? 1.0f : 0.1f, key == "AimRate" ? 30.0f : 1.0f);
 				} catch (...) {
 				}
+			} else if (key == "AimForward" || key == "AimDown" || key == "AimRight") {
+				try {
+					const float v = std::stof(line.substr(eq + 1));
+					(key == "AimForward" ? g_aimForward : key == "AimDown" ? g_aimDown : g_aimRight) = std::clamp(v, -60.0f, 120.0f);
+				} catch (...) {
+				}
+			} else if (key == "AimCenter") {
+				g_aimCenter = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "Convergence") {
 				try {
 					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
@@ -537,7 +549,11 @@ namespace
 		bool              on{ false };
 		float             baseFov{ 0.0f };
 		float             baseWalk{ 0.0f };
+		float             walkApplied{ 0.0f };  // what has been taken off the walking speed so far (put back exactly at the end)
 		Clock::time_point last{};
+		RE::NiPointer<RE::NiAVObject> gun;      // the first-person weapon's root node (a child of the hand's WEAPON node), moved while aimed
+		RE::NiPoint3      gunBase{};            // its own local position, put back at the end
+		bool              centerTold{ false };
 	};
 	AimState g_aim;
 
@@ -556,6 +572,71 @@ namespace
 		}
 	}
 
+	RE::NiPoint3 MulT(const RE::NiMatrix3& m, const RE::NiPoint3& v)  // the transpose of m times v (a world offset in the node's own axes)
+	{
+		return { m.entry[0][0] * v.x + m.entry[1][0] * v.y + m.entry[2][0] * v.z, m.entry[0][1] * v.x + m.entry[1][1] * v.y + m.entry[2][1] * v.z,
+			m.entry[0][2] * v.x + m.entry[1][2] * v.y + m.entry[2][2] * v.z };
+	}
+
+	RE::NiPoint3 Mul(const RE::NiMatrix3& m, const RE::NiPoint3& v)
+	{
+		return { m.entry[0][0] * v.x + m.entry[0][1] * v.y + m.entry[0][2] * v.z, m.entry[1][0] * v.x + m.entry[1][1] * v.y + m.entry[1][2] * v.z,
+			m.entry[2][0] * v.x + m.entry[2][1] * v.y + m.entry[2][2] * v.z };
+	}
+
+	// The first-person gun is moved so its muzzle sits just below the crosshair, ahead of the eye (the hand's animation still drives the arm; only the weapon's
+	// own node moves, from its place in the hand to the place in front of the camera, by blend). The muzzle's place in the weapon's own axes does not change when
+	// the weapon is moved, so the node's new local position is worked out from the hand's (unmoved) transform: no step depends on the last one.
+	void CenterGun(RE::PlayerCharacter* a_player, bool a_start)
+	{
+		const auto camera = RE::PlayerCamera::GetSingleton();
+		if (!g_aimCenter || !camera || !camera->IsInFirstPerson()) {
+			return;
+		}
+		const auto root3d = a_player->Get3D(true);
+		const auto muzzle = root3d ? root3d->GetObjectByName("SkylandsMuzzle"sv) : nullptr;
+		if (!muzzle) {
+			return;
+		}
+		if (a_start || !g_aim.gun) {
+			RE::NiAVObject* node = muzzle;
+			for (int i = 0; i < 10 && node && node->parent; ++i, node = node->parent) {
+				if (std::string_view(node->parent->name.c_str()) == "WEAPON") {
+					g_aim.gun.reset(node);
+					g_aim.gunBase = node->local.translate;
+					break;
+				}
+			}
+			if (!g_aim.centerTold) {
+				g_aim.centerTold = true;
+				SKSE::log::info("aim: weapon node {} (centring the gun while aimed)", g_aim.gun ? g_aim.gun->name.c_str() : "NOT FOUND, the gun stays where it is");
+			}
+		}
+		const auto gun = g_aim.gun.get();
+		if (!gun || !gun->parent) {
+			return;
+		}
+		RE::NiPoint3 eye{}, look{};
+		a_player->GetEyeVector(eye, look, true);
+		const Vec3 dir = Norm({ look.x, look.y, look.z });
+		const Vec3 right = Norm(Cross(dir, { 0.0f, 0.0f, 1.0f }));
+		const Vec3 up = Cross(right, dir);
+		const float b = g_aim.blend;
+		const RE::NiPoint3 target{ eye.x + dir.x * g_aimForward + right.x * g_aimRight - up.x * g_aimDown,
+			eye.y + dir.y * g_aimForward + right.y * g_aimRight - up.y * g_aimDown, eye.z + dir.z * g_aimForward + right.z * g_aimRight - up.z * g_aimDown };
+		const float scale = gun->world.scale > 1e-4f ? gun->world.scale : 1.0f;
+		const RE::NiPoint3 offset{ muzzle->world.translate.x - gun->world.translate.x, muzzle->world.translate.y - gun->world.translate.y,
+			muzzle->world.translate.z - gun->world.translate.z };
+		const RE::NiPoint3 rel = MulT(gun->world.rotate, { offset.x / scale, offset.y / scale, offset.z / scale });  // the muzzle in the weapon's own axes
+		const RE::NiPoint3 back = Mul(gun->world.rotate, { rel.x * scale, rel.y * scale, rel.z * scale });
+		const RE::NiPoint3 rootWorld{ target.x - back.x, target.y - back.y, target.z - back.z };
+		const auto&        parent = gun->parent->world;
+		const float        ps = parent.scale > 1e-4f ? parent.scale : 1.0f;
+		const RE::NiPoint3 local = MulT(parent.rotate, { (rootWorld.x - parent.translate.x) / ps, (rootWorld.y - parent.translate.y) / ps, (rootWorld.z - parent.translate.z) / ps });
+		gun->local.translate = { g_aim.gunBase.x + (local.x - g_aim.gunBase.x) * b, g_aim.gunBase.y + (local.y - g_aim.gunBase.y) * b,
+			g_aim.gunBase.z + (local.z - g_aim.gunBase.z) * b };
+	}
+
 	void ReleaseAim(RE::PlayerCharacter* a_player)
 	{
 		if (!g_aim.on) {
@@ -564,8 +645,13 @@ namespace
 		g_aim.on = false;
 		g_aim.blend = 0.0f;
 		SetFov(g_aim.baseFov);
-		if (a_player) {
-			a_player->AsActorValueOwner()->SetActorValue(RE::ActorValue::kSpeedMult, g_aim.baseWalk);
+		if (a_player && g_aim.walkApplied != 0.0f) {
+			a_player->AsActorValueOwner()->ModActorValue(RE::ActorValue::kSpeedMult, -g_aim.walkApplied);
+		}
+		g_aim.walkApplied = 0.0f;
+		if (g_aim.gun) {
+			g_aim.gun->local.translate = g_aim.gunBase;
+			g_aim.gun.reset();
 		}
 		SKSE::log::info("aim ended: field of view back to {:.1f}, walking speed back to {:.0f}", g_aim.baseFov, g_aim.baseWalk);
 	}
@@ -581,7 +667,9 @@ namespace
 			const auto camera = RE::PlayerCamera::GetSingleton();
 			g_aim.baseFov = setting ? setting->data.f : (camera ? camera->GetRuntimeData2().worldFOV : 65.0f);
 			g_aim.baseWalk = a_player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSpeedMult);
+			g_aim.walkApplied = 0.0f;
 			g_aim.on = true;
+			CenterGun(a_player, true);
 			g_aim.last = a_now;
 			SKSE::log::info("aim started: {:.1f}x from field of view {:.1f}, walking speed {:.0f}", a_info.zoom / 10.0f, g_aim.baseFov, g_aim.baseWalk);
 		}
@@ -595,7 +683,12 @@ namespace
 		const float zoom = 1.0f + (a_info.zoom / 10.0f - 1.0f) * g_aim.blend;
 		const float half = std::tan(g_aim.baseFov * 0.5f * std::numbers::pi_v<float> / 180.0f) / zoom;
 		SetFov(2.0f * std::atan(half) * 180.0f / std::numbers::pi_v<float>);
-		a_player->AsActorValueOwner()->SetActorValue(RE::ActorValue::kSpeedMult, g_aim.baseWalk * (1.0f - (1.0f - g_aimWalk) * g_aim.blend));
+		const float taken = g_aim.baseWalk * (1.0f - g_aimWalk) * g_aim.blend;  // taken off the walking speed (added back exactly by ReleaseAim)
+		if (taken != g_aim.walkApplied) {
+			a_player->AsActorValueOwner()->ModActorValue(RE::ActorValue::kSpeedMult, g_aim.walkApplied - taken);
+			g_aim.walkApplied = taken;
+		}
+		CenterGun(a_player, false);
 	}
 
 	// A relic bonus in percent as a divisor: 0 is 1.0, 50 is 1.5; never below 0.2
@@ -918,7 +1011,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 5, 0, 0 },
+	.Version = { 1, 5, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
