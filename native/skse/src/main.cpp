@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 160;  // 1.6.0
+	constexpr std::int32_t kVersion = 170;  // 1.7.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -21,6 +21,8 @@ namespace
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
+	int           g_startAmmo = 300;  // rounds of its ammo a player with none is given when a gun is taken up, once per run of the game (ini: StartAmmo)
+	bool          g_ammoDrops = true;  // enemies that die with a gun carry some of its ammo (ini: AmmoDrops=0 turns it off)
 	std::uint32_t g_reloadKey = 19;  // keyboard scan code of the reload key (ini: ReloadKey; 19 is R)
 	bool          g_ammoText = true;  // short ammo messages on the screen (ini: AmmoText=0 turns them off)
 	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
@@ -78,6 +80,13 @@ namespace
 					g_reloadKey = static_cast<std::uint32_t>(std::clamp(std::stoi(line.substr(eq + 1)), 1, 255));
 				} catch (...) {
 				}
+			} else if (key == "StartAmmo") {
+				try {
+					g_startAmmo = std::clamp(std::stoi(line.substr(eq + 1)), 0, 100000);
+				} catch (...) {
+				}
+			} else if (key == "AmmoDrops") {
+				g_ammoDrops = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "AmmoText") {
 				g_ammoText = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "AimCenter") {
@@ -264,6 +273,7 @@ namespace
 		int   element{ 0 };      // 0 none, 1 fire, 2 shock, 3 corrosive, 4 slag (the colour of the muzzle flash)
 		int   flash{ 100 };      // the size of the muzzle flash in percent (the flash mesh's file name carries it)
 		int   zoom{ 10 };        // the magnification when aimed, in tenths (13 is 1.3x)
+		std::uint32_t ammo{ 0 };  // the form id (without its file) of the item this gun uses as ammo; 0: none, the reserve is unlimited
 	};
 
 	std::mutex                                     g_gunLock;
@@ -311,6 +321,7 @@ namespace
 					case 'e': info.element = value; break;
 					case 'f': info.flash = value; break;
 					case 'z': info.zoom = value; break;
+					case 'm': info.ammo = static_cast<std::uint32_t>(value); break;
 					default: break;
 					}
 				}
@@ -483,6 +494,65 @@ namespace
 	// An enemy with a Skylands gun in its hands casts the gun's enchantment the way it casts any staff: the game launches the
 	// first bullet. The rest of the burst is ours: it is started from the cast event, spaced by the gun's interval, from the gun's
 	// muzzle, at the enemy's combat target. The gun's magazine is not counted for enemies.
+	// The ammo of a gun: an item of the same plugin as the gun's enchantment (the guns themselves are overrides of the main plugin's weapons), found from the
+	// number in the gun's keyword. The plugin is light (FE...) while its forms fit, else an ordinary one.
+	RE::TESBoundObject* AmmoOf(RE::TESObjectWEAP* a_weapon, const GunInfo& a_info)
+	{
+		if (!a_info.ammo || !a_weapon || !a_weapon->formEnchanting) {
+			return nullptr;
+		}
+		const RE::FormID ench = a_weapon->formEnchanting->GetFormID();
+		const RE::FormID id = (ench >> 24) == 0xFE ? ((ench & 0xFFFFF000u) | (a_info.ammo & 0xFFFu)) : ((ench & 0xFF000000u) | (a_info.ammo & 0xFFFFFFu));
+		return RE::TESForm::LookupByID<RE::TESBoundObject>(id);
+	}
+
+	int CountOf(RE::TESObjectREFR* a_who, RE::TESBoundObject* a_item)
+	{
+		if (!a_who || !a_item) {
+			return 0;
+		}
+		const auto counts = a_who->GetInventoryCounts();
+		const auto it = counts.find(a_item);
+		return it == counts.end() ? 0 : it->second;
+	}
+
+	// Ammo on the bodies of enemies: one that dies holding a Skylands gun carries some of that gun's ammo (and a body killed by the player may carry some for
+	// either type), so what the player spends can be found again.
+	class DeathSink : public RE::BSTEventSink<RE::TESDeathEvent>
+	{
+	public:
+		static DeathSink* Get()
+		{
+			static DeathSink sink;
+			return std::addressof(sink);
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override
+		{
+			static RE::FormID last = 0;
+			if (!g_ammoDrops || !a_event || !a_event->actorDying) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			const auto dying = a_event->actorDying->As<RE::Actor>();
+			if (!dying || dying->IsPlayerRef() || dying->GetFormID() == last) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			last = dying->GetFormID();
+			static thread_local std::mt19937 rng{ std::random_device{}() };
+			GunInfo    info{};
+			const auto weapon = HeldGun(dying, info);
+			if (const auto ammo = AmmoOf(weapon, info)) {
+				const int count = std::uniform_int_distribution<int>(10, 30)(rng);
+				dying->AddObjectToContainer(ammo, nullptr, count, nullptr);
+				static std::atomic_int told{ 0 };
+				if (told.fetch_add(1) < 4) {
+					SKSE::log::info("ammo drop: {:08X} carries {} of {:08X}", dying->GetFormID(), count, ammo->GetFormID());
+				}
+			}
+			return RE::BSEventNotifyControl::kContinue;
+		}
+	};
+
 	class CastSink : public RE::BSTEventSink<RE::TESSpellCastEvent>
 	{
 	public:
@@ -560,6 +630,8 @@ namespace
 		int                   reloadPart{ 3 };  // the next part of the reload sound to play (3: all played)
 		bool                  chambered{ false };  // a reload started with rounds left keeps one in the chamber
 		bool                  lowTold{ false };
+		RE::TESBoundObject*   ammo{ nullptr };  // the held gun's ammo item (null: unlimited)
+		Clock::time_point     dryUntil{};       // no new "out of ammo" before this
 		Clock::time_point     holdStart{};
 		int                   holdShots{ 0 };
 		bool                  wasHeld{ false };
@@ -860,6 +932,21 @@ namespace
 		g_gun.reloadPart = 0;
 	}
 
+	// A reload, if there is ammo for it (a_key: the player asked for it, so the answer is always given)
+	bool TryReload(RE::PlayerCharacter* a_player, Clock::time_point a_now, int a_ms, bool a_key)
+	{
+		if (!a_key && a_now < g_gun.dryUntil) {
+			return false;
+		}
+		if (g_gun.ammo && CountOf(a_player, g_gun.ammo) <= 0) {
+			AmmoText("Out of ammo");
+			g_gun.dryUntil = a_now + std::chrono::milliseconds(1500);
+			return false;
+		}
+		BeginReload(a_now, a_ms);
+		return true;
+	}
+
 	void ReloadSounds(RE::PlayerCharacter* a_player, Clock::time_point a_now)
 	{
 		static constexpr float share[3] = { 0.02f, 0.45f, 0.86f };
@@ -904,8 +991,17 @@ namespace
 			g_gun.mag = kept != g_gun.mags.end() ? kept->second : info.clip;
 			g_gun.reloading = false;
 			g_gun.reloadPart = 3;
+			g_gun.ammo = AmmoOf(weapon, info);
+			if (g_gun.ammo && g_startAmmo > 0 && CountOf(player, g_gun.ammo) <= 0) {  // none of its ammo: a first stock, once for each kind in a run of the game
+				static std::unordered_map<RE::FormID, bool> given;
+				if (!given[g_gun.ammo->GetFormID()]) {
+					given[g_gun.ammo->GetFormID()] = true;
+					player->AddObjectToContainer(g_gun.ammo, nullptr, g_startAmmo, nullptr);
+					SKSE::log::info("ammo: {} of {:08X} given to a player with none", g_startAmmo, g_gun.ammo->GetFormID());
+				}
+			}
 			if (g_gun.mag <= 0) {
-				BeginReload(now, static_cast<int>(info.reload * 1000.0f));
+				TryReload(player, now, static_cast<int>(info.reload * 1000.0f), false);
 			}
 			g_gun.nextShot = now;
 			g_gun.wasHeld = false;
@@ -927,10 +1023,20 @@ namespace
 			ReloadSounds(player, now);
 			if (now >= g_gun.reloadUntil) {
 				g_gun.reloading = false;
-				g_gun.mag = g_gun.info.clip + (g_gun.chambered ? 1 : 0);
+				const int want = g_gun.info.clip + (g_gun.chambered ? 1 : 0) - g_gun.mag;
+				int       got = want;
+				int       left = -1;
+				if (g_gun.ammo) {  // the rounds come out of the player's ammo (a short stock gives a short magazine)
+					got = (std::min)(want, CountOf(player, g_gun.ammo));
+					if (got > 0) {
+						player->RemoveItem(g_gun.ammo, got, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+					}
+					left = CountOf(player, g_gun.ammo);
+				}
+				g_gun.mag += (std::max)(0, got);
 				g_gun.chambered = false;
 				g_gun.lowTold = false;
-				AmmoText("Magazine " + std::to_string(g_gun.mag) + " / " + std::to_string(g_gun.info.clip));
+				AmmoText("Magazine " + std::to_string(g_gun.mag) + " / " + std::to_string(g_gun.info.clip) + (left >= 0 ? "   Ammo " + std::to_string(left) : std::string()));
 				SetBar(player, g_gun.mag);
 				g_reloading = false;
 			}
@@ -940,11 +1046,13 @@ namespace
 		if (g_reloadLatch.exchange(false) && g_gun.mag < g_gun.info.clip) {  // the reload key: a reload now (a round stays chambered if there is one left)
 			g_gun.chambered = g_gun.mag > 0;
 			g_gun.wasHeld = false;
-			BeginReload(now, g_reloadMs.load());
-			g_reloading = true;
-			SKSE::log::info("reload key: reload started with {} of {} rounds left", g_gun.mag, g_gun.info.clip);
-			ReloadSounds(player, now);
-			return;
+			if (TryReload(player, now, g_reloadMs.load(), true)) {
+				g_reloading = true;
+				SKSE::log::info("reload key: reload started with {} of {} rounds left", g_gun.mag, g_gun.info.clip);
+				ReloadSounds(player, now);
+				return;
+			}
+			g_gun.chambered = false;
 		}
 		if (!g_held.load()) {
 			g_gun.wasHeld = false;
@@ -981,8 +1089,7 @@ namespace
 			const double seconds = std::chrono::duration<double>(now - g_gun.holdStart).count();
 			g_measuredTenths = (g_gun.holdShots >= 3 && seconds >= 0.3) ? static_cast<int>((g_gun.holdShots - 1) / seconds * 10.0 + 0.5) : 0;
 		}
-		if (g_gun.mag <= 0) {
-			BeginReload(now, g_reloadMs.load());
+		if (g_gun.mag <= 0 && TryReload(player, now, g_reloadMs.load(), false)) {
 			g_reloading = true;
 			ReloadSounds(player, now);
 		}
@@ -1123,6 +1230,8 @@ namespace
 			if (const auto holder = RE::ScriptEventSourceHolder::GetSingleton()) {
 				holder->AddEventSink(CastSink::Get());
 				SKSE::log::info("enemy cast listener registered");
+				holder->AddEventSink(DeathSink::Get());
+				SKSE::log::info("ammo drop listener registered");
 			}
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
@@ -1149,7 +1258,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 6, 0, 0 },
+	.Version = { 1, 7, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

@@ -38,6 +38,9 @@ AimCenter=1
 ReloadKey=19
 ; short ammo messages on the screen: reloading, magazine full, low ammo (1 on, 0 off)
 AmmoText=1
+; ammo: a player with none of a gun's ammo is given this many rounds when the gun is first taken up in a run of the game, and enemies that die with a gun carry some
+StartAmmo=300
+AmmoDrops=1
 AimForward=30
 AimDown=6
 AimRight=0

@@ -553,6 +553,7 @@ MGEF_RESIST_AT = 16
 PROJ_MUZZLE_LIGHT_AT, PROJ_MUZZLE_DURATION_AT = 20, 44
 STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, STAFF_FLASH_SECONDS = 26.0, 6.0, 0.05  # the muzzle flash: a short glowing burst ahead of the barrel
 STAFF_FLASH_PERCENT = {"smg": 75, "assault_rifle": 90}  # the muzzle flash's size by gun type, in percent of the first flash (the user asked for 25% and 10% smaller)
+STAFF_AMMO_NAMES = {"smg": "SMG Ammo", "assault_rifle": "Assault Rifle Ammo"}  # the inventory items that are the guns' reserve (the plugin takes a reload's rounds from them)
 STAFF_ZOOM = {"smg": 13, "assault_rifle": 16}  # the magnification when aimed down the sights, in tenths (the user chose 1.3x and 1.6x)
 RELOAD_PARTS = ("out", "in", "end")  # the magazine comes out, a new one goes in, the gun is made ready (bl2/audio.py RELOAD_PARTS)
 STAFF_FLASH_LIGHT_RADIUS = 260
@@ -598,7 +599,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.21.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.22.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -638,6 +639,8 @@ class Armory:
         self.fx_id = view.new_id("MGEF:SkylandsStaffGunFx")
         self.ability_id = view.new_id("SPEL:SkylandsStaffGunAbility")
         self.quest_id = view.new_id("QUST:SkylandsStaffGunQuest")
+        # the ammo items (one per gun type) live in the player's pack; a gun's keyword carries its ammo's id so the plugin can find it
+        self.ammo_ids = {kind: view.new_id(f"AMMO:SkylandsAmmo_{kind}") for kind in STAFF_KINDS}
         self.base = staff_donor(m, None, self.log)  # the weapon every staff gun is a copy of
         if self.base is None:
             return
@@ -864,7 +867,7 @@ class Armory:
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}"
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}_m{self.ammo_ids[kind] & 0xFFFFFF}"
         self.kinds.add(kind)
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
         mfr = g.get("manufacturer", "")
@@ -912,6 +915,15 @@ class Armory:
                 snd_ids.append(found[0])
                 for part in RELOAD_PARTS:
                     reload_ids[part].append(0)
+        bolts = self.rounds.bolts  # the vanilla bolt record the Borderlands rounds are built on (ammo items are built from scratch the same way)
+        for kind in STAFF_KINDS:
+            keep = [(sig, d) for sig, d in bolts.subrecords if sig in ("OBND", "MODL", "YNAM", "ZNAM")]
+            am = esp.Rec("AMMO", self.ammo_ids[kind], [("EDID", esp.zstr(f"SkylandsAmmo_{kind}")), *keep])
+            am.add("FULL", esp.zstr(STAFF_AMMO_NAMES[kind]))
+            am.subs.sort(key=lambda sd: ["EDID", "OBND", "FULL", "MODL", "YNAM", "ZNAM"].index(sd[0]))
+            am.add("DATA", struct.pack("<IIfI", 0, 0, 1.0, 2))
+            self.view.override(am)
+            self.log.append(f"Staff guns: ammo item {STAFF_AMMO_NAMES[kind]} ({am.form_id:08X}); guns of that type use it from the player's pack")
         gifts = [self.gifts.get(kind) or self.first_of.get(kind) or next(iter(self.first_of.values())) for kind in STAFF_KINDS]
         info = (f"Build {STAFF_INFO_BUILD}. {self.count} staff guns (submachine guns and assault rifles) from the vanilla staff {self.base[0].edid}; "
                 f"each one's numbers are in its SkylandsGun_ keyword; tracers {len(self.tracers)}; shot sound {sound[1] if sound else 'none found'}; "

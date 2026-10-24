@@ -494,7 +494,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         assert parts[2] == f"i{round(max(0.05, 1.0 / max(1.0, sts['fire_rate'])) * 1000)}" and parts[3] == f"r{round(max(0.3, sts['reload']) * 1000)}", (numbers, sts)
         assert abs(int(parts[4][1:]) - row.spread_deg * sts["spread_mult"] * 10) <= 1.0, (numbers, sts)  # the accuracy roll narrows or widens the spread
         assert st.unpack("<H", w.first("EAMT"))[0] == int(parts[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
-        assert str(row.burst) == parts[-4][1:] and parts[-3] in ("e0", "e1", "e2", "e3", "e4") and parts[-2] == f"f{generate.STAFF_FLASH_PERCENT[kind]}" and parts[-1] == f"z{generate.STAFF_ZOOM[kind]}"  # burst for enemies, element for the muzzle flash colour, flash size
+        assert str(row.burst) == parts[-5][1:] and parts[-4] in ("e0", "e1", "e2", "e3", "e4") and parts[-3] == f"f{generate.STAFF_FLASH_PERCENT[kind]}" and parts[-2] == f"z{generate.STAFF_ZOOM[kind]}" and parts[-1].startswith("m")  # burst for enemies, element for the muzzle flash colour, flash size
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
     # the bullets: a plain gun's carries nothing of the donor fire, an elemental one's carries only its element; nothing explodes in view;

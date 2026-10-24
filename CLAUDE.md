@@ -299,6 +299,15 @@ Other commands:
   node so the barrel points along the view, blended by the aim; ini `AimCenter/AimForward/AimDown/AimRight`. The user tuned 30/6/6 for 0.20.1. 0.20.2 UNCONFIRMED in game.
 - 0.21.0 (TestBuild-98, plugin 1.6.0): reload key (`ReloadKey`, R = 19, swallowed from the Ready Weapon handler in gun mode), one round chambered on an early reload, ammo text
   prototype (`RE::SendHUDMessage::ShowHUDMessage`). No ammo reserve yet: ideas given to the user (inventory AMMO items per type as the reserve, plugin counters in an SKSE co-save, ...).
+- 0.20.2 log check: the user's log said "SkylandsNative 151" (plugin 1.5.1), so TestBuild-97 (1.5.2: camera-based aimed gun, speed sign fix) was NOT what ran (no "aim: camera at" line,
+  speed still drifting 200 -> 160); 0.21.0 / TestBuild-98 contains 1.5.2. Always check the first log line's version against the build. Form ids of the second plugin are 12-bit while it is
+  ESL-flagged (0x800-0xFFF): it was at about 0xCEF in 0.19.2 and each `STAFF_ID_SHIFT` bump spends ids, so avoid renaming the script class again (use keywords/natives instead).
+- 0.22.0 (TestBuild-99, plugin 1.7.0): ammo as inventory items (the user chose option 1): AMMO records `SkylandsAmmo_smg` / `SkylandsAmmo_assault_rifle` ("SMG Ammo", "Assault Rifle Ammo",
+  built from scratch like the rounds), ids reserved in `Armory.__init__` (`ammo_ids`), the gun's numbers keyword gained `_m<form id & 0xFFFFFF>`; the plugin finds the item from the gun's
+  ENCHANTMENT id (same plugin; light plugin: `(ench & 0xFFFFF000) | (m & 0xFFF)`), takes the rounds of a reload out of the player's pack when the reload ENDS (a short stock gives a short magazine,
+  "Out of ammo" when none, the message shows the stock), gives `StartAmmo` (300) to a player with none the first time a gun of that kind is taken up in a run, and enemies that die with a gun
+  get 10-30 of its ammo (`DeathSink`, ini `AmmoDrops`). No script change (no ghost). UNCONFIRMED in game: all of it (that AMMO with projectile 0 shows in the pack, `GetInventoryCounts`,
+  `RemoveItem`, `AddObjectToContainer` on corpses, the death event fields).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
