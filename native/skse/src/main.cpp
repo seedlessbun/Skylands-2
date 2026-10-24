@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 171;  // 1.7.1
+	constexpr std::int32_t kVersion = 180;  // 1.8.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -21,6 +21,11 @@ namespace
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
+	bool          g_hud = true;          // the Borderlands-style ammo display, drawn into the game's HUD (ini: Hud=0 turns it off and brings the plain messages back)
+	std::atomic_bool g_hudLive{ false };  // the display has been drawn at least once: the plain messages stay quiet
+	std::atomic_bool g_hudShow{ false };  // a gun is in the hand and the game is running: the display is shown
+	float         g_hudRight = 70.0f;    // the display's right edge, this far from the right of the 1280 x 720 HUD (ini: HudRight)
+	float         g_hudBottom = 80.0f;   // ... and its bottom line, this far from the bottom (ini: HudBottom)
 	int           g_startAmmo = 300;  // rounds of its ammo a player with none is given when a gun is taken up, once per run of the game (ini: StartAmmo)
 	bool          g_ammoDrops = true;  // enemies that die with a gun carry some of its ammo (ini: AmmoDrops=0 turns it off)
 	std::uint32_t g_reloadKey = 19;  // keyboard scan code of the reload key (ini: ReloadKey; 19 is R)
@@ -78,6 +83,13 @@ namespace
 			} else if (key == "ReloadKey") {
 				try {
 					g_reloadKey = static_cast<std::uint32_t>(std::clamp(std::stoi(line.substr(eq + 1)), 1, 255));
+				} catch (...) {
+				}
+			} else if (key == "Hud") {
+				g_hud = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "HudRight" || key == "HudBottom") {
+				try {
+					(key == "HudRight" ? g_hudRight : g_hudBottom) = std::clamp(std::stof(line.substr(eq + 1)), 0.0f, 600.0f);
 				} catch (...) {
 				}
 			} else if (key == "StartAmmo") {
@@ -273,6 +285,7 @@ namespace
 		int   element{ 0 };      // 0 none, 1 fire, 2 shock, 3 corrosive, 4 slag (the colour of the muzzle flash)
 		int   flash{ 100 };      // the size of the muzzle flash in percent (the flash mesh's file name carries it)
 		int   zoom{ 10 };        // the magnification when aimed, in tenths (13 is 1.3x)
+		int   rarity{ 0 };       // 1 common ... 6 e-tech (the colour of its name on the display)
 		std::uint32_t ammo{ 0 };  // the form id (without its file) of the item this gun uses as ammo; 0: none, the reserve is unlimited
 	};
 
@@ -299,6 +312,10 @@ namespace
 			++seen;
 			if (names.size() < 300) {
 				names += std::string(edid) + " ";
+			}
+			if (edid.starts_with("SkylandsRarity_")) {
+				const std::string_view r = edid.substr(15);
+				info.rarity = r == "common" ? 1 : r == "uncommon" ? 2 : r == "rare" ? 3 : r == "epic" ? 4 : r == "legendary" ? 5 : r == "etech" ? 6 : 0;
 			}
 			constexpr std::string_view prefix = "SkylandsGun_";
 			if (edid.starts_with(prefix)) {
@@ -630,6 +647,11 @@ namespace
 		int                   reloadPart{ 3 };  // the next part of the reload sound to play (3: all played)
 		bool                  chambered{ false };  // a reload started with rounds left keeps one in the chamber
 		bool                  lowTold{ false };
+		std::string           name;                 // the gun's name and the colour of its rarity, shown for a moment when it is taken up
+		const char*           rarityColor{ "#FFFFFF" };
+		Clock::time_point     nameUntil{};
+		int                   reserve{ -1 };        // rounds of its ammo in the pack (-1: no ammo item, unlimited), looked at about once a second
+		Clock::time_point     reserveAt{};
 		RE::TESBoundObject*   ammo{ nullptr };  // the held gun's ammo item (null: unlimited)
 		Clock::time_point     dryUntil{};       // no new "out of ammo" before this
 		Clock::time_point     holdStart{};
@@ -972,7 +994,7 @@ namespace
 	// the gun made ready near the end).
 	void AmmoText(const std::string& a_text)
 	{
-		if (g_ammoText) {
+		if (g_ammoText && !g_hudLive.load()) {  // the display says all of this once it is up
 			RE::SendHUDMessage::ShowHUDMessage(a_text.c_str(), nullptr, true);
 		}
 	}
@@ -1017,8 +1039,217 @@ namespace
 		}
 	}
 
+	// ---- the display -----------------------------------------------------------------------------------------------
+	//
+	// Drawn into the game's own HUD movie from here (no file of ours): a movie clip "SkylandsHUD" holding text fields and a bar, made with the movie's
+	// ActionScript calls (createTextField, the drawing calls) and found again by its path at every update, so a reloaded HUD (a loaded game) simply makes a
+	// new one. Bottom right: the name of the gun in the colour of its rarity for a moment when it is taken up, the magazine large with the clip and the stock
+	// beside it, a bar that fills while a reload runs, and a short word (LOW AMMO, RELOAD, NO AMMO) that flashes.
+
+	std::string HtmlEscape(const std::string& a_text)
+	{
+		std::string out;
+		for (const char c : a_text) {
+			out += c == '&' ? "&amp;" : c == '<' ? "&lt;" : c == '>' ? "&gt;" : std::string(1, c);
+		}
+		return out;
+	}
+
+	void HudRect(RE::GFxValue& a_clip, double a_rgb, double a_alpha, double a_w, double a_h)
+	{
+		a_clip.Invoke("beginFill", std::array<RE::GFxValue, 2>{ RE::GFxValue(a_rgb), RE::GFxValue(a_alpha) });
+		a_clip.Invoke("moveTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(0.0), RE::GFxValue(0.0) });
+		a_clip.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(a_w), RE::GFxValue(0.0) });
+		a_clip.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(a_w), RE::GFxValue(a_h) });
+		a_clip.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(0.0), RE::GFxValue(a_h) });
+		a_clip.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(0.0), RE::GFxValue(0.0) });
+		a_clip.Invoke("endFill");
+	}
+
+	bool HudBuild(RE::GFxMovieView* a_movie)
+	{
+		RE::GFxValue root;
+		if (!a_movie->GetVariable(&root, "_root") || !root.IsObject()) {
+			return false;
+		}
+		RE::GFxValue clip;
+		if (!root.CreateEmptyMovieClip(&clip, "SkylandsHUD", 9876)) {
+			return false;
+		}
+		RE::GFxValue::DisplayInfo place;
+		place.SetPosition(1280.0 - g_hudRight, 720.0 - g_hudBottom);
+		place.SetVisible(false);
+		clip.SetDisplayInfo(place);
+		const auto field = [&](const char* a_name, double a_depth, double a_x, double a_y, double a_w, double a_h) {
+			RE::GFxValue result;
+			clip.Invoke("createTextField", &result,
+				std::array<RE::GFxValue, 6>{ RE::GFxValue(a_name), RE::GFxValue(a_depth), RE::GFxValue(a_x), RE::GFxValue(a_y), RE::GFxValue(a_w), RE::GFxValue(a_h) });
+			RE::GFxValue tf;
+			if (clip.GetMember(a_name, &tf) && tf.IsObject()) {
+				tf.SetMember("html", RE::GFxValue(true));
+				tf.SetMember("selectable", RE::GFxValue(false));
+				tf.SetMember("multiline", RE::GFxValue(false));
+				tf.SetMember("wordWrap", RE::GFxValue(false));
+			}
+		};
+		field("tfName", 1, -420.0, -64.0, 420.0, 26.0);
+		field("tfAmmo", 2, -360.0, -42.0, 360.0, 58.0);
+		field("tfWarn", 3, -260.0, 26.0, 260.0, 22.0);
+		RE::GFxValue bg, fill;
+		clip.CreateEmptyMovieClip(&bg, "barBg", 20);
+		HudRect(bg, 0x000000, 60.0, 190.0, 6.0);
+		RE::GFxValue::DisplayInfo at;
+		at.SetPosition(-190.0, 20.0);
+		bg.SetDisplayInfo(at);
+		clip.CreateEmptyMovieClip(&fill, "barFill", 21);
+		HudRect(fill, 0xFFB428, 100.0, 190.0, 6.0);
+		fill.SetDisplayInfo(at);
+		RE::GFxValue check;
+		const bool ok = a_movie->GetVariable(&check, "_root.SkylandsHUD.tfAmmo") && check.IsObject();
+		SKSE::log::info("hud: built in the game's HUD movie ({})", ok ? "text fields found" : "TEXT FIELDS MISSING");
+		return ok;
+	}
+
+	void HudSet(RE::GFxMovieView* a_movie, const char* a_path, double a_alpha, bool a_visible)
+	{
+		RE::GFxValue v;
+		if (a_movie->GetVariable(&v, a_path) && v.IsObject()) {
+			RE::GFxValue::DisplayInfo di;
+			di.SetAlpha(a_alpha);
+			di.SetVisible(a_visible);
+			v.SetDisplayInfo(di);
+		}
+	}
+
+	void HudText(RE::GFxMovieView* a_movie, const char* a_path, const std::string& a_html, std::string& a_last)
+	{
+		if (a_html == a_last) {
+			return;
+		}
+		RE::GFxValue v;
+		if (a_movie->GetVariable(&v, a_path) && v.IsObject()) {
+			v.SetTextHTML(a_html.c_str());
+			a_last = a_html;
+		}
+	}
+
+	void HudFrame(Clock::time_point a_now)
+	{
+		static Clock::time_point next{};
+		static bool              broken = false, shownLast = false;
+		static std::string       lastAmmo, lastName, lastWarn;
+		if (!g_hud || broken || a_now < next) {
+			return;
+		}
+		next = a_now + std::chrono::milliseconds(33);
+		const auto ui = RE::UI::GetSingleton();
+		RE::GPtr<RE::GFxMovieView> movie;
+		if (ui) {
+			movie = ui->GetMovieView("HUD Menu");
+		}
+		if (!movie.get()) {
+			return;
+		}
+		RE::GFxValue clip;
+		if (!movie->GetVariable(&clip, "_root.SkylandsHUD") || !clip.IsObject()) {
+			if (!g_hudShow.load()) {
+				return;
+			}
+			if (!HudBuild(movie.get())) {
+				broken = true;  // the plain messages carry on
+				SKSE::log::info("hud: could not be built; the plain ammo messages stay");
+				return;
+			}
+			lastAmmo.clear();
+			lastName.clear();
+			lastWarn.clear();
+			shownLast = false;
+			if (!movie->GetVariable(&clip, "_root.SkylandsHUD")) {
+				return;
+			}
+		}
+		const bool show = g_hudShow.load() && !g_gun.name.empty();
+		if (!show) {
+			if (shownLast) {
+				shownLast = false;
+				RE::GFxValue::DisplayInfo di;
+				di.SetVisible(false);
+				clip.SetDisplayInfo(di);
+			}
+			return;
+		}
+		if (!shownLast) {
+			shownLast = true;
+			RE::GFxValue::DisplayInfo di;
+			di.SetVisible(true);
+			clip.SetDisplayInfo(di);
+		}
+		const double t = std::chrono::duration<double>(a_now.time_since_epoch()).count();
+		const int    clipSize = g_gun.info.clip, mag = g_gun.mag;
+		if (g_gun.ammo && a_now >= g_gun.reserveAt) {
+			g_gun.reserve = CountOf(RE::PlayerCharacter::GetSingleton(), g_gun.ammo);
+			g_gun.reserveAt = a_now + std::chrono::milliseconds(1000);
+		}
+		const bool low = mag > 0 && mag * 4 <= clipSize;
+		const bool empty = mag <= 0;
+		const bool reloading = g_gun.reloading;
+		// the magazine, large; the clip and the stock beside it
+		const char* magColor = empty ? "#FF3C28" : low ? "#FF6A28" : "#FFB428";
+		std::string ammo = std::string("<p align=\"right\"><font face=\"$EverywhereBoldFont\" size=\"46\" color=\"") + magColor + "\">" + std::to_string((std::max)(0, mag)) +
+			"</font><font face=\"$EverywhereBoldFont\" size=\"22\" color=\"#D2D2D2\"> / " + std::to_string(clipSize) + "</font>";
+		if (g_gun.reserve >= 0) {
+			ammo += std::string("<font face=\"$EverywhereBoldFont\" size=\"22\" color=\"#8A8A8A\">  |  </font><font face=\"$EverywhereBoldFont\" size=\"26\" color=\"") +
+				(g_gun.reserve == 0 ? "#FF3C28" : "#8CD2FF") + "\">" + std::to_string(g_gun.reserve) + "</font>";
+		}
+		ammo += "</p>";
+		HudText(movie.get(), "_root.SkylandsHUD.tfAmmo", ammo, lastAmmo);
+		// a short word that flashes
+		const char* word = reloading ? "RELOADING" : empty ? (g_gun.reserve == 0 ? "NO AMMO" : "RELOAD") : low ? "LOW AMMO" : "";
+		const std::string warn = *word ? std::string("<p align=\"right\"><font face=\"$EverywhereBoldFont\" size=\"18\" color=\"") + (reloading ? "#FFB428" : "#FF3C28") + "\">" + word + "</font></p>" : "";
+		HudText(movie.get(), "_root.SkylandsHUD.tfWarn", warn, lastWarn);
+		const bool flashing = (low || empty) && !reloading;
+		const double pulse = flashing ? 60.0 + 40.0 * std::sin(t * 9.0) : 100.0;
+		HudSet(movie.get(), "_root.SkylandsHUD.tfAmmo", pulse, true);
+		HudSet(movie.get(), "_root.SkylandsHUD.tfWarn", flashing ? pulse : 100.0, *word != 0);
+		// the reload bar
+		if (reloading) {
+			const double total = (std::max)(0.05, std::chrono::duration<double>(g_gun.reloadUntil - g_gun.reloadStart).count());
+			const double done = std::clamp(std::chrono::duration<double>(a_now - g_gun.reloadStart).count() / total, 0.0, 1.0);
+			RE::GFxValue fill;
+			if (movie->GetVariable(&fill, "_root.SkylandsHUD.barFill") && fill.IsObject()) {
+				RE::GFxValue::DisplayInfo di;
+				di.SetScale((std::max)(1.0, done * 100.0), 100.0);
+				di.SetVisible(true);
+				fill.SetDisplayInfo(di);
+			}
+			HudSet(movie.get(), "_root.SkylandsHUD.barBg", 100.0, true);
+		} else {
+			HudSet(movie.get(), "_root.SkylandsHUD.barBg", 100.0, false);
+			HudSet(movie.get(), "_root.SkylandsHUD.barFill", 100.0, false);
+		}
+		// the name of the gun in the colour of its rarity, for a moment after it is taken up, fading at the end
+		const double left = std::chrono::duration<double>(g_gun.nameUntil - a_now).count();
+		if (left > 0.0) {
+			const std::string name = std::string("<p align=\"right\"><font face=\"$EverywhereBoldFont\" size=\"21\" color=\"") + g_gun.rarityColor + "\">" + HtmlEscape(g_gun.name) + "</font></p>";
+			HudText(movie.get(), "_root.SkylandsHUD.tfName", name, lastName);
+			HudSet(movie.get(), "_root.SkylandsHUD.tfName", left < 1.2 ? left / 1.2 * 100.0 : 100.0, true);
+		} else {
+			HudSet(movie.get(), "_root.SkylandsHUD.tfName", 0.0, false);
+		}
+		g_hudLive = true;
+	}
+
+	void TickGun();
+
 	void Tick()
 	{
+		TickGun();
+		HudFrame(Clock::now());
+	}
+
+	void TickGun()
+	{
+		g_hudShow = false;
 		const auto player = RE::PlayerCharacter::GetSingleton();
 		if (!g_gunMode.load() || !player || !player->Is3DLoaded() || MenuOpen()) {
 			g_gun.wasHeld = false;
@@ -1035,6 +1266,7 @@ namespace
 			return;
 		}
 		const auto now = Clock::now();
+		g_hudShow = true;
 		if (weapon->GetFormID() != g_gun.weapon) {  // another gun than before: its numbers, and the rounds it had (a fresh one is full)
 			if (g_gun.weapon) {
 				g_gun.mags[g_gun.weapon] = g_gun.mag;
@@ -1046,6 +1278,11 @@ namespace
 			g_gun.reloading = false;
 			g_gun.reloadPart = 3;
 			g_gun.ammo = AmmoOf(weapon, info);
+			g_gun.name = weapon->GetName() ? weapon->GetName() : "";
+			static const char* const colors[] = { "#FFFFFF", "#FFFFFF", "#3CDC5A", "#3C8CFF", "#B450FF", "#FF9628", "#FF3DB8" };
+			g_gun.rarityColor = colors[std::clamp(info.rarity, 0, 6)];
+			g_gun.nameUntil = now + std::chrono::milliseconds(4500);
+			g_gun.reserveAt = now;
 			if (g_gun.ammo && g_startAmmo > 0 && CountOf(player, g_gun.ammo) <= 0) {  // none of its ammo: a first stock, once for each kind in a run of the game
 				static std::unordered_map<RE::FormID, bool> given;
 				if (!given[g_gun.ammo->GetFormID()]) {
@@ -1086,6 +1323,7 @@ namespace
 						player->RemoveItem(g_gun.ammo, got, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
 					}
 					left = CountOf(player, g_gun.ammo);
+					g_gun.reserve = left;
 				}
 				g_gun.mag += (std::max)(0, got);
 				g_gun.chambered = false;
@@ -1312,7 +1550,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 7, 1, 0 },
+	.Version = { 1, 8, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

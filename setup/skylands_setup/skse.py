@@ -40,6 +40,10 @@ ReloadKey=19
 AmmoText=1
 ; ammo: a player with none of a gun's ammo is given this many rounds when the gun is first taken up in a run of the game, and enemies that die with a gun carry some
 StartAmmo=300
+; the Borderlands-style display at the bottom right (1 on, 0 off: the plain messages come back); where its right edge and bottom line are, in a 1280 x 720 HUD
+Hud=1
+HudRight=70
+HudBottom=80
 AmmoDrops=1
 AimForward=30
 AimDown=9
