@@ -319,6 +319,10 @@ Other commands:
   name for 4.5 s after the gun is taken up; rarity colours from the `SkylandsRarity_<id>` keyword (common white, uncommon green, rare blue, epic purple, legendary orange, etech pink). ini `Hud`,
   `HudRight`, `HudBottom` (1280 x 720 HUD coordinates). If it cannot be built the plain `AmmoText` messages stay (`g_hudLive`). UNCONFIRMED in game: all of it (that the HUD movie takes
   `createTextField` from outside, the font name, the position, alpha). Coloured names in the INVENTORY are not possible with plain records (list text is plain); options told to the user.
+- 0.23.1 in game: CRASH on load into the game, right after "hud: built" and "hud: the game's HUD base clip holds [...]; meters hidden: 4": 0.23.1 hid every HUD base member with "charge" or
+  "enchant" in its name (RightChargeMeter, RightChargeMeterAnim, LeftChargeMeter, LeftChargeMeterAnim) with `SetDisplayInfo`; the "...Anim" ones are probably not display objects. 0.23.2 (TestBuild-103,
+  plugin 1.8.2) hides only names ending in "Meter" and only when `IsDisplayObject()`. The HUD base clip's members are in the log (TutorialLockInstance ... RightChargeMeter, LeftChargeMeter, ...).
+  The aimed-gun `UpdateDownwardPass` change of 0.23.1 had not run yet at the crash (no "aim started" line). A crash needs the crash logger's log if the plugin log stops cold.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

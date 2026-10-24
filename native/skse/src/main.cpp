@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 181;  // 1.8.1
+	constexpr std::int32_t kVersion = 182;  // 1.8.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -1152,7 +1152,9 @@ namespace
 					std::string name = a_name ? a_name : "";
 					std::string low = name;
 					std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-					if (low.find("charge") != std::string::npos || low.find("enchant") != std::string::npos) {
+					// only the meters themselves: "RightChargeMeter" and "LeftChargeMeter" (their "...Anim" partners are not things on the screen, and asking one to be
+					// hidden crashed the game in 0.23.1)
+					if (low.find("charge") != std::string::npos && low.size() >= 5 && low.compare(low.size() - 5, 5, "meter") == 0) {
 						g_meters.push_back(name);
 					}
 					if (all.size() < 1500) {
@@ -1169,7 +1171,7 @@ namespace
 		}
 		for (const auto& name : g_meters) {
 			RE::GFxValue v;
-			if (a_movie->GetVariable(&v, ("_root.HUDMovieBaseInstance." + name).c_str()) && v.IsObject()) {
+			if (a_movie->GetVariable(&v, ("_root.HUDMovieBaseInstance." + name).c_str()) && v.IsDisplayObject()) {
 				RE::GFxValue::DisplayInfo di;
 				di.SetVisible(!a_hide);
 				v.SetDisplayInfo(di);
@@ -1596,7 +1598,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 8, 1, 0 },
+	.Version = { 1, 8, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
