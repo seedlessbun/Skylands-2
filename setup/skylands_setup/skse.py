@@ -26,6 +26,12 @@ DEFAULT_INI = """; SkylandsNative settings
 Convergence=3000
 ; a short glowing flash at the muzzle with every bullet (1 on, 0 off)
 MuzzleFlash=1
+; aiming down the sights (hold the block button): the share of the spread left when fully aimed (0.1 to 1)
+AimSpread=0.5
+; the share of the walking speed left when fully aimed (0.1 to 1)
+AimWalk=0.7
+; how quickly the aim comes up and goes down (whole aims a second, 1 to 30)
+AimRate=7
 """
 
 

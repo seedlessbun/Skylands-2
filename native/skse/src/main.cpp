@@ -12,13 +12,17 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 142;  // 1.4.2
+	constexpr std::int32_t kVersion = 150;  // 1.5.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
+	std::atomic_bool g_aimHeld{ false };  // the aim button ("Left Attack/Block": right mouse by default) is down
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
+	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
+	float g_aimWalk = 0.7f;   // the walking speed's share while fully aimed (ini: AimWalk)
+	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
 	float g_convergence = 3000.0f;  // how far ahead the bullets are aimed to cross the crosshair (game units)
 
 	struct Vec3
@@ -50,6 +54,12 @@ namespace
 			std::erase_if(key, [](unsigned char c) { return std::isspace(c); });
 			if (key == "MuzzleFlash") {
 				g_flash = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "AimSpread" || key == "AimWalk" || key == "AimRate") {
+				try {
+					const float v = std::stof(line.substr(eq + 1));
+					(key == "AimSpread" ? g_aimSpread : key == "AimWalk" ? g_aimWalk : g_aimRate) = std::clamp(v, key == "AimRate" ? 1.0f : 0.1f, key == "AimRate" ? 30.0f : 1.0f);
+				} catch (...) {
+				}
 			} else if (key == "Convergence") {
 				try {
 					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
@@ -61,16 +71,27 @@ namespace
 
 	// Is this button event the attack button? By its user event name, or, when the name is missing (the game may not name the
 	// events of controls that are switched off), by the key the player has mapped to "Right Attack/Block" on that device.
-	bool IsAttack(const RE::ButtonEvent* a_button, const RE::UserEvents* a_events)
+	bool IsAction(const RE::ButtonEvent* a_button, const RE::BSFixedString& a_name)
 	{
-		if (a_button->QUserEvent() == a_events->rightAttack) {
+		if (a_button->QUserEvent() == a_name) {
 			return true;
 		}
 		if (!a_button->QUserEvent().empty()) {
 			return false;
 		}
 		const auto map = RE::ControlMap::GetSingleton();
-		return map && map->GetMappedKey(a_events->rightAttack.c_str(), a_button->GetDevice()) == a_button->GetIDCode();
+		return map && map->GetMappedKey(a_name.c_str(), a_button->GetDevice()) == a_button->GetIDCode();
+	}
+
+	bool IsAttack(const RE::ButtonEvent* a_button, const RE::UserEvents* a_events)
+	{
+		return IsAction(a_button, a_events->rightAttack);
+	}
+
+	// "Left Attack/Block": the aim button while a gun is in the hand
+	bool IsAim(const RE::ButtonEvent* a_button, const RE::UserEvents* a_events)
+	{
+		return IsAction(a_button, a_events->leftAttack);
 	}
 
 	// The attack button, from the game's own input events.
@@ -94,7 +115,14 @@ namespace
 					continue;
 				}
 				const auto button = e->AsButtonEvent();
-				if (!button || !IsAttack(button, events)) {
+				if (!button) {
+					continue;
+				}
+				if (IsAim(button, events)) {
+					g_aimHeld = button->IsPressed();
+					continue;
+				}
+				if (!IsAttack(button, events)) {
 					continue;
 				}
 				if (button->IsPressed()) {
@@ -118,8 +146,8 @@ namespace
 	{
 		static void Thunk(RE::AttackBlockHandler* a_this, RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data)
 		{
-			if (g_gunMode.load() && a_event && IsAttack(a_event, RE::UserEvents::GetSingleton())) {
-				return;
+			if (g_gunMode.load() && a_event && (IsAttack(a_event, RE::UserEvents::GetSingleton()) || IsAim(a_event, RE::UserEvents::GetSingleton()))) {
+				return;  // the right button fires (the plugin), the left one aims (the plugin): neither blocks, bashes nor casts
 			}
 			Original(a_this, a_event, a_data);
 		}
@@ -184,6 +212,7 @@ namespace
 		int   burst{ 1 };        // rounds per burst of an enemy
 		int   element{ 0 };      // 0 none, 1 fire, 2 shock, 3 corrosive, 4 slag (the colour of the muzzle flash)
 		int   flash{ 100 };      // the size of the muzzle flash in percent (the flash mesh's file name carries it)
+		int   zoom{ 10 };        // the magnification when aimed, in tenths (13 is 1.3x)
 	};
 
 	std::mutex                                     g_gunLock;
@@ -230,6 +259,7 @@ namespace
 					case 'b': info.burst = (std::max)(1, value); break;
 					case 'e': info.element = value; break;
 					case 'f': info.flash = value; break;
+					case 'z': info.zoom = value; break;
 					default: break;
 					}
 				}
@@ -495,6 +525,79 @@ namespace
 	std::atomic<RE::FormID>  g_shotSound{ 0 };
 	std::atomic<RE::FormID>  g_reloadSound[3]{ 0, 0, 0 };  // the three parts of a reload: magazine out, magazine in, gun made ready
 
+	// ---- aiming down sights ----------------------------------------------------------------------------------------
+	//
+	// While the aim button is held with a gun in the hand the view zooms (the world field of view, and the game's own setting it is read from
+	// every frame), the spread narrows and walking slows; all of it eases in and out and is put back exactly when the aim ends, the gun goes
+	// away or the game is left.
+
+	struct AimState
+	{
+		float             blend{ 0.0f };  // 0 not aimed, 1 fully aimed
+		bool              on{ false };
+		float             baseFov{ 0.0f };
+		float             baseWalk{ 0.0f };
+		Clock::time_point last{};
+	};
+	AimState g_aim;
+
+	float AimFactor()  // the share of the spread now
+	{
+		return 1.0f + (g_aimSpread - 1.0f) * g_aim.blend;
+	}
+
+	void SetFov(float a_degrees)
+	{
+		if (const auto setting = RE::GetINISetting("fDefaultWorldFOV:Display")) {
+			setting->data.f = a_degrees;
+		}
+		if (const auto camera = RE::PlayerCamera::GetSingleton()) {
+			camera->worldFOV = a_degrees;
+		}
+	}
+
+	void ReleaseAim(RE::PlayerCharacter* a_player)
+	{
+		if (!g_aim.on) {
+			return;
+		}
+		g_aim.on = false;
+		g_aim.blend = 0.0f;
+		SetFov(g_aim.baseFov);
+		if (a_player) {
+			a_player->AsActorValueOwner()->SetActorValue(RE::ActorValue::kSpeedMult, g_aim.baseWalk);
+		}
+		SKSE::log::info("aim ended: field of view back to {:.1f}, walking speed back to {:.0f}", g_aim.baseFov, g_aim.baseWalk);
+	}
+
+	void UpdateAim(RE::PlayerCharacter* a_player, const GunInfo& a_info, Clock::time_point a_now)
+	{
+		const bool want = g_aimHeld.load() && a_info.zoom > 10;
+		if (!g_aim.on && !want) {
+			return;
+		}
+		if (!g_aim.on) {
+			const auto setting = RE::GetINISetting("fDefaultWorldFOV:Display");
+			const auto camera = RE::PlayerCamera::GetSingleton();
+			g_aim.baseFov = setting ? setting->data.f : (camera ? camera->worldFOV : 65.0f);
+			g_aim.baseWalk = a_player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSpeedMult);
+			g_aim.on = true;
+			g_aim.last = a_now;
+			SKSE::log::info("aim started: {:.1f}x from field of view {:.1f}, walking speed {:.0f}", a_info.zoom / 10.0f, g_aim.baseFov, g_aim.baseWalk);
+		}
+		const float dt = std::clamp(std::chrono::duration<float>(a_now - g_aim.last).count(), 0.0f, 0.1f);
+		g_aim.last = a_now;
+		g_aim.blend = std::clamp(g_aim.blend + (want ? 1.0f : -1.0f) * g_aimRate * dt, 0.0f, 1.0f);
+		if (!want && g_aim.blend <= 0.0f) {
+			ReleaseAim(a_player);
+			return;
+		}
+		const float zoom = 1.0f + (a_info.zoom / 10.0f - 1.0f) * g_aim.blend;
+		const float half = std::tan(g_aim.baseFov * 0.5f * std::numbers::pi_v<float> / 180.0f) / zoom;
+		SetFov(2.0f * std::atan(half) * 180.0f / std::numbers::pi_v<float>);
+		a_player->AsActorValueOwner()->SetActorValue(RE::ActorValue::kSpeedMult, g_aim.baseWalk * (1.0f - (1.0f - g_aimWalk) * g_aim.blend));
+	}
+
 	// A relic bonus in percent as a divisor: 0 is 1.0, 50 is 1.5; never below 0.2
 	float Relic(RE::PlayerCharacter* a_player, RE::ActorValue a_value)
 	{
@@ -564,12 +667,16 @@ namespace
 		const auto player = RE::PlayerCharacter::GetSingleton();
 		if (!g_gunMode.load() || !player || !player->Is3DLoaded() || MenuOpen()) {
 			g_gun.wasHeld = false;
+			if (!g_gunMode.load() && player) {
+				ReleaseAim(player);
+			}
 			return;
 		}
 		GunInfo    info{};
 		const auto weapon = HeldGun(player, info);
 		if (!weapon) {
 			g_gun.wasHeld = false;
+			ReleaseAim(player);
 			return;
 		}
 		const auto now = Clock::now();
@@ -598,7 +705,8 @@ namespace
 		const float gap = g_gun.info.interval / rate;
 		g_rateTenths = static_cast<int>(10.0f / gap + 0.5f);
 		g_reloadMs = static_cast<int>(g_gun.info.reload / quick * 1000.0f + 0.5f);
-		g_spreadNowTenths = static_cast<int>(g_gun.info.spread / accuracy * 10.0f + 0.5f);
+		UpdateAim(player, g_gun.info, now);
+		g_spreadNowTenths = static_cast<int>(g_gun.info.spread / accuracy * AimFactor() * 10.0f + 0.5f);
 
 		if (g_gun.reloading) {
 			g_reloading = true;
@@ -628,7 +736,7 @@ namespace
 		const auto step = std::chrono::microseconds(static_cast<long long>(gap * 1000000.0f));
 		while (now >= g_gun.nextShot && g_gun.mag > 0 && fired < 3) {
 			RE::NiPoint3 at{};
-			if (!Launch(player->GetFormID(), 0, 0.0f, 0.0f, kOffsetForward, 1.0f / accuracy, &at)) {
+			if (!Launch(player->GetFormID(), 0, 0.0f, 0.0f, kOffsetForward, AimFactor() / accuracy, &at)) {
 				break;
 			}
 			PlayShot(at);
@@ -810,7 +918,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 4, 2, 0 },
+	.Version = { 1, 5, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

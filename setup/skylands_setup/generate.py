@@ -553,6 +553,7 @@ MGEF_RESIST_AT = 16
 PROJ_MUZZLE_LIGHT_AT, PROJ_MUZZLE_DURATION_AT = 20, 44
 STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, STAFF_FLASH_SECONDS = 26.0, 6.0, 0.05  # the muzzle flash: a short glowing burst ahead of the barrel
 STAFF_FLASH_PERCENT = {"smg": 75, "assault_rifle": 90}  # the muzzle flash's size by gun type, in percent of the first flash (the user asked for 25% and 10% smaller)
+STAFF_ZOOM = {"smg": 13, "assault_rifle": 16}  # the magnification when aimed down the sights, in tenths (the user chose 1.3x and 1.6x)
 RELOAD_PARTS = ("out", "in", "end")  # the magazine comes out, a new one goes in, the gun is made ready (bl2/audio.py RELOAD_PARTS)
 STAFF_FLASH_LIGHT_RADIUS = 260
 STAFF_MUZZLE_FLASH = False  # 0.17.0 turned the projectile's muzzle flash on and the game crashed on the first shot the plugin launched: off until a safer way is tested
@@ -597,7 +598,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.19.3"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.20.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -863,7 +864,7 @@ class Armory:
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}"
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}"
         self.kinds.add(kind)
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
         mfr = g.get("manufacturer", "")

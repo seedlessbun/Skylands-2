@@ -22,3 +22,12 @@ Cost: S = under a day of work and a test build, M = a few builds, L = a project.
 Suggested order after the sound and flash tests: 1 and 2 (small, make the guns feel like guns), then 3 and 7 (handling), then 8 (looks),
 then 5 and 6 (the Borderlands layer), with 10 whenever the relic list is decided. 4 and 12 are the way to bring the sniper and pistol
 over; 9 and 11 are the big ones and should wait for a decision on whether Skylands wants to depend on more than SKSE.
+
+## Aim down sights (0.20.0, plugin 1.5.0)
+
+Hold the block button ("Left Attack/Block", right mouse by default): the view zooms (1.3x SMG, 1.6x rifle, keyword `_z13` / `_z16`, `generate.STAFF_ZOOM`), the
+spread narrows to `AimSpread` (0.5) and walking slows to `AimWalk` (0.7) of normal, all eased by `AimRate` (ini `Data/SKSE/Plugins/SkylandsNative.ini`). While a gun
+is in the hand the plugin keeps the game's attack handler from getting the left button too, so there is no block, bash or left-hand cast. The zoom is the world field of
+view (the INI setting `fDefaultWorldFOV:Display` and `PlayerCamera::worldFOV`, restored exactly when the aim ends); the gun model does not move to the middle of the screen
+(that needs animations). UNCONFIRMED in game: that the field of view change shows (the game may rewrite it each frame), that the walking slow works (`SpeedMult`
+actor value), and that nothing stays changed after a save made while aiming. The ten-shot message's spread shows the aimed value.
