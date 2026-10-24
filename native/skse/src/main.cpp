@@ -646,7 +646,7 @@ namespace
 		g_aim.blend = 0.0f;
 		SetFov(g_aim.baseFov);
 		if (a_player && g_aim.walkApplied != 0.0f) {
-			a_player->AsActorValueOwner()->ModActorValue(RE::ActorValue::kSpeedMult, -g_aim.walkApplied);
+			a_player->AsActorValueOwner()->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kSpeedMult, -g_aim.walkApplied);
 		}
 		g_aim.walkApplied = 0.0f;
 		if (g_aim.gun) {
@@ -685,7 +685,7 @@ namespace
 		SetFov(2.0f * std::atan(half) * 180.0f / std::numbers::pi_v<float>);
 		const float taken = g_aim.baseWalk * (1.0f - g_aimWalk) * g_aim.blend;  // taken off the walking speed (added back exactly by ReleaseAim)
 		if (taken != g_aim.walkApplied) {
-			a_player->AsActorValueOwner()->ModActorValue(RE::ActorValue::kSpeedMult, g_aim.walkApplied - taken);
+			a_player->AsActorValueOwner()->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kSpeedMult, g_aim.walkApplied - taken);
 			g_aim.walkApplied = taken;
 		}
 		CenterGun(a_player, false);
