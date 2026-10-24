@@ -308,6 +308,11 @@ Other commands:
   "Out of ammo" when none, the message shows the stock), gives `StartAmmo` (300) to a player with none the first time a gun of that kind is taken up in a run, and enemies that die with a gun
   get 10-30 of its ammo (`DeathSink`, ini `AmmoDrops`). No script change (no ghost). UNCONFIRMED in game: all of it (that AMMO with projectile 0 shows in the pack, `GetInventoryCounts`,
   `RemoveItem`, `AddObjectToContainer` on corpses, the death event fields).
+- 0.22.1 (TestBuild-100, plugin 1.7.1): user report on 0.22.0: ammo works (from the pack, enemies drop it); aimed gun too high (AimDown 9 now the default), still slightly turned, and it lags the
+  view while moving ("moves slower than me, follows me"): the arm animation lags the camera, and the gun hung under the arm's weapon node. Now the aimed gun is moved under the first-person
+  skeleton ROOT while aimed (`CenterGun`, `RestoreGun`; back to the hand's WEAPON node when the aim ends, a menu opens or the gun goes away) and its turn is set from three nodes in the mesh
+  (`SkylandsMuzzle`, `SkylandsBreech` = rear of the barrel, `SkylandsTop` = above the muzzle; `nif.gun(marks=)`): barrel along the view, top up. UNCONFIRMED in game: that reparenting the weapon
+  node is safe (a gun left floating if the game removes the weapon while aimed), the held turn, the lag (the root may not pitch with the view: pitch then lags by a frame).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

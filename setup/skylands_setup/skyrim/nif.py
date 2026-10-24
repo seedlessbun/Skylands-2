@@ -295,8 +295,12 @@ def collision_blocks(b: NifBuilder, half: tuple[float, float, float], mass: floa
 MUZZLE_NODE = "SkylandsMuzzle"
 
 
+BREECH_NODE, TOP_NODE = "SkylandsBreech", "SkylandsTop"  # empty nodes in a gun mesh: the rear end of the barrel and a point above the muzzle
+
+
 def gun(parts: list, box_half: tuple[float, float, float] = (0.1, 0.4, 0.05), mass: float = 2.0, name: str = "SkylandsGun",
-        extra: list[tuple[str, str, str, int]] | None = None, muzzle: tuple[float, float, float] | None = None) -> bytes:
+        extra: list[tuple[str, str, str, int]] | None = None, muzzle: tuple[float, float, float] | None = None,
+        marks: list[tuple[str, tuple[float, float, float]]] | None = None) -> bytes:
     """A weapon NIF: one lit shape per (mesh, diffuse path, normal path) in `parts`, a BSX flags block, box collision. With
     `muzzle` (a point in the mesh's own coordinates) it also holds an empty NiNode named SkylandsMuzzle there, which the
     SkylandsNative plugin finds in the equipped weapon's 3D to start the bullets from the barrel."""
@@ -315,6 +319,10 @@ def gun(parts: list, box_half: tuple[float, float, float] = (0.1, 0.4, 0.05), ma
         b.set(mz, _net(b, MUZZLE_NODE) + struct.pack("<I3f", 14, *muzzle) + IDENTITY + struct.pack("<fi", 1.0, -1)
               + struct.pack("<I", 0) + struct.pack("<I", 0))  # no children, no effects
         shapes = [*shapes, mz]
+    for node_name, point in marks or []:  # more empty nodes (the barrel's rear end, a point above the muzzle), found by name like the muzzle
+        mk = b.add("NiNode", b"")
+        b.set(mk, _net(b, node_name) + struct.pack("<I3f", 14, *point) + IDENTITY + struct.pack("<fi", 1.0, -1) + struct.pack("<I", 0) + struct.pack("<I", 0))
+        shapes = [*shapes, mk]
     col = collision_blocks(b, box_half, mass, root)
     node = _extra_net(b, name, extras) + _av_c(14, col)
     node += struct.pack("<I", len(shapes)) + b"".join(struct.pack("<i", i) for i in shapes)

@@ -497,6 +497,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         assert str(row.burst) == parts[-5][1:] and parts[-4] in ("e0", "e1", "e2", "e3", "e4") and parts[-3] == f"f{generate.STAFF_FLASH_PERCENT[kind]}" and parts[-2] == f"z{generate.STAFF_ZOOM[kind]}" and parts[-1].startswith("m")  # burst for enemies, element for the muzzle flash colour, flash size
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
+        assert b"SkylandsBreech" in mesh_file.read_bytes() and b"SkylandsTop" in mesh_file.read_bytes()  # the barrel's rear and a point above the muzzle: the plugin holds the aimed gun straight
     # the bullets: a plain gun's carries nothing of the donor fire, an elemental one's carries only its element; nothing explodes in view;
     # half the old size, a quarter faster
     from skylands_setup.skyrim import nifread

@@ -42,7 +42,7 @@ AmmoText=1
 StartAmmo=300
 AmmoDrops=1
 AimForward=30
-AimDown=6
+AimDown=9
 AimRight=0
 """
 
