@@ -31,3 +31,10 @@ is in the hand the plugin keeps the game's attack handler from getting the left 
 view (the INI setting `fDefaultWorldFOV:Display` and `PlayerCamera::worldFOV`, restored exactly when the aim ends); the gun model does not move to the middle of the screen
 (that needs animations). UNCONFIRMED in game: that the field of view change shows (the game may rewrite it each frame), that the walking slow works (`SpeedMult`
 actor value), and that nothing stays changed after a save made while aiming. The ten-shot message's spread shows the aimed value.
+
+## Reload key and ammo text (0.21.0, plugin 1.6.0)
+
+The reload key is `ReloadKey` in `SkylandsNative.ini` (keyboard scan code, 19 = R). While a gun is in the hand it is not given to the game's Ready Weapon handler, so R reloads
+without holstering the gun. A reload started with rounds left keeps one in the chamber (magazine + 1). A reload can only start when the magazine is not full; switching
+guns cancels it. Prototype ammo text (`AmmoText=1`): "Reloading...", "Magazine 24 / 24" when it ends, "Low ammo: 6 / 24" at a quarter, as ordinary HUD messages. UNCONFIRMED:
+that hooking the Ready Weapon handler (slot 6 on 1.7.104) is safe; the log says "ready-weapon handler hooked".

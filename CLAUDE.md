@@ -292,6 +292,13 @@ Other commands:
   `(kind, mfr)` = shot, `(kind, mfr, part)` = reload part. (3) script class `SkylandsStaffGun19` (18 retired), `STAFF_ID_SHIFT` 340: a ghost 18 with empty properties is the
   likeliest reason no sound was heard. The plugin logs "shot sound set", "reload sounds set", "playing sound ... form found/missing" and "sound ...: handle built, valid, play".
   UNCONFIRMED: everything about the Wwise extraction on the real files (read `skylands-setup.log` `audio:` lines), that the reload sounds line up with the animation-less reload.
+- 0.20.0-0.20.2 (plugin 1.5.x, TestBuild-95..97): aim down sights, in the plugin (`UpdateAim`, `CenterGun`): hold "Left Attack/Block" (the plugin swallows it in gun mode), zoom by
+  `fDefaultWorldFOV:Display` + `PlayerCamera::GetRuntimeData2().worldFOV` (keyword `_z13`/`_z16`; confirmed in game: zoom works), spread x `AimSpread`, walking speed via
+  `ModActorValue(kTemporary, kSpeedMult, -taken)` and the exact reverse (`SetActorValue` set the BASE and left it 100 higher each aim, then a sign slip left it a little lower:
+  the user's save may need `player.setav speedmult 200`), the first-person weapon node (child of "WEAPON", found from the `SkylandsMuzzle` node) moved and turned from the CAMERA
+  node so the barrel points along the view, blended by the aim; ini `AimCenter/AimForward/AimDown/AimRight`. The user tuned 30/6/6 for 0.20.1. 0.20.2 UNCONFIRMED in game.
+- 0.21.0 (TestBuild-98, plugin 1.6.0): reload key (`ReloadKey`, R = 19, swallowed from the Ready Weapon handler in gun mode), one round chambered on an early reload, ammo text
+  prototype (`RE::SendHUDMessage::ShowHUDMessage`). No ammo reserve yet: ideas given to the user (inventory AMMO items per type as the reserve, plugin counters in an SKSE co-save, ...).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

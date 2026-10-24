@@ -12,14 +12,17 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 152;  // 1.5.2
+	constexpr std::int32_t kVersion = 160;  // 1.6.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
+	std::atomic_bool g_reloadLatch{ false };  // the reload key went down (cleared by the tick)
 	std::atomic_bool g_aimHeld{ false };  // the aim button ("Left Attack/Block": right mouse by default) is down
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
+	std::uint32_t g_reloadKey = 19;  // keyboard scan code of the reload key (ini: ReloadKey; 19 is R)
+	bool          g_ammoText = true;  // short ammo messages on the screen (ini: AmmoText=0 turns them off)
 	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
 	float g_aimWalk = 0.7f;   // the walking speed's share while fully aimed (ini: AimWalk)
 	float g_aimForward = 30.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
@@ -70,6 +73,13 @@ namespace
 					(key == "AimForward" ? g_aimForward : key == "AimDown" ? g_aimDown : g_aimRight) = std::clamp(v, -60.0f, 120.0f);
 				} catch (...) {
 				}
+			} else if (key == "ReloadKey") {
+				try {
+					g_reloadKey = static_cast<std::uint32_t>(std::clamp(std::stoi(line.substr(eq + 1)), 1, 255));
+				} catch (...) {
+				}
+			} else if (key == "AmmoText") {
+				g_ammoText = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "AimCenter") {
 				g_aimCenter = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "Convergence") {
@@ -130,6 +140,12 @@ namespace
 				if (!button) {
 					continue;
 				}
+				if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == g_reloadKey) {
+					if (button->IsDown()) {
+						g_reloadLatch = true;
+					}
+					continue;
+				}
 				if (IsAim(button, events)) {
 					g_aimHeld = button->IsPressed();
 					continue;
@@ -170,6 +186,29 @@ namespace
 			const std::size_t slot = REL::Module::IsAtLeast(SKSE::RUNTIME_SSE_1_7_99) ? 0x06 : 0x04;
 			Original = vtbl.write_vfunc(slot, Thunk);
 			SKSE::log::info("attack handler hooked (vtable slot {})", slot);
+			return true;
+		}
+
+		static inline REL::Relocation<decltype(Thunk)> Original;
+	};
+
+	// R is also "Ready Weapon" (draw or put away): while a gun is in the hand the reload key is not given to that handler, so a reload does not holster the gun
+	struct ReadyHook
+	{
+		static void Thunk(RE::ReadyWeaponHandler* a_this, RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data)
+		{
+			if (g_gunMode.load() && a_event && a_event->GetDevice() == RE::INPUT_DEVICE::kKeyboard && a_event->GetIDCode() == g_reloadKey) {
+				return;
+			}
+			Original(a_this, a_event, a_data);
+		}
+
+		static bool Install()
+		{
+			REL::Relocation<std::uintptr_t> vtbl{ RE::VTABLE_ReadyWeaponHandler[0] };
+			const std::size_t slot = REL::Module::IsAtLeast(SKSE::RUNTIME_SSE_1_7_99) ? 0x06 : 0x04;
+			Original = vtbl.write_vfunc(slot, Thunk);
+			SKSE::log::info("ready-weapon handler hooked (vtable slot {})", slot);
 			return true;
 		}
 
@@ -519,6 +558,8 @@ namespace
 		Clock::time_point     reloadUntil{};
 		Clock::time_point     reloadStart{};
 		int                   reloadPart{ 3 };  // the next part of the reload sound to play (3: all played)
+		bool                  chambered{ false };  // a reload started with rounds left keeps one in the chamber
+		bool                  lowTold{ false };
 		Clock::time_point     holdStart{};
 		int                   holdShots{ 0 };
 		bool                  wasHeld{ false };
@@ -803,10 +844,18 @@ namespace
 
 	// A reload begins: its three sounds are played at fixed shares of the time it takes (the magazine out at once, the new one in at about half,
 	// the gun made ready near the end).
+	void AmmoText(const std::string& a_text)
+	{
+		if (g_ammoText) {
+			RE::SendHUDMessage::ShowHUDMessage(a_text.c_str(), nullptr, true);
+		}
+	}
+
 	void BeginReload(Clock::time_point a_now, int a_ms)
 	{
 		g_gun.reloading = true;
 		g_gun.reloadStart = a_now;
+		AmmoText("Reloading...");
 		g_gun.reloadUntil = a_now + std::chrono::milliseconds(a_ms);
 		g_gun.reloadPart = 0;
 	}
@@ -878,13 +927,25 @@ namespace
 			ReloadSounds(player, now);
 			if (now >= g_gun.reloadUntil) {
 				g_gun.reloading = false;
-				g_gun.mag = g_gun.info.clip;
+				g_gun.mag = g_gun.info.clip + (g_gun.chambered ? 1 : 0);
+				g_gun.chambered = false;
+				g_gun.lowTold = false;
+				AmmoText("Magazine " + std::to_string(g_gun.mag) + " / " + std::to_string(g_gun.info.clip));
 				SetBar(player, g_gun.mag);
 				g_reloading = false;
 			}
 			return;
 		}
 		g_reloading = false;
+		if (g_reloadLatch.exchange(false) && g_gun.mag < g_gun.info.clip) {  // the reload key: a reload now (a round stays chambered if there is one left)
+			g_gun.chambered = g_gun.mag > 0;
+			g_gun.wasHeld = false;
+			BeginReload(now, g_reloadMs.load());
+			g_reloading = true;
+			SKSE::log::info("reload key: reload started with {} of {} rounds left", g_gun.mag, g_gun.info.clip);
+			ReloadSounds(player, now);
+			return;
+		}
 		if (!g_held.load()) {
 			g_gun.wasHeld = false;
 			return;
@@ -913,6 +974,10 @@ namespace
 		}
 		if (fired) {
 			SetBar(player, g_gun.mag);
+			if (!g_gun.lowTold && g_gun.mag > 0 && g_gun.mag * 4 <= g_gun.info.clip) {  // a quarter left
+				g_gun.lowTold = true;
+				AmmoText("Low ammo: " + std::to_string(g_gun.mag) + " / " + std::to_string(g_gun.info.clip));
+			}
 			const double seconds = std::chrono::duration<double>(now - g_gun.holdStart).count();
 			g_measuredTenths = (g_gun.holdShots >= 3 && seconds >= 0.3) ? static_cast<int>((g_gun.holdShots - 1) / seconds * 10.0 + 0.5) : 0;
 		}
@@ -1053,6 +1118,7 @@ namespace
 	{
 		if (a_message->type == SKSE::MessagingInterface::kDataLoaded) {
 			AttackHook::Install();
+			ReadyHook::Install();
 			StartPump();
 			if (const auto holder = RE::ScriptEventSourceHolder::GetSingleton()) {
 				holder->AddEventSink(CastSink::Get());
@@ -1083,7 +1149,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 5, 2, 0 },
+	.Version = { 1, 6, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
