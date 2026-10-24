@@ -552,7 +552,7 @@ namespace
 			setting->data.f = a_degrees;
 		}
 		if (const auto camera = RE::PlayerCamera::GetSingleton()) {
-			camera->worldFOV = a_degrees;
+			camera->GetRuntimeData2().worldFOV = a_degrees;
 		}
 	}
 
@@ -579,7 +579,7 @@ namespace
 		if (!g_aim.on) {
 			const auto setting = RE::GetINISetting("fDefaultWorldFOV:Display");
 			const auto camera = RE::PlayerCamera::GetSingleton();
-			g_aim.baseFov = setting ? setting->data.f : (camera ? camera->worldFOV : 65.0f);
+			g_aim.baseFov = setting ? setting->data.f : (camera ? camera->GetRuntimeData2().worldFOV : 65.0f);
 			g_aim.baseWalk = a_player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSpeedMult);
 			g_aim.on = true;
 			g_aim.last = a_now;
