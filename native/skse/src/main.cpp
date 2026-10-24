@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 180;  // 1.8.0
+	constexpr std::int32_t kVersion = 181;  // 1.8.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -33,7 +33,7 @@ namespace
 	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
 	float g_aimWalk = 0.7f;   // the walking speed's share while fully aimed (ini: AimWalk)
 	float g_aimForward = 30.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
-	float g_aimDown = 9.0f;      // ... this far below it (ini: AimDown)
+	float g_aimDown = 7.0f;      // ... this far below it (ini: AimDown)
 	float g_aimRight = 0.0f;     // ... and this far to the right (ini: AimRight)
 	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
@@ -893,6 +893,9 @@ namespace
 		const float         ang = std::acos(cosA);
 		const Vec3          axis = Norm({ delta.entry[2][1] - delta.entry[1][2], delta.entry[0][2] - delta.entry[2][0], delta.entry[1][0] - delta.entry[0][1] });
 		gun->local.rotate = ang > 1e-4f ? MatMul(Turn(axis, ang * b), g_aim.startRot) : g_aim.startRot;
+		// the gun's world transform is worked out now, from the root and the camera as they are at this moment, so that what is drawn is not a frame behind the view
+		RE::NiUpdateData update{};
+		gun->UpdateDownwardPass(update, 0);
 		static bool told = false;
 		if (!told) {
 			told = true;
@@ -1133,6 +1136,48 @@ namespace
 		}
 	}
 
+	// The game's own enchantment charge meters (what showed the magazine before the display) are hidden while a gun is up. Their names are found among the members of the
+	// HUD's base clip (anything with "charge" or "enchant" in its name), and told in the log with the other member names, so a wrong guess can be corrected.
+	std::vector<std::string> g_meters;
+	bool                     g_metersHidden = false, g_metersLooked = false;
+
+	void HudMeters(RE::GFxMovieView* a_movie, bool a_hide)
+	{
+		if (!g_metersLooked) {
+			g_metersLooked = true;
+			RE::GFxValue base;
+			if (a_movie->GetVariable(&base, "_root.HUDMovieBaseInstance") && base.IsObject()) {
+				std::string all;
+				base.VisitMembers([&](const char* a_name, const RE::GFxValue&) {
+					std::string name = a_name ? a_name : "";
+					std::string low = name;
+					std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+					if (low.find("charge") != std::string::npos || low.find("enchant") != std::string::npos) {
+						g_meters.push_back(name);
+					}
+					if (all.size() < 1500) {
+						all += name + " ";
+					}
+				});
+				SKSE::log::info("hud: the game's HUD base clip holds [{}]; meters hidden: {}", all, g_meters.size());
+			} else {
+				SKSE::log::info("hud: the game's HUD base clip was not found");
+			}
+		}
+		if (g_meters.empty() || (!a_hide && !g_metersHidden)) {
+			return;
+		}
+		for (const auto& name : g_meters) {
+			RE::GFxValue v;
+			if (a_movie->GetVariable(&v, ("_root.HUDMovieBaseInstance." + name).c_str()) && v.IsObject()) {
+				RE::GFxValue::DisplayInfo di;
+				di.SetVisible(!a_hide);
+				v.SetDisplayInfo(di);
+			}
+		}
+		g_metersHidden = a_hide;
+	}
+
 	void HudFrame(Clock::time_point a_now)
 	{
 		static Clock::time_point next{};
@@ -1169,6 +1214,7 @@ namespace
 			}
 		}
 		const bool show = g_hudShow.load() && !g_gun.name.empty();
+		HudMeters(movie.get(), show);
 		if (!show) {
 			if (shownLast) {
 				shownLast = false;
@@ -1550,7 +1596,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 8, 0, 0 },
+	.Version = { 1, 8, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
