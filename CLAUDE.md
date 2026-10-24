@@ -313,6 +313,12 @@ Other commands:
   skeleton ROOT while aimed (`CenterGun`, `RestoreGun`; back to the hand's WEAPON node when the aim ends, a menu opens or the gun goes away) and its turn is set from three nodes in the mesh
   (`SkylandsMuzzle`, `SkylandsBreech` = rear of the barrel, `SkylandsTop` = above the muzzle; `nif.gun(marks=)`): barrel along the view, top up. UNCONFIRMED in game: that reparenting the weapon
   node is safe (a gun left floating if the game removes the weapon while aimed), the held turn, the lag (the root may not pitch with the view: pitch then lags by a frame).
+- 0.23.0 (TestBuild-101, plugin 1.8.0): HUD prototype (user chose bottom right, Borderlands style, low-ammo flash, reload bar, gun name in the rarity colour when equipped). Drawn from the plugin into the
+  game's own HUD movie, no SWF of ours: `HudBuild` makes the clip `_root.SkylandsHUD` (`CreateEmptyMovieClip`, `createTextField`, the drawing calls, `$EverywhereBoldFont` in HTML), `HudFrame`
+  (30 Hz, from `Tick`) finds it by path each update (so a reloaded HUD rebuilds it) and shows the magazine, `/ clip`, `| stock`, a bar while reloading, a flashing LOW AMMO / RELOAD / NO AMMO, and the
+  name for 4.5 s after the gun is taken up; rarity colours from the `SkylandsRarity_<id>` keyword (common white, uncommon green, rare blue, epic purple, legendary orange, etech pink). ini `Hud`,
+  `HudRight`, `HudBottom` (1280 x 720 HUD coordinates). If it cannot be built the plain `AmmoText` messages stay (`g_hudLive`). UNCONFIRMED in game: all of it (that the HUD movie takes
+  `createTextField` from outside, the font name, the position, alpha). Coloured names in the INVENTORY are not possible with plain records (list text is plain); options told to the user.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
