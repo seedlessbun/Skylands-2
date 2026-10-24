@@ -551,7 +551,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         for percent in (75, 90):  # submachine guns 25% smaller, assault rifles 10% smaller
             assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"Flash_Staff_{word}_{percent}.nif").read_bytes().startswith(b"Gamebryo File Format")
     keys = {r.edid: r for r in recs["KYWD"]}
-    assert any(k.endswith("_f75") for k in keys) and any(k.endswith("_f90") for k in keys), "each gun's flash size is in its numbers keyword"
+    assert any("_f75_" in k for k in keys) and any("_f90_" in k for k in keys), "each gun's flash size is in its numbers keyword"
     for mesh in ("Tracer_Staff_fire.nif",):  # one per element the fake game has
         assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / mesh).read_bytes().startswith(b"Gamebryo File Format")
 
