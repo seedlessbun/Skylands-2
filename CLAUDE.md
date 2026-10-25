@@ -353,6 +353,13 @@ Other commands:
   muzzle place, 5 units inside the barrel end), and it sat slightly on the barrel. 0.25.1 (TestBuild-108, plugin 1.10.1): the player's flash is respawned every tick for 60 ms (`FollowFlash`, `g_flashFollow`, each
   effect lives 0.03 s) at the muzzle node of THAT tick, along muzzle minus breech, pushed `0.15 x barrel length - 5` units forward (user: "15% away from the gun"); enemies keep the one static flash.
   UNCONFIRMED in game: that the respawned flashes read as one flash (no flicker or double brightness).
+- 0.25.1 in game: not reported yet at 0.26.0 time. 0.26.0 (TestBuild-109, plugin 1.11.0), user requests: (1) hands invisible while fully aimed (`HideHands`, ini): `CenterGun` culls (`SetAppCulled`) every
+  non-node leaf under the first-person root except the gun when the blend is >= 0.4 (`HideHands`), shows them below it and in `RestoreGun` (`ShowHands`); log "aim: N arm parts hidden". (2) muzzle and shell
+  effects prototype (roadmap item 8), all plugin-side, NO new records: temporary effects of our own meshes (`Fx_Casing`, `Fx_Smoke_0..2`, `Fx_Burst_<element>`, `generate.STAFF_FX_MESHES`) moved by the plugin and
+  re-spawned every 30-60 ms (`Fx`, `FxFrame`, `EmitShotFx`, `BarrelFrame` from the muzzle/breech/top nodes): casings thrown out of the receiver's right side and falling (gravity 1300, 0.6 s, no ground test),
+  a puff at the muzzle per shot plus a wisp for 1.1 s after, and the small elemental burst where an elemental bullet ends (`TrackBullet`: the launched projectile's handle is watched; when it is gone a burst is
+  drawn at the last seen place; this replaces the old explosion records, which stay silent). Ini `Casings/Smoke/ImpactBursts`. UNCONFIRMED in game: all of it (looks, performance of ~15 temp effects a tick, that
+  a handle that goes null means the bullet ended, the arm cull hiding the right nodes). Damage text: put on hold by the user.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

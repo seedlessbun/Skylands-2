@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 201;  // 1.10.1
+	constexpr std::int32_t kVersion = 210;  // 1.11.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -46,6 +46,10 @@ namespace
 	float g_recoilRecover = 0.6f;  // the share of the kick the view comes back down by once the shooting stops (ini: RecoilRecover)
 	float g_recoilAim = 0.6f;      // the kick's share while fully aimed (ini: RecoilAim)
 	float g_recoilGun = 1.0f;      // how far the aimed gun model jerks back with a shot, in units, at the reference rate (ini: RecoilGun)
+	bool  g_hideHands = true;      // the arms are hidden while fully aimed, so only the gun is in front of the view (ini: HideHands=0 turns it off)
+	bool  g_fxCasing = true;       // shell casings fly out of the gun (ini: Casings=0 turns them off)
+	bool  g_fxSmoke = true;        // a puff of smoke at the muzzle with each shot and a wisp after (ini: Smoke=0)
+	bool  g_fxBurst = true;        // a small burst of the element's colour where an elemental bullet ends (ini: ImpactBursts=0)
 	float g_sway = 1.0f;           // the aimed gun's sway (breathing, walking, turning) as a multiple of the default; 0 = none (ini: Sway)
 
 	struct Vec3
@@ -125,6 +129,9 @@ namespace
 					(key == "RecoilPitch" ? g_recoilPitch : key == "RecoilYaw" ? g_recoilYaw : key == "RecoilRecover" ? g_recoilRecover : key == "RecoilAim" ? g_recoilAim : key == "RecoilGun" ? g_recoilGun : g_sway) = v;
 				} catch (...) {
 				}
+			} else if (key == "HideHands" || key == "Casings" || key == "Smoke" || key == "ImpactBursts") {
+				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
+				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : key == "Smoke" ? g_fxSmoke : g_fxBurst) = on;
 			} else if (key == "Convergence") {
 				try {
 					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
@@ -434,6 +441,9 @@ namespace
 		}
 	}
 
+	void TrackBullet(const RE::ProjectileHandle& a_handle, const RE::NiPoint3& a_from, int a_element);  // effects, below
+	void EmitShotFx(RE::PlayerCharacter* a_player);
+
 	// Launches the held gun's bullet. The player's bullets cross the crosshair (a_target null); an enemy's go at a_target's chest.
 	// right, up and forward move the start in the view's own axes; spreadMult scales the gun's spread (the player's accuracy relics).
 	bool Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward, float a_spreadMult, RE::NiPoint3* a_originOut = nullptr)
@@ -527,6 +537,7 @@ namespace
 		if (tell) {
 			SKSE::log::info("launched");
 		}
+		TrackBullet(handle, origin, info.element);
 		if (a_originOut) {
 			*a_originOut = origin;
 		}
@@ -537,6 +548,7 @@ namespace
 			SpawnFlash(shooter, { origin.x - aim.x * back, origin.y - aim.y * back, origin.z - aim.z * back }, pitch, heading, info.element, info.flash);
 		} else {  // the player's flash is drawn by FollowFlash from the next tick on, glued to the muzzle node
 			g_flashFollow = { std::chrono::steady_clock::now() + std::chrono::milliseconds(60), info.element, info.flash };
+			EmitShotFx(RE::PlayerCharacter::GetSingleton());
 		}
 		return true;
 	}
@@ -783,6 +795,7 @@ namespace
 		RE::NiPoint3      startT{};             // the gun's place and turn in the root's axes when the aim began
 		RE::NiMatrix3     startRot{};
 		bool              centerTold{ false };
+		std::vector<RE::NiPointer<RE::NiAVObject>> hidden;  // the arm geometry switched off while aimed (switched on again when the aim ends)
 		struct View
 		{
 			bool         have{ false };
@@ -904,6 +917,210 @@ namespace
 		g_kick.swayUp = up;
 	}
 
+	// ---- shell casings, smoke and impact bursts ------------------------------------------------------------------------
+	// Small temporary effects of our own meshes, moved by the plugin: each lives a few hundredths of a second and is spawned again at its new place every
+	// 30 to 60 ms, so a casing flies in an arc, a puff drifts up and swells, and a burst blooms. Nothing is placed in the world (no references, nothing in a save).
+	struct Fx
+	{
+		int          kind{ 0 };  // 0 casing, 1 smoke, 2 burst
+		RE::NiPoint3 pos{};
+		Vec3         vel{ 0.0f, 0.0f, 0.0f };
+		float        age{ 0.0f }, life{ 0.5f }, next{ 0.0f }, spin{ 0.0f }, tilt{ 0.0f };
+		int          element{ 0 };
+	};
+	std::vector<Fx> g_fx;
+	struct Tracked
+	{
+		RE::ProjectileHandle handle;
+		RE::NiPoint3         last{};
+		int                  element{ 0 };
+		float                age{ 0.0f };
+	};
+	std::vector<Tracked>     g_tracked;
+	float                    g_smokeLeft = 0.0f, g_smokeGap = 0.0f;  // seconds of wisp still to come after the last shot, and to the next puff
+
+	float Rand01();
+
+	void TrackBullet(const RE::ProjectileHandle& a_handle, const RE::NiPoint3& a_from, int a_element)
+	{
+		if (!g_fxBurst || a_element <= 0 || !a_handle.get() || g_tracked.size() > 48) {
+			return;
+		}
+		g_tracked.push_back({ a_handle, a_from, a_element, 0.0f });
+	}
+
+	void AddBurst(const RE::NiPoint3& a_at, int a_element)
+	{
+		if (g_fx.size() > 80) {
+			return;
+		}
+		Fx f;
+		f.kind = 2;
+		f.pos = a_at;
+		f.life = 0.2f;
+		f.element = a_element;
+		f.spin = Rand01() * 6.28f;
+		g_fx.push_back(f);
+	}
+
+	// the barrel's frame of the player's gun: the muzzle, the direction of the barrel, its top and its side (null when the gun has no marker nodes)
+	bool BarrelFrame(RE::PlayerCharacter* a_player, RE::NiPoint3& a_muzzle, RE::NiPoint3& a_breech, Vec3& a_dir, Vec3& a_up, Vec3& a_right, float& a_length)
+	{
+		const auto camera = RE::PlayerCamera::GetSingleton();
+		const auto root = a_player->Get3D(camera && camera->IsInFirstPerson());
+		if (!root) {
+			return false;
+		}
+		const auto muzzle = root->GetObjectByName("SkylandsMuzzle"sv);
+		const auto breech = root->GetObjectByName("SkylandsBreech"sv);
+		const auto top = root->GetObjectByName("SkylandsTop"sv);
+		if (!muzzle || !breech || !top) {
+			return false;
+		}
+		a_muzzle = muzzle->world.translate;
+		a_breech = breech->world.translate;
+		const Vec3 d{ a_muzzle.x - a_breech.x, a_muzzle.y - a_breech.y, a_muzzle.z - a_breech.z };
+		a_length = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+		a_dir = Norm(d);
+		const Vec3 u{ top->world.translate.x - a_muzzle.x, top->world.translate.y - a_muzzle.y, top->world.translate.z - a_muzzle.z };
+		const float k = u.x * a_dir.x + u.y * a_dir.y + u.z * a_dir.z;
+		a_up = Norm({ u.x - a_dir.x * k, u.y - a_dir.y * k, u.z - a_dir.z * k });
+		a_right = Cross(a_dir, a_up);
+		return true;
+	}
+
+	void AddPuff(const RE::NiPoint3& a_at, const Vec3& a_dir, const Vec3& a_up, float a_push, float a_rise, float a_life)
+	{
+		if (g_fx.size() > 80) {
+			return;
+		}
+		Fx f;
+		f.kind = 1;
+		f.pos = a_at;
+		f.vel = { a_dir.x * a_push + a_up.x * a_rise + (Rand01() - 0.5f) * 8.0f, a_dir.y * a_push + a_up.y * a_rise + (Rand01() - 0.5f) * 8.0f,
+			a_dir.z * a_push + a_up.z * a_rise + 6.0f + Rand01() * 6.0f };
+		f.life = a_life;
+		g_fx.push_back(f);
+	}
+
+	// per shot, for the player's gun: a casing out of the ejection side of the receiver, a puff of smoke at the muzzle, and the smoke that lingers after the shooting
+	void EmitShotFx(RE::PlayerCharacter* a_player)
+	{
+		if (!a_player || (!g_fxCasing && !g_fxSmoke)) {
+			return;
+		}
+		RE::NiPoint3 muzzle{}, breech{};
+		Vec3         dir{}, up{}, right{};
+		float        length = 0.0f;
+		if (!BarrelFrame(a_player, muzzle, breech, dir, up, right, length)) {
+			return;
+		}
+		if (g_fxCasing && g_fx.size() < 80) {
+			Fx f;
+			f.kind = 0;
+			f.pos = { breech.x + dir.x * length * 0.35f + up.x * 1.5f + right.x * 2.0f, breech.y + dir.y * length * 0.35f + up.y * 1.5f + right.y * 2.0f,
+				breech.z + dir.z * length * 0.35f + up.z * 1.5f + right.z * 2.0f };
+			const float sideways = 70.0f + Rand01() * 30.0f, lift = 55.0f + Rand01() * 35.0f, back = 5.0f + Rand01() * 20.0f;
+			f.vel = { right.x * sideways + up.x * lift - dir.x * back, right.y * sideways + up.y * lift - dir.y * back, right.z * sideways + up.z * lift - dir.z * back };
+			f.life = 0.6f;
+			f.spin = Rand01() * 6.28f;
+			f.tilt = Rand01() * 6.28f;
+			g_fx.push_back(f);
+		}
+		if (g_fxSmoke) {
+			AddPuff({ muzzle.x + dir.x * 2.0f, muzzle.y + dir.y * 2.0f, muzzle.z + dir.z * 2.0f }, dir, up, 30.0f, 14.0f, 0.55f);
+			g_smokeLeft = 1.1f;
+		}
+	}
+
+	// every tick: the lingering wisp, the bullets that have ended (a burst where each was last seen), and the drawing of every live effect
+	void FxFrame(RE::PlayerCharacter* a_player, Clock::time_point a_now)
+	{
+		static Clock::time_point last{};
+		const float dt = last.time_since_epoch().count() == 0 ? 0.016f : std::clamp(std::chrono::duration<float>(a_now - last).count(), 0.001f, 0.1f);
+		last = a_now;
+		if (!a_player || MenuOpen()) {
+			return;
+		}
+		const auto cell = a_player->GetParentCell();
+		if (!cell) {
+			g_fx.clear();
+			g_tracked.clear();
+			return;
+		}
+		g_stage = "effects";
+		for (auto it = g_tracked.begin(); it != g_tracked.end();) {
+			it->age += dt;
+			const auto p = it->handle.get();
+			if (p && !p->IsDeleted() && !p->IsDisabled() && it->age < 10.0f) {
+				it->last = p->GetPosition();
+				++it;
+				continue;
+			}
+			if (it->age > 0.02f && it->age < 10.0f) {
+				AddBurst(it->last, it->element);
+			}
+			it = g_tracked.erase(it);
+		}
+		if (g_fxSmoke && g_smokeLeft > 0.0f) {  // a thin wisp from the barrel for a moment after the last shot
+			g_smokeLeft -= dt;
+			g_smokeGap -= dt;
+			if (g_smokeGap <= 0.0f) {
+				g_smokeGap = 0.09f;
+				RE::NiPoint3 muzzle{}, breech{};
+				Vec3         dir{}, up{}, right{};
+				float        length = 0.0f;
+				if (BarrelFrame(a_player, muzzle, breech, dir, up, right, length)) {
+					AddPuff(muzzle, dir, up, 4.0f, 16.0f, 0.9f);
+				}
+			}
+		}
+		static const char* const elements[] = { "plain", "fire", "shock", "corrosive", "slag" };
+		for (auto it = g_fx.begin(); it != g_fx.end();) {
+			Fx& f = *it;
+			f.age += dt;
+			if (f.age > f.life) {
+				it = g_fx.erase(it);
+				continue;
+			}
+			if (f.kind == 0) {  // a casing: thrown out, falls
+				f.vel.z -= 1300.0f * dt;
+				f.spin += 24.0f * dt;
+			} else if (f.kind == 1) {  // smoke: slows, rises a little
+				const float drag = std::exp(-1.6f * dt);
+				f.vel = { f.vel.x * drag, f.vel.y * drag, f.vel.z * drag };
+			}
+			f.pos = { f.pos.x + f.vel.x * dt, f.pos.y + f.vel.y * dt, f.pos.z + f.vel.z * dt };
+			if (f.age < f.next) {
+				++it;
+				continue;
+			}
+			const float share = f.age / f.life;
+			std::string mesh;
+			float       scale = 1.0f;
+			RE::NiMatrix3 rotation;
+			rotation.SetEulerAnglesXYZ(f.spin, f.tilt, 0.0f);
+			if (f.kind == 0) {
+				mesh = "Skylands\\Fx_Casing.nif";
+				f.next = f.age + 0.033f;
+			} else if (f.kind == 1) {
+				mesh = std::string("Skylands\\Fx_Smoke_") + std::to_string((std::min)(2, static_cast<int>(share * 3.0f))) + ".nif";
+				scale = 1.0f + share * 2.4f;
+				f.next = f.age + 0.06f;
+			} else {
+				mesh = std::string("Skylands\\Fx_Burst_") + elements[std::clamp(f.element, 0, 4)] + ".nif";
+				scale = 0.8f + share * 1.6f;
+				f.next = f.age + 0.05f;
+			}
+			static std::atomic_int told{ 0 };
+			if (told.fetch_add(1) < 4) {
+				SKSE::log::info("effect: kind {} {} at {:.0f} {:.0f} {:.0f}", f.kind, mesh, f.pos.x, f.pos.y, f.pos.z);
+			}
+			RE::BSTempEffectParticle::Spawn(cell, 0.07f, mesh.c_str(), rotation, f.pos, scale, 0, nullptr);
+			++it;
+		}
+	}
+
 	void SetFov(float a_degrees)
 	{
 		if (const auto setting = RE::GetINISetting("fDefaultWorldFOV:Display")) {
@@ -963,9 +1180,41 @@ namespace
 	// gun in the hand followed it), and is held straight in front of the view: its barrel along the view, its top up, its muzzle a little ahead of the eye and below
 	// the crosshair (ini AimForward / AimDown / AimRight). The three reference nodes of the mesh (SkylandsMuzzle, SkylandsBreech, SkylandsTop) say which way the
 	// gun's own barrel and top run; they are constant in the weapon's own axes whatever its place.
+	void ShowHands()
+	{
+		for (auto& g : g_aim.hidden) {
+			if (g) {
+				g->SetAppCulled(false);
+			}
+		}
+		g_aim.hidden.clear();
+	}
+
+	// Everything drawn under the first-person root except the gun itself (the arms, gloves and sleeves) is switched off, so the gun floats alone in front of the view.
+	void HideHands(RE::NiNode* a_root, RE::NiAVObject* a_gun)
+	{
+		std::vector<RE::NiNode*> stack{ a_root };
+		while (!stack.empty() && g_aim.hidden.size() < 64) {
+			const auto node = stack.back();
+			stack.pop_back();
+			for (auto& child : node->GetChildren()) {
+				if (!child || child.get() == a_gun) {
+					continue;
+				}
+				if (const auto n = child->AsNode()) {
+					stack.push_back(n);
+				} else if (!child->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+					child->SetAppCulled(true);
+					g_aim.hidden.emplace_back(child.get());
+				}
+			}
+		}
+	}
+
 	void RestoreGun()
 	{
 		g_stage = "aim: gun back to the hand";
+		ShowHands();
 		if (!g_aim.gun) {
 			return;
 		}
@@ -1144,6 +1393,13 @@ namespace
 		const float         ang = std::acos(cosA);
 		const Vec3          axis = Norm({ delta.entry[2][1] - delta.entry[1][2], delta.entry[0][2] - delta.entry[2][0], delta.entry[1][0] - delta.entry[0][1] });
 		gun->local.rotate = ang > 1e-4f ? MatMul(Turn(axis, ang * b), g_aim.startRot) : g_aim.startRot;
+		g_stage = "aim: hands";
+		if (g_hideHands && b >= 0.4f && g_aim.hidden.empty()) {
+			HideHands(rootNode, gun);
+			SKSE::log::info("aim: {} arm parts hidden", g_aim.hidden.size());
+		} else if ((!g_hideHands || b < 0.4f) && !g_aim.hidden.empty()) {
+			ShowHands();
+		}
 		// the gun's world transform is worked out now, from the root and the camera as they are at this moment, so that what is drawn is not a frame behind the view
 		RE::NiUpdateData update{};
 		gun->UpdateDownwardPass(update, 0);
@@ -1553,6 +1809,8 @@ namespace
 	{
 		g_stage = "tick: gun";
 		TickGun();
+		g_stage = "tick: effects";
+		FxFrame(RE::PlayerCharacter::GetSingleton(), Clock::now());
 		g_stage = "tick: hud";
 		HudFrame(Clock::now());
 		g_stage = "tick: done";
@@ -1898,7 +2156,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 10, 1, 0 },
+	.Version = { 1, 11, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

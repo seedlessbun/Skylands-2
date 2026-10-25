@@ -551,6 +551,8 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     for word in ("plain", "fire", "shock", "corrosive", "slag"):  # the muzzle flash meshes the plugin spawns, one per element colour and size
         for percent in (75, 90):  # submachine guns 25% smaller, assault rifles 10% smaller
             assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"Flash_Staff_{word}_{percent}.nif").read_bytes().startswith(b"Gamebryo File Format")
+    for mesh in ("Fx_Casing", "Fx_Smoke_0", "Fx_Smoke_1", "Fx_Smoke_2", *(f"Fx_Burst_{w}" for w in ("plain", "fire", "shock", "corrosive", "slag"))):  # casings, smoke, impact bursts
+        assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"{mesh}.nif").read_bytes().startswith(b"Gamebryo File Format")
     keys = {r.edid: r for r in recs["KYWD"]}
     assert any("_f75_" in k for k in keys) and any("_f90_" in k for k in keys), "each gun's flash size is in its numbers keyword"
     for mesh in ("Tracer_Staff_fire.nif",):  # one per element the fake game has

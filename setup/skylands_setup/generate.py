@@ -468,6 +468,8 @@ ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
 STAFF_REV = "0.15.0"
 STAFF_SCRIPT = "SkylandsStaffGun20"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
 STAFF_ID_SHIFT = 380  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
+# meshes of the plugin's own small effects (shell casing, three strengths of smoke): name, colour, length, width. They glow (additive), so a darker colour is a fainter one.
+STAFF_FX_MESHES = [("Fx_Casing", (255, 190, 70), 4.0, 0.9), ("Fx_Smoke_0", (140, 140, 140), 7.0, 5.0), ("Fx_Smoke_1", (85, 85, 85), 7.0, 5.0), ("Fx_Smoke_2", (40, 40, 40), 7.0, 5.0)]
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 PROJ_FLAG_MUZZLE_FLASH = 0x8
 PROJ_LIGHT_AT, PROJ_SOUND_AT, PROJ_SOUND_COUNTDOWN_AT = 16, 40, 56
@@ -599,7 +601,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.25.1"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.26.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -948,6 +950,10 @@ class Armory:
                 # the muzzle flash meshes the plugin spawns at the barrel (one in each element's colour and each size); they are not a projectile feature
                 self.tracers[f"Skylands\\Flash_Staff_{word}_{percent}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, STAFF_FLASH_LENGTH * percent / 100, STAFF_FLASH_WIDTH * percent / 100,
                                                                                         forward=True)
+        for name, rgb, length, width in STAFF_FX_MESHES:
+            self.tracers[f"Skylands\\{name}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, length, width, forward=True)
+        for word, rgb in (("plain", STAFF_TRACER_RGB[None]), *((n.lower(), STAFF_TRACER_RGB[n.lower()]) for n in ELEMENT_NAMES)):
+            self.tracers[f"Skylands\\Fx_Burst_{word}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, 10.0, 7.0, forward=True)  # the small burst where an elemental bullet ends
         self.report["staff_tracer"] = list(self.tracers.items())
         self.report["staff_gun"] = {"guns": self.count, "tracers": len(self.tracers)}
         self.log.append(f"Staff guns: {self.count} built; gifts {[hex(g) for g in gifts]}; {info}")
