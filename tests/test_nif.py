@@ -45,6 +45,16 @@ def test_tracer_resaves_identically_in_nifly(tmp_path):
     assert src.read_bytes() == out.read_bytes()
 
 
+@pytest.mark.skipif(not NIFCHECK, reason="set NIFCHECK to the nifly checker")
+@pytest.mark.parametrize("style", [0, 1, 2])
+def test_rockets_resave_identically_in_nifly(tmp_path, style):
+    src, out = tmp_path / "rocket.nif", tmp_path / "resaved.nif"
+    src.write_bytes(nif.rocket(style, (255, 150, 50), "textures\\skylands\\beam.dds"))
+    r = subprocess.run([NIFCHECK, str(src), str(out)], capture_output=True, text=True, check=True)
+    assert r.stdout.count("shape Tracer") >= 6 and "badtris=0" in r.stdout, r.stdout  # three or four layers of two crossed quads
+    assert src.read_bytes() == out.read_bytes()
+
+
 def _gun_parts():
     from skylands_setup import meshes as M
 

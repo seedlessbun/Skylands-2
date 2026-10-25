@@ -939,7 +939,7 @@ def class_choice_quest(bolts: bool = True) -> Script:
     )
 
 
-def watcher(bolts: bool = True) -> Script:
+def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None = None) -> Script:
     """SkylandsHunter extends ActiveMagicEffect: the effect of an ability every humanoid race (and so
     every person, and the player) carries. It runs once per person.
 
@@ -1259,9 +1259,10 @@ def watcher(bolts: bool = True) -> Script:
         code=[
             ("callmethod", ("id", "HasKeyword"), ("id", "Me"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
             ("jmpf", ("id", "::temp0"), ("lbl", "no")),
-            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
-            ("callmethod", ("id", "IsHostileToActor"), ("id", "Me"), ("id", "::temp0"), ("id", "player")),
-            ("return", ("id", "::temp0")),
+            *([("return", ("bool", True))] if everyone else [  # every person may carry a gun (staff install), else only those hostile to the player
+                ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+                ("callmethod", ("id", "IsHostileToActor"), ("id", "Me"), ("id", "::temp0"), ("id", "player")),
+                ("return", ("id", "::temp0"))]),
             ("label", "no"),
             ("return", ("bool", False)),
         ],
@@ -1274,6 +1275,7 @@ def watcher(bolts: bool = True) -> Script:
         code=[
             ("callmethod", ("id", "HasKeyword"), ("id", "Me"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
             ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            *([("return", ("bool", True))] if everyone else []),
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             ("cmp_eq", ("id", "::temp0"), ("id", "killer"), ("id", "player")),
             ("jmpf", ("id", "::temp0"), ("lbl", "hostile")),
@@ -1367,7 +1369,7 @@ def watcher(bolts: bool = True) -> Script:
             ("jmpf", ("id", "::temp0"), ("lbl", "bare")),
             ("return", None),
             ("label", "bare"),
-            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::ArmChance_var")),
+            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::ArmChance_var") if arm_percent is None else ("int", arm_percent)),
             ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             call("Equip"),
             ("label", "end"),

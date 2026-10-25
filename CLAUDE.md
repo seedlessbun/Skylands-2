@@ -370,6 +370,16 @@ Other commands:
   (`--gun-shooting staff`; the old partial 'Shooting-Staff' bat is gone). With ~4x the guns the second plugin passes 0xFFF ids, so it is no longer ESL-flagged (`esp.py` drops the flag over 0x1000): it takes a normal
   load-order slot, and the form ids of its records change against earlier builds. The class-choice quest and Hunter keep their old props (Skylands.esp is untouched). UNCONFIRMED in game: all of it (pellet spread and
   damage, rocket look/explosion, sniper zoom, whether the vanilla explosion art reads as 'small', ammo/mesh/sounds for the new types, ids and load order of the now non-light second plugin).
+- 0.28.0 (TestBuild-111, plugin 1.13.0; the user went to sleep and left a list; 0.27.0's push had a plugin that did not compile: the `pellets` field and `case 'p'` edits had been lost in a script that never wrote the file - after every
+  scripted edit check with grep that it applied, and wait for the CI DLL before trusting a version): (1) shotguns: `_p<n>` pellets come from each BL2 gun's own row (cap 24), `Launch` fires them one by one, each at its own random
+  place in the spread cone (uniform disc), one flash/sound per shot; damage per pellet = shot damage / pellets x 1.5; an enemy's cast launches the rest of the pellets (`CastSink`). (2) rockets: launchers' bullets are `Rocket_<style>_<element>.nif`
+  (`nif.rocket`, `nif.glow` = any number of glowing crossed-quad layers) in three looks picked by the gun's variant `k % 3` (the gun's text names it): 0 Missile (speed x1.1, no light/sound), 1 Heavy rocket (x0.8, a little gravity,
+  donor light and flight sound, dark smoke tail), 2 Plasma rocket (x1.5, light and sound); keyword `_t<1..3>` tells the plugin the exhaust: it tracks the launched projectile's handle (`TrackRocket`) and leaves flame (`Fx_Flame_0..2`)
+  and smoke (`Fx_Smoke_0..2`, three strengths by age) behind it every 30 ms, and a launcher puffs back-blast smoke (ini `Rockets`); no casings from launchers. Explosions are the real `SkylandsBlast_launcher_*` ones (radius 420). (3) People:
+  the Hunter script of a staff install (`scripts.watcher(bolts=False, everyone=True, arm_percent=70)`) lets EVERY person with the NPC keyword (not only the player's enemies) roll for a gun, 70 percent (a literal in the pex, because a
+  saved property keeps its old value), and a person's death can drop a new gun (`Worthy`) whoever killed them; the plugin also gives bodies ammo: the held gun's (10-30) and, for 30-60 percent of humanoid bodies, 6-20 of a random kind
+  (`SkylandsAmmos_<id>_..` keyword on every gun lists the six ammo items; log "ammo set"). Chest lists get the six ammo items through the overridden `SkylandsAmmoDrop`. The gun models of all types use the same hold, grip, muzzle and
+  breech/top marks as the SMG and rifle (only `models.LENGTH` differs). UNCONFIRMED in game: everything in this entry.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

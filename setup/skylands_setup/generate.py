@@ -469,7 +469,9 @@ STAFF_REV = "0.15.0"
 STAFF_SCRIPT = "SkylandsStaffGun20"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
 STAFF_ID_SHIFT = 380  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
 # meshes of the plugin's own small effects (the shell casing): name, colour, length, width. They glow (additive), so a darker colour is a fainter one.
-STAFF_FX_MESHES = [("Fx_Casing", (255, 190, 70), 4.0, 0.9)]
+STAFF_FX_MESHES = [("Fx_Casing", (255, 190, 70), 4.0, 0.9),
+                   ("Fx_Smoke_0", (140, 140, 140), 7.0, 5.0), ("Fx_Smoke_1", (85, 85, 85), 7.0, 5.0), ("Fx_Smoke_2", (40, 40, 40), 7.0, 5.0),  # the rocket exhaust and back-blast, by age
+                   ("Fx_Flame_0", (255, 150, 50), 9.0, 5.0), ("Fx_Flame_1", (255, 205, 90), 9.0, 5.5), ("Fx_Flame_2", (110, 190, 255), 9.0, 4.5)]
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 PROJ_FLAG_MUZZLE_FLASH = 0x8
 PROJ_LIGHT_AT, PROJ_SOUND_AT, PROJ_SOUND_COUNTDOWN_AT = 16, 40, 56
@@ -563,6 +565,12 @@ STAFF_FLASH_LIGHT_RADIUS = 260
 STAFF_MUZZLE_FLASH = False  # 0.17.0 turned the projectile's muzzle flash on and the game crashed on the first shot the plugin launched: off until a safer way is tested
 STAFF_KINDS = ("smg", "assault_rifle", "pistol", "shotgun", "sniper", "launcher")  # every gun type is a staff gun (the first two keep their ids from the earlier builds; the gifts are the first two)
 STAFF_NPC_BURST_MAX = 6
+ROCKET_SPEED = (1.1, 0.8, 1.5)  # the rocket's speed against the Borderlands speed / 3 (3000 / 3 = 1000), by look: missile, heavy rocket, plasma rocket
+ROCKET_GRAVITY = (0.0, 0.04, 0.0)  # the heavy one drops a little over distance
+ROCKET_LIGHT = (False, True, True)  # keeps the donor projectile's light along the flight
+ROCKET_SOUND = (False, True, True)  # ... and its flight sound
+ROCKET_TRAIL = (1, 2, 3)  # the number the plugin reads (keyword _t) to draw the exhaust: 1 flame and thin smoke, 2 heavy smoke, 3 sparks
+STAFF_ARM_PERCENT = 70  # the share of people (everyone with the NPC keyword, hostile or not) who load carrying a gun in a staff install (the pex uses this, not the saved property)
 
 
 def muzzle_light(view: esp.Plugin, m: "Masters", edid: str, rgb: tuple[int, int, int], radius: int) -> int:
@@ -602,7 +610,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.27.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.28.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -724,31 +732,38 @@ class Armory:
             self.keywords[edid] = self.view.new("KYWD", edid).form_id
         return self.keywords[edid]
 
-    def _bullet(self, kind: str, element: str | None, gt, shot):
+    def _bullet(self, kind: str, element: str | None, gt, shot, style: int | None = None):
         """The projectile and effect of one gun type x element, shared by its guns: (projectile id, the effect record's parts).
         A plain gun's bullet carries no element at all (no hit art, shader, impact, sound, keyword or resist: the donor staff's fire is stripped);
         an elemental gun's bullet is made from a staff of that element and carries only that one element's hit; nothing explodes visibly."""
-        key = (kind, element)
+        key = (kind, element, style)
         if key in self.bullets:
             return self.bullets[key]
         elem_donor = self._element_donor(element)
         plain = elem_donor is None
         donor = elem_donor or self._donor(None)
         _, _, d_mgef, d_proj = donor
-        edid = f"SkylandsStaffBullet_{kind}_{(element or 'plain').lower()}"
+        edid = f"SkylandsStaffBullet_{kind}_{(element or 'plain').lower()}" + ("" if style is None else f"_r{style}")
         t_len, t_wid = STAFF_TRACER_SIZE.get(kind, (STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH))
         mesh = f"Skylands\\Tracer_Staff_{(element or 'plain').lower()}{'' if kind not in STAFF_TRACER_SIZE else '_' + kind}.nif"
-        if mesh not in self.tracers:
+        if style is not None:  # a launcher's rocket: a bigger, slower projectile in one of three looks (the gun's variant picks one)
+            mesh = f"Skylands\\Rocket_{style}_{(element or 'plain').lower()}.nif"
+            if mesh not in self.tracers:
+                self.tracers[mesh] = nif.rocket(style, STAFF_TRACER_RGB.get(element.lower() if element else None, (255, 150, 50)), BEAM_TEXTURE)
+        elif mesh not in self.tracers:
             self.tracers[mesh] = nif.tracer(STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None]), BEAM_TEXTURE, t_len, t_wid)
         pr = esp.Rec("PROJ", self.view.new_id(f"PROJ:{edid}"), [(sig, d) for sig, d in d_proj.subrecords if sig not in ("VMAD", "MODT", "NAM1", "NAM2")])
         pr.set("EDID", esp.zstr(edid))
         pr.set("MODL", esp.zstr(mesh))  # the glowing tracer (nif.tracer) instead of the donor's fireball
         pd = bytearray(d_proj.first("DATA"))
-        speed = float(shot.speed_bl2 if shot else 20000) * BL2_TO_SKYRIM_SPEED * STAFF_BULLET_SPEED
-        struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0, speed)
+        speed = float(shot.speed_bl2 if shot else 20000) * BL2_TO_SKYRIM_SPEED * (STAFF_BULLET_SPEED if style is None else ROCKET_SPEED[style])
+        struct.pack_into("<ff", pd, PROJ_GRAVITY_AT, 0.0 if style is None else ROCKET_GRAVITY[style], speed)
         struct.pack_into("<f", pd, PROJ_RANGE_AT, 30000.0)
-        struct.pack_into("<II", pd, PROJ_LIGHT_AT, 0, 0)  # the donor's firelight and muzzle light
-        struct.pack_into("<I", pd, PROJ_SOUND_AT, 0)  # the donor's flight sound
+        keep_light, keep_sound = style is not None and ROCKET_LIGHT[style], style is not None and ROCKET_SOUND[style]  # rockets may keep the donor's glow and whoosh
+        light_now = struct.unpack_from("<I", pd, PROJ_LIGHT_AT)[0]
+        struct.pack_into("<II", pd, PROJ_LIGHT_AT, light_now if keep_light else 0, 0)  # the donor's firelight (and never its muzzle light)
+        if not keep_sound:
+            struct.pack_into("<I", pd, PROJ_SOUND_AT, 0)  # the donor's flight sound
         flags = struct.unpack_from("<H", pd, PROJ_FLAGS_AT)[0] & ~PROJ_FLAG_MUZZLE_FLASH
         flash = None
         if STAFF_MUZZLE_FLASH:  # our own glowing burst and a short light, shown for a moment where the bullet leaves
@@ -797,7 +812,8 @@ class Armory:
         shot = S.SHOOTING.get(kind)
         donor = self._donor(element) or self._donor(None)
         _, d_ench, d_mgef, _ = donor
-        proj_id, (mparts, mdata) = self._bullet(kind, element, gt, shot)
+        style = k % len(nif.ROCKET_STYLES) if kind == "launcher" else None  # the look of a rocket, by variant, so all three can be compared in play
+        proj_id, (mparts, mdata) = self._bullet(kind, element, gt, shot, style)
         row = self.gunner.rows[self.gunner.index[(kind, g.get("manufacturer", ""))]] if (kind, g.get("manufacturer", "")) in self.gunner.index \
             else self.gunner.rows[KINDS.index(kind)]
         magazine = int(clip or row["clip"])
@@ -806,8 +822,12 @@ class Armory:
         reload_s = max(0.3, float(st["reload"]))
         spread = float(row["spread"]) * float(st.get("spread_mult", 1.0))
         burst = max(1, min(STAFF_NPC_BURST_MAX, int(row["burst"])))
-        pellets = max(1, min(12, int(row.get("pellets", 1) or 1)))  # projectiles in one shot (shotguns)
+        pellets = max(1, min(24, int(row.get("pellets", 1) or 1)))  # projectiles in one shot (shotguns)
         text = f"{text} Accuracy: shots spread {spread:.1f} degrees."
+        if kind == "launcher":
+            text += f" Rocket: {nif.ROCKET_STYLES[k % len(nif.ROCKET_STYLES)]}."
+        elif pellets > 1:
+            text += f" {pellets} pellets a shot."
         # the effect: this gun's own copy of the bullet effect, which carries its stats text (the crossbow guns show theirs the same way)
         mg = esp.Rec("MGEF", self.view.new_id(f"MGEF:Staff_{edid}"), [("EDID", esp.zstr(f"Staff_{edid}"))])
         mg.subs += [(sig, d) for sig, d in mparts]
@@ -842,9 +862,10 @@ class Armory:
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}_m{self.ammo_ids[kind] & 0xFFFFFF}_p{pellets}"
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}_m{self.ammo_ids[kind] & 0xFFFFFF}_p{pellets}_t{0 if style is None else ROCKET_TRAIL[style]}"
         self.kinds.add(kind)
-        ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
+        ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}"),
+               self._keyword("SkylandsAmmos_" + "_".join(str(self.ammo_ids[k] & 0xFFFFFF) for k in STAFF_KINDS))]  # every ammo item of the set: the plugin gives bodies some of any kind
         mfr = g.get("manufacturer", "")
         own = [self._shot_sndr(kind, mfr), *(self._shot_sndr(kind, mfr, part) for part in RELOAD_PARTS)]
         if any(x is not None for x in own):  # this gun type from this manufacturer has its own Borderlands shot or reload sounds
@@ -1392,9 +1413,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     (out_data / PLUGIN).write_bytes(p.encode())
     if view.records:
         (out_data / MODELS_PLUGIN).write_bytes(view.encode())
+    staff_all = armory is not None and armory.ok and bool(armory.count)
     (out_data / "Scripts" / "SkylandsHunterQuest.pex").write_bytes(pex.write(scripts.class_choice_quest(bolts=not (armory is not None and armory.ok and armory.count))))
     (out_data / "Scripts" / "SkylandsHunterPower.pex").write_bytes(pex.write(scripts.respawn_power()))
-    (out_data / "Scripts" / "SkylandsHunter.pex").write_bytes(pex.write(scripts.watcher(bolts=not (armory is not None and armory.ok and armory.count))))  # staff guns need no bolts
+    (out_data / "Scripts" / "SkylandsHunter.pex").write_bytes(pex.write(scripts.watcher(bolts=not staff_all, everyone=staff_all, arm_percent=STAFF_ARM_PERCENT if staff_all else None)))  # staff guns need no bolts
     if rounds is not None:
         (out_data / "Meshes" / "Skylands" / "AimPoint.nif").write_bytes(nif.empty())
         (out_data / "Scripts" / "SkylandsGunner.pex").write_bytes(pex.write(scripts.gunner()))

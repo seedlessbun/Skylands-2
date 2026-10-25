@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 211;  // 1.11.1
+	constexpr std::int32_t kVersion = 230;  // 1.13.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -47,6 +47,7 @@ namespace
 	float g_recoilAim = 0.6f;      // the kick's share while fully aimed (ini: RecoilAim)
 	float g_recoilGun = 1.0f;      // how far the aimed gun model jerks back with a shot, in units, at the reference rate (ini: RecoilGun)
 	bool  g_hideHands = true;      // the arms are hidden while fully aimed, so only the gun is in front of the view (ini: HideHands=0 turns it off)
+	bool  g_fxRocket = true;       // a rocket's exhaust trail and the back-blast of its launcher (ini: Rockets=0 turns them off)
 	bool  g_fxCasing = true;       // shell casings fly out of the gun (ini: Casings=0 turns them off)
 	float g_sway = 1.0f;           // the aimed gun's sway (breathing, walking, turning) as a multiple of the default; 0 = none (ini: Sway)
 
@@ -127,9 +128,9 @@ namespace
 					(key == "RecoilPitch" ? g_recoilPitch : key == "RecoilYaw" ? g_recoilYaw : key == "RecoilRecover" ? g_recoilRecover : key == "RecoilAim" ? g_recoilAim : key == "RecoilGun" ? g_recoilGun : g_sway) = v;
 				} catch (...) {
 				}
-			} else if (key == "HideHands" || key == "Casings") {
+			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
-				(key == "HideHands" ? g_hideHands : g_fxCasing) = on;
+				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
 			} else if (key == "Convergence") {
 				try {
 					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
@@ -319,10 +320,15 @@ namespace
 		int   burst{ 1 };        // rounds per burst of an enemy
 		int   element{ 0 };      // 0 none, 1 fire, 2 shock, 3 corrosive, 4 slag (the colour of the muzzle flash)
 		int   flash{ 100 };      // the size of the muzzle flash in percent (the flash mesh's file name carries it)
+		int   pellets{ 1 };      // bullets in one shot (a shotgun's pellets)
+		int   trail{ 0 };        // a rocket's exhaust look: 0 none (not a rocket), 1 flame and thin smoke, 2 heavy smoke, 3 sparks
 		int   zoom{ 10 };        // the magnification when aimed, in tenths (13 is 1.3x)
 		int   rarity{ 0 };       // 1 common ... 6 e-tech (the colour of its name on the display)
 		std::uint32_t ammo{ 0 };  // the form id (without its file) of the item this gun uses as ammo; 0: none, the reserve is unlimited
 	};
+
+	std::vector<std::uint32_t> g_ammoLocals;  // the form ids (without the file) of every ammo item of the set, read from the SkylandsAmmos_ keyword of a gun
+	RE::FormID                 g_ammoEnch = 0;  // the enchantment of a gun it was read from: it tells which file the ammo items are in
 
 	std::mutex                                     g_gunLock;
 	std::unordered_map<RE::FormID, GunInfo>        g_guns;
@@ -345,6 +351,22 @@ namespace
 			// the member, not the virtual GetFormEditorID (a vtable slot that moved between runtimes would read garbage)
 			const std::string_view edid = a_keyword && a_keyword->formEditorID.c_str() ? a_keyword->formEditorID.c_str() : "";
 			++seen;
+			if (edid.starts_with("SkylandsAmmos_") && g_ammoLocals.empty() && a_weapon->formEnchanting) {
+				std::size_t at = 14;
+				while (at < edid.size()) {
+					const auto end = edid.find('_', at);
+					const std::string_view part = edid.substr(at, end == std::string_view::npos ? std::string_view::npos : end - at);
+					if (!part.empty()) {
+						g_ammoLocals.push_back(static_cast<std::uint32_t>(std::strtoul(std::string(part).c_str(), nullptr, 10)));
+					}
+					if (end == std::string_view::npos) {
+						break;
+					}
+					at = end + 1;
+				}
+				g_ammoEnch = a_weapon->formEnchanting->GetFormID();
+				SKSE::log::info("ammo set: {} items read from {}", g_ammoLocals.size(), edid);
+			}
 			if (names.size() < 300) {
 				names += std::string(edid) + " ";
 			}
@@ -374,6 +396,8 @@ namespace
 					case 'f': info.flash = value; break;
 					case 'z': info.zoom = value; break;
 					case 'm': info.ammo = static_cast<std::uint32_t>(value); break;
+					case 'p': info.pellets = std::clamp(value, 1, 24); break;
+					case 't': info.trail = std::clamp(value, 0, 3); break;
 					default: break;
 					}
 				}
@@ -439,11 +463,12 @@ namespace
 		}
 	}
 
-	void EmitShotFx(RE::PlayerCharacter* a_player);
+	void EmitShotFx(RE::PlayerCharacter* a_player, int a_trail);
+	void TrackRocket(const RE::ProjectileHandle& a_handle, const RE::NiPoint3& a_from, int a_trail);
 
 	// Launches the held gun's bullet. The player's bullets cross the crosshair (a_target null); an enemy's go at a_target's chest.
 	// right, up and forward move the start in the view's own axes; spreadMult scales the gun's spread (the player's accuracy relics).
-	bool Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward, float a_spreadMult, RE::NiPoint3* a_originOut = nullptr)
+	bool Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward, float a_spreadMult, RE::NiPoint3* a_originOut = nullptr, int a_pellets = -1)
 	{
 		g_stage = "launch";
 		const auto shooter = RE::TESForm::LookupByID<RE::Actor>(a_shooter);
@@ -516,7 +541,7 @@ namespace
 		const bool tell = launches.fetch_add(1) < 3;  // the first launches are told before and after, so a crash inside the game's launch shows in the log
 		static thread_local std::mt19937 rng{ std::random_device{}() };
 		std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-		for (int pellet = 0; pellet < (std::max)(1, info.pellets); ++pellet) {
+		for (int pellet = 0; pellet < (a_pellets > 0 ? a_pellets : (std::max)(1, info.pellets)); ++pellet) {
 			float aimPitch = pitch, aimHeading = heading;
 			if (spread > 0.0f) {
 				const float radius = spread * std::numbers::pi_v<float> / 180.0f * std::sqrt(unit(rng));
@@ -535,6 +560,9 @@ namespace
 			if (tell && pellet == 0) {
 				SKSE::log::info("launched");
 			}
+			if (info.trail > 0) {
+				TrackRocket(handle, origin, info.trail);
+			}
 		}
 		if (a_originOut) {
 			*a_originOut = origin;
@@ -546,7 +574,7 @@ namespace
 			SpawnFlash(shooter, { origin.x - aim.x * back, origin.y - aim.y * back, origin.z - aim.z * back }, pitch, heading, info.element, info.flash);
 		} else {  // the player's flash is drawn by FollowFlash from the next tick on, glued to the muzzle node
 			g_flashFollow = { std::chrono::steady_clock::now() + std::chrono::milliseconds(60), info.element, info.flash };
-			EmitShotFx(RE::PlayerCharacter::GetSingleton());
+			EmitShotFx(RE::PlayerCharacter::GetSingleton(), info.trail);
 		}
 		return true;
 	}
@@ -641,24 +669,38 @@ namespace
 			static thread_local std::mt19937 rng{ std::random_device{}() };
 			GunInfo    info{};
 			const auto weapon = HeldGun(dying, info);
+			std::vector<std::pair<RE::FormID, int>> loot;  // what the body will carry: the ammo of its gun, and sometimes a few of any other kind
 			if (const auto ammo = AmmoOf(weapon, info)) {
+				loot.emplace_back(ammo->GetFormID(), std::uniform_int_distribution<int>(10, 30)(rng));
+			}
+			const auto race = dying->GetRace();
+			if (!g_ammoLocals.empty() && race && race->HasKeywordString("ActorTypeNPC") && std::uniform_int_distribution<int>(1, 100)(rng) <= (weapon ? 30 : 60)) {
+				const std::uint32_t local = g_ammoLocals[std::uniform_int_distribution<std::size_t>(0, g_ammoLocals.size() - 1)(rng)];
+				const RE::FormID    id = (g_ammoEnch >> 24) == 0xFE ? ((g_ammoEnch & 0xFFFFF000u) | (local & 0xFFFu)) : ((g_ammoEnch & 0xFF000000u) | (local & 0xFFFFFFu));
+				loot.emplace_back(id, std::uniform_int_distribution<int>(6, 20)(rng));
+			}
+			if (!loot.empty()) {
 				// not inside the death event (changing a body's pack while the game is still killing it is a known way to crash): a moment later, from the game thread,
 				// looking the body up again
-				const int           count = std::uniform_int_distribution<int>(10, 30)(rng);
-				const RE::FormID    body = dying->GetFormID(), item = ammo->GetFormID();
-				std::thread([body, item, count]() {
+				const RE::FormID body = dying->GetFormID();
+				std::thread([body, loot]() {
 					std::this_thread::sleep_for(std::chrono::milliseconds(800));
-					RunOnGameThread([body, item, count]() {
+					RunOnGameThread([body, loot]() {
 						g_stage = "ammo drop";
 						const auto actor = RE::TESForm::LookupByID<RE::Actor>(body);
-						const auto what = RE::TESForm::LookupByID<RE::TESBoundObject>(item);
-						if (!actor || !what || !actor->IsDead()) {
+						if (!actor || !actor->IsDead()) {
 							return;
 						}
-						actor->AddObjectToContainer(what, nullptr, count, nullptr);
-						static std::atomic_int told{ 0 };
-						if (told.fetch_add(1) < 4) {
-							SKSE::log::info("ammo drop: {:08X} carries {} of {:08X}", body, count, item);
+						for (const auto& [item, count] : loot) {
+							const auto what = RE::TESForm::LookupByID<RE::TESBoundObject>(item);
+							if (!what) {
+								continue;
+							}
+							actor->AddObjectToContainer(what, nullptr, count, nullptr);
+							static std::atomic_int told{ 0 };
+							if (told.fetch_add(1) < 6) {
+								SKSE::log::info("ammo drop: {:08X} carries {} of {:08X}", body, count, item);
+							}
 						}
 					});
 				}).detach();
@@ -697,10 +739,24 @@ namespace
 				SKSE::log::info("enemy {:08X} cast {:08X} holding gun {:08X} (its enchantment {:08X}): {}", actor->GetFormID(), a_event->spell,
 					weapon->GetFormID(), weapon->formEnchanting->GetFormID(), ours ? "a burst of " + std::to_string(info.burst) : "not the gun's own cast"s);
 			}
-			if (!ours || info.burst < 2) {
+			if (!ours) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const RE::FormID shooter = actor->GetFormID();
+			if (info.pellets > 1) {  // the game's own cast sent one pellet: the rest of the shot's pellets follow it at once
+				const int rest = info.pellets - 1;
+				RunOnGameThread([shooter, rest]() {
+					const auto who = RE::TESForm::LookupByID<RE::Actor>(shooter);
+					if (!who || who->IsDead() || !who->Is3DLoaded()) {
+						return;
+					}
+					const auto target = who->GetActorRuntimeData().currentCombatTarget.get();
+					Launch(shooter, target ? target->GetFormID() : 0, 0.0f, 0.0f, 0.0f, 1.0f, nullptr, rest);
+				});
+			}
+			if (info.burst < 2) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
 			const int        more = info.burst - 1;
 			const auto       gap = std::chrono::milliseconds(static_cast<int>(info.interval * 1000.0f));
 			std::thread([shooter, more, gap]() {
@@ -920,11 +976,29 @@ namespace
 	// 33 ms, so a casing flies in an arc. Nothing is placed in the world (no references, nothing in a save).
 	struct Fx
 	{
+		int          kind{ 0 };  // 0 casing, 1 smoke, 2 flame
+		int          look{ 0 };  // the rocket look (0 to 2) for smoke and flame
 		RE::NiPoint3 pos{};
 		Vec3         vel{ 0.0f, 0.0f, 0.0f };
-		float        age{ 0.0f }, life{ 0.6f }, next{ 0.0f }, spin{ 0.0f }, tilt{ 0.0f };
+		float        age{ 0.0f }, life{ 0.6f }, next{ 0.0f }, spin{ 0.0f }, tilt{ 0.0f }, size{ 1.0f };
 	};
 	std::vector<Fx> g_fx;
+	struct Rocket
+	{
+		RE::ProjectileHandle handle;
+		RE::NiPoint3         last{};
+		int                  trail{ 1 };
+		float                age{ 0.0f }, emit{ 0.0f };
+	};
+	std::vector<Rocket> g_rockets;
+
+	void TrackRocket(const RE::ProjectileHandle& a_handle, const RE::NiPoint3& a_from, int a_trail)
+	{
+		if (!g_fxRocket || !a_handle.get() || g_rockets.size() > 24) {
+			return;
+		}
+		g_rockets.push_back({ a_handle, a_from, a_trail, 0.0f, 0.0f });
+	}
 
 	float Rand01();
 
@@ -955,15 +1029,35 @@ namespace
 	}
 
 	// per shot, for the player's gun: a casing out of the ejection side of the receiver
-	void EmitShotFx(RE::PlayerCharacter* a_player)
+	void EmitShotFx(RE::PlayerCharacter* a_player, int a_trail)
 	{
-		if (!a_player || !g_fxCasing || g_fx.size() >= 80) {
+		if (!a_player || g_fx.size() >= 70) {
 			return;
 		}
 		RE::NiPoint3 muzzle{}, breech{};
 		Vec3         dir{}, up{}, right{};
 		float        length = 0.0f;
 		if (!BarrelFrame(a_player, muzzle, breech, dir, up, right, length)) {
+			return;
+		}
+		if (a_trail > 0) {  // a launcher: no casing; a cloud of back-blast smoke instead
+			if (!g_fxRocket) {
+				return;
+			}
+			for (int i = 0; i < 5; ++i) {
+				Fx p;
+				p.kind = 1;
+				p.look = a_trail - 1;
+				p.pos = { breech.x + dir.x * length * 0.1f, breech.y + dir.y * length * 0.1f, breech.z + dir.z * length * 0.1f };
+				p.vel = { -dir.x * (40.0f + Rand01() * 50.0f) + (Rand01() - 0.5f) * 40.0f, -dir.y * (40.0f + Rand01() * 50.0f) + (Rand01() - 0.5f) * 40.0f,
+					-dir.z * (40.0f + Rand01() * 50.0f) + 10.0f + Rand01() * 30.0f };
+				p.life = 0.9f;
+				p.size = 1.4f;
+				g_fx.push_back(p);
+			}
+			return;
+		}
+		if (!g_fxCasing) {
 			return;
 		}
 		Fx f;
@@ -991,6 +1085,43 @@ namespace
 			return;
 		}
 		g_stage = "effects";
+		// the rockets in flight: an exhaust of flame and smoke is left behind them every few hundredths of a second, as long as the game still holds the projectile
+		for (auto it = g_rockets.begin(); it != g_rockets.end();) {
+			it->age += dt;
+			const auto p = it->handle.get();
+			if (!p || p->IsDeleted() || p->IsDisabled() || it->age > 12.0f) {
+				it = g_rockets.erase(it);
+				continue;
+			}
+			const RE::NiPoint3 now = p->GetPosition();
+			it->emit -= dt;
+			if (it->emit <= 0.0f && g_fx.size() < 120) {
+				it->emit = 0.03f;
+				const Vec3 away = Norm({ it->last.x - now.x, it->last.y - now.y, it->last.z - now.z });
+				Fx flame;
+				flame.kind = 2;
+				flame.look = it->trail - 1;
+				flame.pos = now;
+				flame.life = it->trail == 3 ? 0.18f : 0.28f;
+				flame.size = 1.4f;
+				flame.spin = Rand01() * 6.28f;
+				g_fx.push_back(flame);
+				if (it->trail != 3 || Rand01() < 0.3f) {
+					Fx smoke;
+					smoke.kind = 1;
+					smoke.look = it->trail - 1;
+					smoke.pos = { now.x + away.x * 8.0f, now.y + away.y * 8.0f, now.z + away.z * 8.0f };
+					smoke.vel = { (Rand01() - 0.5f) * 14.0f, (Rand01() - 0.5f) * 14.0f, 8.0f + Rand01() * 10.0f };
+					smoke.life = it->trail == 2 ? 1.6f : 0.9f;
+					smoke.size = it->trail == 2 ? 1.5f : 0.9f;
+					g_fx.push_back(smoke);
+				}
+			}
+			it->last = now;
+			++it;
+		}
+		static const char* const smokes[] = { "Skylands\\Fx_Smoke_0.nif", "Skylands\\Fx_Smoke_1.nif", "Skylands\\Fx_Smoke_2.nif" };
+		static const char* const flames[] = { "Skylands\\Fx_Flame_0.nif", "Skylands\\Fx_Flame_1.nif", "Skylands\\Fx_Flame_2.nif" };
 		for (auto it = g_fx.begin(); it != g_fx.end();) {
 			Fx& f = *it;
 			f.age += dt;
@@ -998,14 +1129,29 @@ namespace
 				it = g_fx.erase(it);
 				continue;
 			}
-			f.vel.z -= 1300.0f * dt;  // thrown out, falls
-			f.spin += 24.0f * dt;
+			const char* mesh = "Skylands\\Fx_Casing.nif";
+			float       scale = 1.0f, step = 0.033f;
+			if (f.kind == 0) {
+				f.vel.z -= 1300.0f * dt;  // thrown out, falls
+				f.spin += 24.0f * dt;
+			} else if (f.kind == 1) {  // smoke: slows, rises a little, swells and fades through three strengths
+				const float drag = std::exp(-1.6f * dt);
+				f.vel = { f.vel.x * drag, f.vel.y * drag, f.vel.z * drag };
+				const float share = f.age / f.life;
+				mesh = smokes[std::clamp(static_cast<int>(share * 3.0f), 0, 2)];
+				scale = f.size * (1.0f + share * 2.2f);
+				step = 0.06f;
+			} else {  // flame: shrinks as it ages
+				mesh = flames[std::clamp(f.look, 0, 2)];
+				scale = f.size * (1.0f - 0.7f * f.age / f.life);
+				step = 0.04f;
+			}
 			f.pos = { f.pos.x + f.vel.x * dt, f.pos.y + f.vel.y * dt, f.pos.z + f.vel.z * dt };
 			if (f.age >= f.next) {
-				f.next = f.age + 0.033f;
+				f.next = f.age + step;
 				RE::NiMatrix3 rotation;
 				rotation.SetEulerAnglesXYZ(f.spin, f.tilt, 0.0f);
-				RE::BSTempEffectParticle::Spawn(cell, 0.07f, "Skylands\\Fx_Casing.nif", rotation, f.pos, 1.0f, 0, nullptr);
+				RE::BSTempEffectParticle::Spawn(cell, 0.07f, mesh, rotation, f.pos, scale, 0, nullptr);
 			}
 			++it;
 		}
@@ -2046,7 +2192,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 11, 1, 0 },
+	.Version = { 1, 13, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

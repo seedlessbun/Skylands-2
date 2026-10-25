@@ -63,6 +63,8 @@ RecoilGun=1.0
 ; the arms are hidden while fully aimed (1 on, 0 off); shell casings out of the gun (1 on, 0 off)
 HideHands=1
 Casings=1
+; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
+Rockets=1
 ; the aimed gun's sway (breathing, walking, a lag behind turns): 1 is the default, 0 none, 2 twice as much
 Sway=1.0
 """
