@@ -54,6 +54,14 @@ AmmoDrops=1
 AimForward=33
 AimDown=6.5
 AimRight=0
+; recoil: degrees the view kicks up with a shot (0 = none), the most it drifts sideways, the share of the kick given back when the shooting stops, the kick's share while aimed, and how far (units) the aimed gun jerks back
+RecoilPitch=0.55
+RecoilYaw=0.22
+RecoilRecover=0.6
+RecoilAim=0.6
+RecoilGun=1.0
+; the aimed gun's sway (breathing, walking, a lag behind turns): 1 is the default, 0 none, 2 twice as much
+Sway=1.0
 """
 
 

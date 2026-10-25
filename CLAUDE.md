@@ -340,6 +340,15 @@ Other commands:
   included the lag. No crash line in that log. 0.24.1 (TestBuild-106, plugin 1.9.1): the camera offset is measured only when the player stands still (`rest`), origin = actor now + rest; defaults ReloadKey 47 (V),
   AimDown 6.5 (user: "down .5"), IniVersion 3; `ReloadMouse` also accepts code 256+n and the plugin logs the first 30 mouse/pad button presses ("button down: device D code C") to find a side button's code.
   The user's mouse reload button did not work in 0.24.0 (cause not yet known).
+- 0.24.1 in game (log plugin 191): the aimed gun stays in place while running, V reloads (user: "very good"). The multi-bullet tap: `TickGun` kept `nextShot` as it was when the trigger went down unless it was MORE
+  than one interval ahead, so after a pause shorter than three intervals the catch-up loop (`fired < 3`) fired the owed rounds at once (2-3 bullets from one tap). Not visible in the log (only the first
+  launches are logged), found in the code.
+- 0.25.0 (TestBuild-107, plugin 1.10.0): (1) tap fix: a pull starts with `nextShot = max(nextShot, now)` (the cooldown holds, no backlog) and a tap that is up again before the tick (`g_latch`) is one round
+  (`tapped`, `most = held ? 3 : 1`); (2) recoil and sway, user chose "both sways and Borderlands-style recoil": `AddKick` per shot (pitch `RecoilPitch` 0.55 deg x sqrt(interval/0.12) x aim share, yaw random +-`RecoilYaw`
+  0.22), `RecoilFrame` per tick applies it to `player->data.angle` within ~35 ms, gives `RecoilRecover` (0.6) of the pitch back 120 ms after the last shot (time constant 0.2 s), jerks the aimed gun back
+  `RecoilGun` units, and works the aimed gun's sway (breathing, walking bob, lag behind turning; `Sway`) into `CenterGun`'s target. Sway is ADS only (the hip gun hangs on the arm animation). Ini keys
+  `RecoilPitch/RecoilYaw/RecoilRecover/RecoilAim/RecoilGun/Sway` (IniVersion stays 3: new keys get defaults). UNCONFIRMED in game: that writing `data.angle` moves the first-person view (the log says
+  "recoil: first kick moved the view pitch a -> b"), the signs (kick up, sway left when turning right), the strengths.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

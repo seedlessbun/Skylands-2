@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 191;  // 1.9.1
+	constexpr std::int32_t kVersion = 200;  // 1.10.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -41,6 +41,12 @@ namespace
 	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
 	float g_convergence = 3000.0f;  // how far ahead the bullets are aimed to cross the crosshair (game units)
+	float g_recoilPitch = 0.55f;   // degrees the view kicks up with a shot at the reference fire rate (ini: RecoilPitch; 0 = no recoil)
+	float g_recoilYaw = 0.22f;     // ... and at most this far sideways, either way (ini: RecoilYaw)
+	float g_recoilRecover = 0.6f;  // the share of the kick the view comes back down by once the shooting stops (ini: RecoilRecover)
+	float g_recoilAim = 0.6f;      // the kick's share while fully aimed (ini: RecoilAim)
+	float g_recoilGun = 1.0f;      // how far the aimed gun model jerks back with a shot, in units, at the reference rate (ini: RecoilGun)
+	float g_sway = 1.0f;           // the aimed gun's sway (breathing, walking, turning) as a multiple of the default; 0 = none (ini: Sway)
 
 	struct Vec3
 	{
@@ -113,6 +119,12 @@ namespace
 				g_ammoText = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "AimCenter") {
 				g_aimCenter = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "RecoilPitch" || key == "RecoilYaw" || key == "RecoilRecover" || key == "RecoilAim" || key == "RecoilGun" || key == "Sway") {
+				try {
+					const float v = std::clamp(std::stof(line.substr(eq + 1)), 0.0f, key == "RecoilRecover" || key == "RecoilAim" ? 1.0f : 10.0f);
+					(key == "RecoilPitch" ? g_recoilPitch : key == "RecoilYaw" ? g_recoilYaw : key == "RecoilRecover" ? g_recoilRecover : key == "RecoilAim" ? g_recoilAim : key == "RecoilGun" ? g_recoilGun : g_sway) = v;
+				} catch (...) {
+				}
 			} else if (key == "Convergence") {
 				try {
 					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
@@ -743,6 +755,114 @@ namespace
 		return 1.0f + (g_aimSpread - 1.0f) * g_aim.blend;
 	}
 
+	// ---- recoil and sway ------------------------------------------------------------------------------------------------
+	// Every shot kicks the view up (and a little sideways): the kick is applied to the player's angles within a few hundredths of a second, and
+	// once the shooting has stopped part of it (RecoilRecover) is given back, so the aim ends up a little higher. The aimed gun model jerks
+	// back with each shot, and sways: breathing when still, a bob when walking, and a lag behind turns of the view.
+	struct KickState
+	{
+		float                pendPitch{ 0.0f }, pendYaw{ 0.0f }, owedPitch{ 0.0f }, gunBack{ 0.0f };  // degrees waiting to be applied, degrees to give back, units
+		float                swayRight{ 0.0f }, swayUp{ 0.0f }, turnYaw{ 0.0f }, turnPitch{ 0.0f }, speed{ 0.0f }, phase{ 0.0f }, lastYaw{ 0.0f }, lastPitch{ 0.0f };
+		float                clock{ 0.0f };
+		RE::NiPoint3         lastPos{};
+		bool                 have{ false }, told{ false };
+		Clock::time_point    lastShot{}, lastFrame{};
+	} g_kick;
+
+	void ResetKick()
+	{
+		g_kick.pendPitch = g_kick.pendYaw = g_kick.owedPitch = g_kick.gunBack = 0.0f;
+		g_kick.swayRight = g_kick.swayUp = g_kick.turnYaw = g_kick.turnPitch = g_kick.speed = 0.0f;
+		g_kick.have = false;
+	}
+
+	float Rand01()
+	{
+		static std::uint32_t s = 2463534242u;
+		s ^= s << 13;
+		s ^= s >> 17;
+		s ^= s << 5;
+		return static_cast<float>(s & 0xFFFFFF) / 16777216.0f;
+	}
+
+	void AddKick(const GunInfo& a_info, Clock::time_point a_now)
+	{
+		const float rateF = std::clamp(std::sqrt(a_info.interval / 0.12f), 0.7f, 1.6f);  // a slower gun kicks harder
+		const float aim = 1.0f - (1.0f - g_recoilAim) * g_aim.blend;
+		const float p = g_recoilPitch * rateF * aim * (0.85f + 0.3f * Rand01());
+		g_kick.pendPitch += p;
+		g_kick.pendYaw += (Rand01() * 2.0f - 1.0f) * g_recoilYaw * aim;
+		g_kick.owedPitch += p * g_recoilRecover;
+		g_kick.gunBack = (std::min)(g_kick.gunBack + g_recoilGun * rateF, g_recoilGun * 3.0f);
+		g_kick.lastShot = a_now;
+	}
+
+	// once a frame, from the tick: applies the kick to the view, gives part of it back, and works out the sway offsets (to the right, up) the aimed gun gets
+	void RecoilFrame(RE::PlayerCharacter* a_player, Clock::time_point a_now)
+	{
+		g_stage = "recoil and sway";
+		constexpr float rad = std::numbers::pi_v<float> / 180.0f;
+		const float     dt = g_kick.have ? std::clamp(std::chrono::duration<float>(a_now - g_kick.lastFrame).count(), 0.001f, 0.1f) : 0.016f;
+		g_kick.lastFrame = a_now;
+		float x = a_player->GetAngleX(), z = a_player->GetAngleZ();
+		const RE::NiPoint3 pos = a_player->GetPosition();
+		float dx = 0.0f, dz = 0.0f;
+		const float a = 1.0f - std::exp(-dt / 0.035f);
+		dx -= g_kick.pendPitch * a * rad;  // pitch is positive downwards: a kick up lowers it
+		dz += g_kick.pendYaw * a * rad;
+		g_kick.pendPitch -= g_kick.pendPitch * a;
+		g_kick.pendYaw -= g_kick.pendYaw * a;
+		if (a_now - g_kick.lastShot > std::chrono::milliseconds(120) && g_kick.owedPitch > 0.0f) {
+			const float back = g_kick.owedPitch * (1.0f - std::exp(-dt / 0.2f));
+			g_kick.owedPitch -= back;
+			dx += back * rad;
+		}
+		if (g_kick.have && (dx != 0.0f || dz != 0.0f)) {
+			const float nx = std::clamp(x + dx, -1.45f, 1.45f);
+			float       nz = std::fmod(z + dz, 2.0f * std::numbers::pi_v<float>);
+			if (nz < 0.0f) {
+				nz += 2.0f * std::numbers::pi_v<float>;
+			}
+			a_player->data.angle.x = nx;
+			a_player->data.angle.z = nz;
+			if (!g_kick.told) {
+				g_kick.told = true;
+				SKSE::log::info("recoil: first kick moved the view pitch {:.3f} -> {:.3f}, heading {:.3f} -> {:.3f} (radians)", x, nx, z, nz);
+			}
+			x = nx;
+			z = nz;
+		}
+		g_kick.gunBack *= std::exp(-dt / 0.07f);
+		// sway
+		if (g_kick.have) {
+			const float walked = std::sqrt((pos.x - g_kick.lastPos.x) * (pos.x - g_kick.lastPos.x) + (pos.y - g_kick.lastPos.y) * (pos.y - g_kick.lastPos.y)) / dt;
+			g_kick.speed += (std::clamp(walked / 400.0f, 0.0f, 1.0f) - g_kick.speed) * (1.0f - std::exp(-dt / 0.15f));
+			float dyaw = z - g_kick.lastYaw;
+			if (dyaw > std::numbers::pi_v<float>) {
+				dyaw -= 2.0f * std::numbers::pi_v<float>;
+			} else if (dyaw < -std::numbers::pi_v<float>) {
+				dyaw += 2.0f * std::numbers::pi_v<float>;
+			}
+			const float follow = 1.0f - std::exp(-dt / 0.09f);  // the view's turning speed, smoothed: the gun lags behind it
+			g_kick.turnYaw += (std::clamp(dyaw / dt, -8.0f, 8.0f) - g_kick.turnYaw) * follow;
+			g_kick.turnPitch += (std::clamp((x - g_kick.lastPitch) / dt, -8.0f, 8.0f) - g_kick.turnPitch) * follow;
+		}
+		g_kick.lastPos = pos;
+		g_kick.lastYaw = z;
+		g_kick.lastPitch = x;
+		g_kick.have = true;
+		g_kick.clock += dt;
+		g_kick.phase += dt * (5.5f + 2.5f * g_kick.speed);
+		const float t = g_kick.clock;
+		const float still = 1.0f - g_kick.speed;
+		float       right = std::sin(t * 0.85f) * 0.10f * still + std::sin(g_kick.phase) * 0.30f * g_kick.speed + g_kick.turnYaw * 0.35f;  // turning right: the gun trails to the left
+		float       up = std::sin(t * 1.55f + 0.7f) * 0.13f * still - std::fabs(std::sin(g_kick.phase)) * 0.45f * g_kick.speed + g_kick.turnPitch * 0.35f;
+		right = std::clamp(right, -1.5f, 1.5f) * g_sway;
+		up = std::clamp(up, -1.5f, 1.5f) * g_sway;
+		g_kick.swayRight = right;
+		g_kick.swayUp = up;
+	}
+
 	void SetFov(float a_degrees)
 	{
 		if (const auto setting = RE::GetINISetting("fDefaultWorldFOV:Display")) {
@@ -939,8 +1059,11 @@ namespace
 		const Vec3 right = Norm(Cross(dir, { 0.0f, 0.0f, 1.0f }));
 		const Vec3 up = Cross(right, dir);
 		const float b = g_aim.blend;
-		const RE::NiPoint3 target{ origin.x + dir.x * g_aimForward + right.x * g_aimRight - up.x * g_aimDown,
-			origin.y + dir.y * g_aimForward + right.y * g_aimRight - up.y * g_aimDown, origin.z + dir.z * g_aimForward + right.z * g_aimRight - up.z * g_aimDown };
+		const float fwd = g_aimForward - g_kick.gunBack;  // the shot jerks the gun back ...
+		const float side = g_aimRight - g_kick.swayRight;  // ... the sway moves it (turning right: the gun lags to the left)
+		const float low = g_aimDown - g_kick.swayUp - g_kick.gunBack * 0.15f;  // ... and a little up
+		const RE::NiPoint3 target{ origin.x + dir.x * fwd + right.x * side - up.x * low, origin.y + dir.y * fwd + right.y * side - up.y * low,
+			origin.z + dir.z * fwd + right.z * side - up.z * low };
 		const float scale = gun->world.scale > 1e-4f ? gun->world.scale : 1.0f;
 		const auto& gw = gun->world;
 		// the muzzle in the weapon's own axes, and its barrel and top directions there
@@ -1397,9 +1520,11 @@ namespace
 	void TickGun()
 	{
 		g_hudShow = false;
+		const bool tapped = g_latch.exchange(false);  // the trigger went down since the last tick (even if it is already up again)
 		const auto player = RE::PlayerCharacter::GetSingleton();
 		if (!g_gunMode.load() || !player || !player->Is3DLoaded() || MenuOpen()) {
 			g_gun.wasHeld = false;
+			ResetKick();
 			if (player) {  // gun put away, menu open, 3D gone: the aim ends and the gun goes back to the hand
 				ReleaseAim(player);
 			}
@@ -1409,6 +1534,7 @@ namespace
 		const auto weapon = HeldGun(player, info);
 		if (!weapon) {
 			g_gun.wasHeld = false;
+			ResetKick();
 			ReleaseAim(player);
 			return;
 		}
@@ -1453,6 +1579,7 @@ namespace
 		const float gap = g_gun.info.interval / rate;
 		g_rateTenths = static_cast<int>(10.0f / gap + 0.5f);
 		g_reloadMs = static_cast<int>(g_gun.info.reload / quick * 1000.0f + 0.5f);
+		RecoilFrame(player, now);
 		UpdateAim(player, g_gun.info, now);
 		g_spreadNowTenths = static_cast<int>(g_gun.info.spread / accuracy * AimFactor() * 10.0f + 0.5f);
 
@@ -1493,7 +1620,8 @@ namespace
 			}
 			g_gun.chambered = false;
 		}
-		if (!g_held.load()) {
+		const bool held = g_held.load();
+		if (!held && !tapped) {
 			g_gun.wasHeld = false;
 			return;
 		}
@@ -1501,23 +1629,30 @@ namespace
 			g_gun.wasHeld = true;
 			g_gun.holdStart = now;
 			g_gun.holdShots = 0;
-			if (g_gun.nextShot > now + std::chrono::milliseconds(static_cast<int>(gap * 1000.0f))) {
+			// A pull never starts with a backlog: rounds "owed" from a pause shorter than three intervals used to come out all at once (two or three
+			// bullets from one tap). The gun's cooldown still holds: a pull before the last shot's interval is over waits for it.
+			if (g_gun.nextShot < now) {
 				g_gun.nextShot = now;
 			}
 		}
 		int fired = 0;
 		const auto step = std::chrono::microseconds(static_cast<long long>(gap * 1000000.0f));
-		while (now >= g_gun.nextShot && g_gun.mag > 0 && fired < 3) {
+		const int most = held ? 3 : 1;  // a tap already over by this tick is one round
+		while (now >= g_gun.nextShot && g_gun.mag > 0 && fired < most) {
 			RE::NiPoint3 at{};
 			if (!Launch(player->GetFormID(), 0, 0.0f, 0.0f, kOffsetForward, AimFactor() / accuracy, &at)) {
 				break;
 			}
 			PlayShot(at);
+			AddKick(g_gun.info, now);
 			--g_gun.mag;
 			++g_gun.holdShots;
 			++fired;
 			++g_shots;
 			g_gun.nextShot = (now - g_gun.nextShot > step * 3) ? now + step : g_gun.nextShot + step;
+		}
+		if (!held) {  // the tap is spent
+			g_gun.wasHeld = false;
 		}
 		if (fired) {
 			SetBar(player, g_gun.mag);
@@ -1721,7 +1856,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 9, 1, 0 },
+	.Version = { 1, 10, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
