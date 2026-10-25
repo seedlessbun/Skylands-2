@@ -1259,7 +1259,10 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
         code=[
             ("callmethod", ("id", "HasKeyword"), ("id", "Me"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
             ("jmpf", ("id", "::temp0"), ("lbl", "no")),
-            *([("return", ("bool", True))] if everyone else [  # every person may carry a gun (staff install), else only those hostile to the player
+            *([("callmethod", ("id", "IsChild"), ("id", "Me"), ("id", "::temp0")),  # every person but children may carry a gun (staff install)
+               ("not", ("id", "::temp0"), ("id", "::temp0")),
+               ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+               ("return", ("bool", True))] if everyone else [  # else only those hostile to the player
                 ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
                 ("callmethod", ("id", "IsHostileToActor"), ("id", "Me"), ("id", "::temp0"), ("id", "player")),
                 ("return", ("id", "::temp0"))]),
@@ -1275,7 +1278,10 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
         code=[
             ("callmethod", ("id", "HasKeyword"), ("id", "Me"), ("id", "::temp0"), ("id", "::NpcKeyword_var")),
             ("jmpf", ("id", "::temp0"), ("lbl", "no")),
-            *([("return", ("bool", True))] if everyone else []),
+            *([("callmethod", ("id", "IsChild"), ("id", "Me"), ("id", "::temp0")),
+               ("not", ("id", "::temp0"), ("id", "::temp0")),
+               ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+               ("return", ("bool", True))] if everyone else []),
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             ("cmp_eq", ("id", "::temp0"), ("id", "killer"), ("id", "player")),
             ("jmpf", ("id", "::temp0"), ("lbl", "hostile")),

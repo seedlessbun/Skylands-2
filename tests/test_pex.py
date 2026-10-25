@@ -293,6 +293,6 @@ def test_the_staff_install_watcher_arms_everyone_seventy_percent_of_the_time_and
     psc = decompile(tmp_path, scripts.watcher(bolts=False, everyone=True, arm_percent=70), "SkylandsHunter")
     eligible = psc.split("Function Eligible()")[1].split("EndFunction")[0]
     assert "IsHostileToActor" not in eligible and "HasKeyword(NpcKeyword)" in eligible, eligible  # any person, not only the player's enemies
-    assert "Roll(70)" in psc and "Roll(ArmChance)" not in psc  # the saved property is not used: an old save keeps its old value
+    assert "IsChild" in eligible and "Roll(70)" in psc and "Roll(ArmChance)" not in psc  # the saved property is not used: an old save keeps its old value
     assert "Bolts" not in psc.split("Function Equip()")[1].split("EndFunction")[0]
     assert "Roll(ArmChance)" in decompile(tmp_path, scripts.watcher(), "SkylandsHunter")  # the other installs are as they were

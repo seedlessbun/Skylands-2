@@ -1162,7 +1162,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     rounds = Rounds(view, m, bolts, base_enchant, report["model_log"]) if shooting in ("bl2", "both", "staff") else None
     if rounds is not None:
         shots = S.SHOOTING
-        for kind in KINDS:
+        for kind in KINDS if shooting != "staff" else []:  # a staff install has no crossbow rounds (their ids stay reserved so every later record keeps its place)
             gtype = next(g for g in S.GUN_TYPES.values() if g.id == kind)
             for element in (None, *ELEMENT_NAMES):
                 rounds.build(kind, element, float(gtype.base_damage), shots.get(kind))
