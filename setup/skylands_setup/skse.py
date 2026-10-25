@@ -23,7 +23,7 @@ ADDRESS_LIBRARY = "https://www.nexusmods.com/skyrimspecialedition/mods/32444"
 DEFAULT_INI = """; SkylandsNative settings
 [Skylands]
 ; the version of this file's defaults: an install keeps the values you changed while this number is the same, and writes the new defaults (the old file is kept as .old) when it is not
-IniVersion=2
+IniVersion=3
 ; how far ahead (game units) the bullets are aimed to cross the crosshair
 Convergence=3000
 ; a short glowing flash at the muzzle with every bullet (1 on, 0 off)
@@ -38,8 +38,8 @@ AimRate=7
 AimCenter=1
 ; the aimed gun is placed from the player's position and angles of this frame (1) or the camera's (0)
 AimPredict=1
-; the reload key as a keyboard scan code (19 is R; while a gun is in the hand it no longer puts the weapon away)
-ReloadKey=19
+; the reload key as a keyboard scan code (47 is V; 19 is R, which is also Ready Weapon: while a gun is in the hand it no longer puts the weapon away)
+ReloadKey=47
 ; a mouse button as the reload key as well (3, 4, 5 ... are the side buttons; -1 none)
 ReloadMouse=-1
 ; short ammo messages on the screen: reloading, magazine full, low ammo (1 on, 0 off)
@@ -52,7 +52,7 @@ HudRight=70
 HudBottom=80
 AmmoDrops=1
 AimForward=33
-AimDown=6
+AimDown=6.5
 AimRight=0
 """
 

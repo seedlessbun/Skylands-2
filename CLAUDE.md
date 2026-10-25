@@ -335,6 +335,11 @@ Other commands:
   node is worked out after the plugin's tick, so it is a frame old at the tick, and a run is a visible lag; "aim view:" log lines every 100 ms (actor / root / camera / used positions, forward dot) show the real order;
   (4) `ReloadMouse` (a mouse button as a second reload key, -1 off); (5) the installer keeps the player's settings-file values while `IniVersion` is the same (`skse.merge_ini`, the old file kept as `.ini.old` otherwise):
   BUMP `IniVersion` when a default is deliberately changed. UNCONFIRMED in game: all of it.
+- 0.24.0 in game (log plugin 190, "aim view" lines): at our tick the player's position and the first-person ROOT are always EQUAL (the root is current), the CAMERA node trails by ~33 units while running (about 55 ms)
+  and sits exactly +120.5 above the actor at rest; the player's angles agree with the camera's forward (dot 0.9995-1.0000). 0.24.0's prediction paired a camera value with the previous tick's actor position, so its offset
+  included the lag. No crash line in that log. 0.24.1 (TestBuild-106, plugin 1.9.1): the camera offset is measured only when the player stands still (`rest`), origin = actor now + rest; defaults ReloadKey 47 (V),
+  AimDown 6.5 (user: "down .5"), IniVersion 3; `ReloadMouse` also accepts code 256+n and the plugin logs the first 30 mouse/pad button presses ("button down: device D code C") to find a side button's code.
+  The user's mouse reload button did not work in 0.24.0 (cause not yet known).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 190;  // 1.9.0
+	constexpr std::int32_t kVersion = 191;  // 1.9.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -31,12 +31,12 @@ namespace
 	float         g_hudBottom = 80.0f;   // ... and its bottom line, this far from the bottom (ini: HudBottom)
 	int           g_startAmmo = 300;  // rounds of its ammo a player with none is given when a gun is taken up, once per run of the game (ini: StartAmmo)
 	bool          g_ammoDrops = true;  // enemies that die with a gun carry some of its ammo (ini: AmmoDrops=0 turns it off)
-	std::uint32_t g_reloadKey = 19;  // keyboard scan code of the reload key (ini: ReloadKey; 19 is R)
+	std::uint32_t g_reloadKey = 47;  // keyboard scan code of the reload key (ini: ReloadKey; 19 is R)
 	bool          g_ammoText = true;  // short ammo messages on the screen (ini: AmmoText=0 turns them off)
 	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
 	float g_aimWalk = 0.7f;   // the walking speed's share while fully aimed (ini: AimWalk)
 	float g_aimForward = 33.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
-	float g_aimDown = 6.0f;      // ... this far below it (ini: AimDown)
+	float g_aimDown = 6.5f;      // ... this far below it (ini: AimDown)
 	float g_aimRight = 0.0f;     // ... and this far to the right (ini: AimRight)
 	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
@@ -172,11 +172,18 @@ namespace
 					continue;
 				}
 				if ((button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == g_reloadKey) ||
-					(g_reloadMouse >= 0 && button->GetDevice() == RE::INPUT_DEVICE::kMouse && static_cast<int>(button->GetIDCode()) == g_reloadMouse)) {
+					(g_reloadMouse >= 0 && button->GetDevice() == RE::INPUT_DEVICE::kMouse &&
+						(static_cast<int>(button->GetIDCode()) == g_reloadMouse || static_cast<int>(button->GetIDCode()) == 256 + g_reloadMouse))) {
 					if (button->IsDown()) {
 						g_reloadLatch = true;
 					}
 					continue;
+				}
+				if (button->GetDevice() != RE::INPUT_DEVICE::kKeyboard && button->IsDown()) {  // what the mouse and pad buttons send (the first thirty), to see which code a side button has
+					static std::atomic_int told{ 0 };
+					if (told.fetch_add(1) < 30) {
+						SKSE::log::info("button down: device {} code {} event name '{}'", static_cast<int>(button->GetDevice()), static_cast<int>(button->GetIDCode()), button->QUserEvent().c_str());
+					}
 				}
 				if (IsAim(button, events)) {
 					g_aimHeld = button->IsPressed();
@@ -884,16 +891,22 @@ namespace
 			// frame's. So the view is taken as the player's position now plus the camera's offset from the player that was measured when a new camera frame arrived, and the
 			// direction from the player's angles now.
 			if (g_aimPredict) {
-				auto& vp = g_aim.view;
-				const RE::NiPoint3 camT = cam->world.translate;
-				if (!vp.have || camT.x != vp.camSeen.x || camT.y != vp.camSeen.y || camT.z != vp.camSeen.z) {
-					const RE::NiPoint3 pair = vp.have ? vp.lastActor : actorNow;  // the player's position at the last tick of the frame the camera was worked out in
-					vp.offset = { camT.x - pair.x, camT.y - pair.y, camT.z - pair.z };
-					vp.camSeen = camT;
-					vp.have = true;
+				// The camera node lags the player while moving (measured: about 30 units at a run, actor and first-person root are always equal). Its distance above the player is
+				// constant, so that is measured while the player stands still, and the view is the player's position of this frame plus it.
+				auto&              vp = g_aim.view;
+				static RE::NiPoint3 rest{ 0.0f, 0.0f, 120.0f };
+				static bool         haveRest = false;
+				const RE::NiPoint3  camT = cam->world.translate;
+				const float         moved = std::fabs(actorNow.x - vp.lastActor.x) + std::fabs(actorNow.y - vp.lastActor.y) + std::fabs(actorNow.z - vp.lastActor.z);
+				const bool          still = vp.have && moved < 0.25f && camT.x == vp.camSeen.x && camT.y == vp.camSeen.y && camT.z == vp.camSeen.z;
+				if (!haveRest || still) {
+					rest = { camT.x - actorNow.x, camT.y - actorNow.y, camT.z - actorNow.z };
+					haveRest = true;
 				}
+				vp.camSeen = camT;
 				vp.lastActor = actorNow;
-				origin = { actorNow.x + vp.offset.x, actorNow.y + vp.offset.y, actorNow.z + vp.offset.z };
+				vp.have = true;
+				origin = { actorNow.x + rest.x, actorNow.y + rest.y, actorNow.z + rest.z };
 			}
 			int   best = 0;
 			float bestDot = 0.0f;
@@ -1708,7 +1721,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 9, 0, 0 },
+	.Version = { 1, 9, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
