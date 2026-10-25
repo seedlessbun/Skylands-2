@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 182;  // 1.8.2
+	constexpr std::int32_t kVersion = 183;  // 1.8.3
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -32,8 +32,8 @@ namespace
 	bool          g_ammoText = true;  // short ammo messages on the screen (ini: AmmoText=0 turns them off)
 	float g_aimSpread = 0.5f;  // the spread's share while fully aimed (ini: AimSpread)
 	float g_aimWalk = 0.7f;   // the walking speed's share while fully aimed (ini: AimWalk)
-	float g_aimForward = 30.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
-	float g_aimDown = 7.0f;      // ... this far below it (ini: AimDown)
+	float g_aimForward = 33.0f;  // where the muzzle sits when fully aimed: this far ahead of the eye (ini: AimForward)
+	float g_aimDown = 6.0f;      // ... this far below it (ini: AimDown)
 	float g_aimRight = 0.0f;     // ... and this far to the right (ini: AimRight)
 	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
@@ -1154,14 +1154,16 @@ namespace
 					std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 					// only the meters themselves: "RightChargeMeter" and "LeftChargeMeter" (their "...Anim" partners are not things on the screen, and asking one to be
 					// hidden crashed the game in 0.23.1)
-					if (low.find("charge") != std::string::npos && low.size() >= 5 && low.compare(low.size() - 5, 5, "meter") == 0) {
+					// the on-screen clips are the "...MeterAnim" ones (like HealthMeterAnim); the plain "...Meter" members are helper objects, not display objects (0.23.2 hid
+					// those and the bar stayed). Every candidate is checked to be a display object before it is touched.
+					if (low.find("charge") != std::string::npos && low.size() >= 9 && low.compare(low.size() - 9, 9, "meteranim") == 0) {
 						g_meters.push_back(name);
 					}
 					if (all.size() < 1500) {
 						all += name + " ";
 					}
 				});
-				SKSE::log::info("hud: the game's HUD base clip holds [{}]; meters hidden: {}", all, g_meters.size());
+				SKSE::log::info("hud: the game's HUD base clip holds [{}]; charge meter clips: {}", all, g_meters.size());
 			} else {
 				SKSE::log::info("hud: the game's HUD base clip was not found");
 			}
@@ -1171,7 +1173,12 @@ namespace
 		}
 		for (const auto& name : g_meters) {
 			RE::GFxValue v;
-			if (a_movie->GetVariable(&v, ("_root.HUDMovieBaseInstance." + name).c_str()) && v.IsDisplayObject()) {
+			const bool found = a_movie->GetVariable(&v, ("_root.HUDMovieBaseInstance." + name).c_str());
+			static std::atomic_int told{ 0 };
+			if (told.fetch_add(1) < 4) {
+				SKSE::log::info("hud: {} found {}, display object {}", name, found, found && v.IsDisplayObject());
+			}
+			if (found && v.IsDisplayObject()) {
 				RE::GFxValue::DisplayInfo di;
 				di.SetVisible(!a_hide);
 				v.SetDisplayInfo(di);
@@ -1598,7 +1605,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 8, 2, 0 },
+	.Version = { 1, 8, 3, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

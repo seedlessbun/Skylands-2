@@ -323,6 +323,10 @@ Other commands:
   "enchant" in its name (RightChargeMeter, RightChargeMeterAnim, LeftChargeMeter, LeftChargeMeterAnim) with `SetDisplayInfo`; the "...Anim" ones are probably not display objects. 0.23.2 (TestBuild-103,
   plugin 1.8.2) hides only names ending in "Meter" and only when `IsDisplayObject()`. The HUD base clip's members are in the log (TutorialLockInstance ... RightChargeMeter, LeftChargeMeter, ...).
   The aimed-gun `UpdateDownwardPass` change of 0.23.1 had not run yet at the crash (no "aim started" line). A crash needs the crash logger's log if the plugin log stops cold.
+- 0.23.2 in game (log, plugin 182): no crash, HUD works, the old charge bar STILL showed: "meters hidden: 2" were `RightChargeMeter` / `LeftChargeMeter`, which are probably helper objects (like
+  `StaminaMeter` next to `StaminaMeterAnim`); the clips are the "...MeterAnim" ones. 0.23.3 (TestBuild-104, plugin 1.8.3) hides names with "charge" ending in "meteranim", only if `IsDisplayObject()`, and logs
+  what it found ("hud: RightChargeMeterAnim found ..., display object ..."). The 0.23.1 crash was most likely `SetDisplayInfo` on a non-display helper object. Aimed gun defaults now AimForward 33, AimDown 6
+  (user: "up 1, away from the camera 3"; the user said the gun "looks pretty good"; log: "aim: gun held ... turn 13.3 degrees from the hand's").
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

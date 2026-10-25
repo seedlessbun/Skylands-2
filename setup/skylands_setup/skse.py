@@ -45,8 +45,8 @@ Hud=1
 HudRight=70
 HudBottom=80
 AmmoDrops=1
-AimForward=30
-AimDown=7
+AimForward=33
+AimDown=6
 AimRight=0
 """
 
