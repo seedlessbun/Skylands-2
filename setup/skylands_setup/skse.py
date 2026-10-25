@@ -22,6 +22,8 @@ SKSE_DOWNLOAD = "https://skse.silverlock.org/"
 ADDRESS_LIBRARY = "https://www.nexusmods.com/skyrimspecialedition/mods/32444"
 DEFAULT_INI = """; SkylandsNative settings
 [Skylands]
+; the version of this file's defaults: an install keeps the values you changed while this number is the same, and writes the new defaults (the old file is kept as .old) when it is not
+IniVersion=2
 ; how far ahead (game units) the bullets are aimed to cross the crosshair
 Convergence=3000
 ; a short glowing flash at the muzzle with every bullet (1 on, 0 off)
@@ -34,8 +36,12 @@ AimWalk=0.7
 AimRate=7
 ; the gun moves to the middle of the screen while aimed (1 on, 0 off); where its muzzle sits: ahead of the eye, below it, to the right of it (game units)
 AimCenter=1
+; the aimed gun is placed from the player's position and angles of this frame (1) or the camera's (0)
+AimPredict=1
 ; the reload key as a keyboard scan code (19 is R; while a gun is in the hand it no longer puts the weapon away)
 ReloadKey=19
+; a mouse button as the reload key as well (3, 4, 5 ... are the side buttons; -1 none)
+ReloadMouse=-1
 ; short ammo messages on the screen: reloading, magazine full, low ammo (1 on, 0 off)
 AmmoText=1
 ; ammo: a player with none of a gun's ammo is given this many rounds when the gun is first taken up in a run of the game, and enemies that die with a gun carry some
@@ -123,16 +129,51 @@ def describe(st: SkseStatus) -> list[str]:
     return out
 
 
-def stage_plugin(stage: Path, bin_dir: Path) -> str | None:
-    """Put the Skylands plugin (if the build has it) and its settings in the stage folder, so they install and uninstall with the rest."""
+def _ini_values(text: str) -> dict[str, str]:
+    out = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith((";", "[")) and "=" in line:
+            key, _, value = line.partition("=")
+            out[key.strip()] = value.strip()
+    return out
+
+
+def merge_ini(default: str, old: str | None) -> tuple[str, bool]:
+    """The settings file to install: the defaults, with the values the player changed kept when the old file has the same IniVersion. Returns (text, kept)."""
+    if not old:
+        return default, False
+    before, after = _ini_values(old), _ini_values(default)
+    if before.get("IniVersion") != after.get("IniVersion"):
+        return default, False
+    lines = []
+    for line in default.splitlines():
+        key = line.partition("=")[0].strip()
+        if "=" in line and not line.strip().startswith((";", "[")) and key in before and key != "IniVersion":
+            line = f"{key}={before[key]}"
+        lines.append(line)
+    return "\n".join(lines) + "\n", True
+
+
+def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None) -> str | None:
+    """Put the Skylands plugin (if the build has it) and its settings in the stage folder, so they install and uninstall with the rest. The player's values in an
+    installed settings file of the same IniVersion are kept; a file of another version is kept next to the new one as .old."""
     dll = Path(bin_dir) / PLUGIN_DLL
     if not dll.is_file():
         return None
     dest = Path(stage) / "Data" / "SKSE" / "Plugins"
     dest.mkdir(parents=True, exist_ok=True)
     (dest / PLUGIN_DLL).write_bytes(dll.read_bytes())
-    ini = dest / PLUGIN_INI
-    ini.write_text(DEFAULT_INI, encoding="utf-8")
+    old = None
+    if existing_ini is not None and Path(existing_ini).is_file():
+        try:
+            old = Path(existing_ini).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            old = None
+    text, kept = merge_ini(DEFAULT_INI, old)
+    (dest / PLUGIN_INI).write_text(text, encoding="utf-8")
+    if old and not kept:
+        (dest / (PLUGIN_INI + ".old")).write_text(old, encoding="utf-8")
     return f"Data/SKSE/Plugins/{PLUGIN_DLL}"
 
 

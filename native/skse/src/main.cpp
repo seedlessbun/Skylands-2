@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 183;  // 1.8.3
+	constexpr std::int32_t kVersion = 190;  // 1.9.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -21,6 +21,9 @@ namespace
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
+	std::atomic<const char*> g_stage{ "start" };  // where the plugin last was (told by the crash handler)
+	bool          g_aimPredict = true;   // the aimed gun is placed from the player's own position and angles of this frame, not the camera's of the last (ini: AimPredict=0 turns it off)
+	int           g_reloadMouse = -1;    // a mouse button (3, 4, 5, ... the side buttons) as the reload key as well; -1 none (ini: ReloadMouse)
 	bool          g_hud = true;          // the Borderlands-style ammo display, drawn into the game's HUD (ini: Hud=0 turns it off and brings the plain messages back)
 	std::atomic_bool g_hudLive{ false };  // the display has been drawn at least once: the plain messages stay quiet
 	std::atomic_bool g_hudShow{ false };  // a gun is in the hand and the game is running: the display is shown
@@ -83,6 +86,13 @@ namespace
 			} else if (key == "ReloadKey") {
 				try {
 					g_reloadKey = static_cast<std::uint32_t>(std::clamp(std::stoi(line.substr(eq + 1)), 1, 255));
+				} catch (...) {
+				}
+			} else if (key == "AimPredict") {
+				g_aimPredict = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "ReloadMouse") {
+				try {
+					g_reloadMouse = std::clamp(std::stoi(line.substr(eq + 1)), -1, 9);
 				} catch (...) {
 				}
 			} else if (key == "Hud") {
@@ -161,7 +171,8 @@ namespace
 				if (!button) {
 					continue;
 				}
-				if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == g_reloadKey) {
+				if ((button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == g_reloadKey) ||
+					(g_reloadMouse >= 0 && button->GetDevice() == RE::INPUT_DEVICE::kMouse && static_cast<int>(button->GetIDCode()) == g_reloadMouse)) {
 					if (button->IsDown()) {
 						g_reloadLatch = true;
 					}
@@ -401,6 +412,7 @@ namespace
 	// right, up and forward move the start in the view's own axes; spreadMult scales the gun's spread (the player's accuracy relics).
 	bool Launch(RE::FormID a_shooter, RE::FormID a_targetId, float a_right, float a_up, float a_forward, float a_spreadMult, RE::NiPoint3* a_originOut = nullptr)
 	{
+		g_stage = "launch";
 		const auto shooter = RE::TESForm::LookupByID<RE::Actor>(a_shooter);
 		GunInfo    info{};
 		const auto weapon = HeldGun(shooter, info);
@@ -546,6 +558,7 @@ namespace
 
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override
 		{
+			g_stage = "death event";
 			static RE::FormID last = 0;
 			if (!g_ammoDrops || !a_event || !a_event->actorDying) {
 				return RE::BSEventNotifyControl::kContinue;
@@ -559,12 +572,26 @@ namespace
 			GunInfo    info{};
 			const auto weapon = HeldGun(dying, info);
 			if (const auto ammo = AmmoOf(weapon, info)) {
-				const int count = std::uniform_int_distribution<int>(10, 30)(rng);
-				dying->AddObjectToContainer(ammo, nullptr, count, nullptr);
-				static std::atomic_int told{ 0 };
-				if (told.fetch_add(1) < 4) {
-					SKSE::log::info("ammo drop: {:08X} carries {} of {:08X}", dying->GetFormID(), count, ammo->GetFormID());
-				}
+				// not inside the death event (changing a body's pack while the game is still killing it is a known way to crash): a moment later, from the game thread,
+				// looking the body up again
+				const int           count = std::uniform_int_distribution<int>(10, 30)(rng);
+				const RE::FormID    body = dying->GetFormID(), item = ammo->GetFormID();
+				std::thread([body, item, count]() {
+					std::this_thread::sleep_for(std::chrono::milliseconds(800));
+					RunOnGameThread([body, item, count]() {
+						g_stage = "ammo drop";
+						const auto actor = RE::TESForm::LookupByID<RE::Actor>(body);
+						const auto what = RE::TESForm::LookupByID<RE::TESBoundObject>(item);
+						if (!actor || !what || !actor->IsDead()) {
+							return;
+						}
+						actor->AddObjectToContainer(what, nullptr, count, nullptr);
+						static std::atomic_int told{ 0 };
+						if (told.fetch_add(1) < 4) {
+							SKSE::log::info("ammo drop: {:08X} carries {} of {:08X}", body, count, item);
+						}
+					});
+				}).detach();
 			}
 			return RE::BSEventNotifyControl::kContinue;
 		}
@@ -581,6 +608,7 @@ namespace
 
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESSpellCastEvent* a_event, RE::BSTEventSource<RE::TESSpellCastEvent>*) override
 		{
+			g_stage = "enemy cast event";
 			if (!a_event || !a_event->object) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
@@ -695,6 +723,11 @@ namespace
 		RE::NiPoint3      startT{};             // the gun's place and turn in the root's axes when the aim began
 		RE::NiMatrix3     startRot{};
 		bool              centerTold{ false };
+		struct View
+		{
+			bool         have{ false };
+			RE::NiPoint3 camSeen{}, lastActor{}, offset{};
+		} view;
 	};
 	AimState g_aim;
 
@@ -764,6 +797,7 @@ namespace
 	// gun's own barrel and top run; they are constant in the weapon's own axes whatever its place.
 	void RestoreGun()
 	{
+		g_stage = "aim: gun back to the hand";
 		if (!g_aim.gun) {
 			return;
 		}
@@ -782,6 +816,7 @@ namespace
 
 	void CenterGun(RE::PlayerCharacter* a_player, bool a_start)
 	{
+		g_stage = a_start ? "aim: gun moved under the root" : "aim: gun placed";
 		const auto camera = RE::PlayerCamera::GetSingleton();
 		if (!g_aimCenter || !camera || !camera->IsInFirstPerson()) {
 			return;
@@ -827,7 +862,14 @@ namespace
 			return;  // the first frame only moves the node; its world transform is up to date after the game's next update
 		}
 		const auto gun = g_aim.gun.get();
-		if (!gun || gun->parent != rootNode) {
+		if (!gun || g_aim.root.get() != rootNode) {  // the first-person skeleton is not the one the aim began with (a new 3D): the gun goes back to the hand it came from
+			if (g_aim.gun) {
+				SKSE::log::info("aim: the first-person 3D changed during the aim; the gun is put back");
+				RestoreGun();
+			}
+			return;
+		}
+		if (gun->parent != rootNode) {
 			return;
 		}
 		// the view: the camera node itself, its forward axis found as the one of its three axes that points along the look direction
@@ -835,8 +877,24 @@ namespace
 		a_player->GetEyeVector(eye, look, true);
 		Vec3         dir = Norm({ look.x, look.y, look.z });
 		RE::NiPoint3 origin = eye;
+		const RE::NiPoint3 actorNow = a_player->GetPosition();
 		if (const auto& cam = camera->cameraRoot) {
 			origin = cam->world.translate;
+			// The camera node is worked out late in the frame, after the plugin's tick: what it holds here is the last frame's. The player's own position and angles are this
+			// frame's. So the view is taken as the player's position now plus the camera's offset from the player that was measured when a new camera frame arrived, and the
+			// direction from the player's angles now.
+			if (g_aimPredict) {
+				auto& vp = g_aim.view;
+				const RE::NiPoint3 camT = cam->world.translate;
+				if (!vp.have || camT.x != vp.camSeen.x || camT.y != vp.camSeen.y || camT.z != vp.camSeen.z) {
+					const RE::NiPoint3 pair = vp.have ? vp.lastActor : actorNow;  // the player's position at the last tick of the frame the camera was worked out in
+					vp.offset = { camT.x - pair.x, camT.y - pair.y, camT.z - pair.z };
+					vp.camSeen = camT;
+					vp.have = true;
+				}
+				vp.lastActor = actorNow;
+				origin = { actorNow.x + vp.offset.x, actorNow.y + vp.offset.y, actorNow.z + vp.offset.z };
+			}
 			int   best = 0;
 			float bestDot = 0.0f;
 			for (int c = 0; c < 3; ++c) {
@@ -848,6 +906,22 @@ namespace
 			}
 			const float sign = bestDot < 0.0f ? -1.0f : 1.0f;
 			dir = Norm({ sign * cam->world.rotate.entry[0][best], sign * cam->world.rotate.entry[1][best], sign * cam->world.rotate.entry[2][best] });
+			if (g_aimPredict) {  // the direction of this frame, from the player's angles (pitch is positive downwards, heading from north)
+				const float h = a_player->GetAngleZ(), pch = a_player->GetAngleX();
+				dir = Norm({ std::sin(h) * std::cos(pch), std::cos(h) * std::cos(pch), -std::sin(pch) });
+			}
+			// what the game's own numbers say, every tenth of a second for the first minute of aiming: this is how the next fix is chosen
+			static std::chrono::steady_clock::time_point lastNote{};
+			static int notes = 0;
+			const auto nowT = std::chrono::steady_clock::now();
+			if (notes < 600 && nowT - lastNote > std::chrono::milliseconds(100)) {
+				lastNote = nowT;
+				++notes;
+				const Vec3 camDir = Norm({ sign * cam->world.rotate.entry[0][best], sign * cam->world.rotate.entry[1][best], sign * cam->world.rotate.entry[2][best] });
+				SKSE::log::info("aim view: actor {:.1f} {:.1f} {:.1f} | root {:.1f} {:.1f} {:.1f} | camera {:.1f} {:.1f} {:.1f} | used {:.1f} {:.1f} {:.1f} | forward dot {:.4f}", actorNow.x, actorNow.y, actorNow.z,
+					rootNode->world.translate.x, rootNode->world.translate.y, rootNode->world.translate.z, cam->world.translate.x, cam->world.translate.y, cam->world.translate.z, origin.x, origin.y, origin.z,
+					dir.x * camDir.x + dir.y * camDir.y + dir.z * camDir.z);
+			}
 		}
 		const Vec3 right = Norm(Cross(dir, { 0.0f, 0.0f, 1.0f }));
 		const Vec3 up = Cross(right, dir);
@@ -922,6 +996,7 @@ namespace
 
 	void UpdateAim(RE::PlayerCharacter* a_player, const GunInfo& a_info, Clock::time_point a_now)
 	{
+		g_stage = "aim";
 		const bool want = g_aimHeld.load() && a_info.zoom > 10;
 		if (!g_aim.on && !want) {
 			return;
@@ -932,6 +1007,7 @@ namespace
 			g_aim.baseFov = setting ? setting->data.f : (camera ? camera->GetRuntimeData2().worldFOV : 65.0f);
 			g_aim.baseWalk = a_player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSpeedMult);
 			g_aim.walkApplied = 0.0f;
+			g_aim.view = {};
 			g_aim.on = true;
 			CenterGun(a_player, true);
 			g_aim.last = a_now;
@@ -1298,8 +1374,11 @@ namespace
 
 	void Tick()
 	{
+		g_stage = "tick: gun";
 		TickGun();
+		g_stage = "tick: hud";
 		HudFrame(Clock::now());
+		g_stage = "tick: done";
 	}
 
 	void TickGun()
@@ -1589,6 +1668,30 @@ namespace
 		}
 	}
 
+	// When the game crashes inside or after this plugin's code, the plugin says where: the exception, the address (module and offset) and the last stage the plugin
+	// marked. The previous filter (a crash logger, if one is installed) is called afterwards, so nothing else is lost.
+	LPTOP_LEVEL_EXCEPTION_FILTER g_previousFilter = nullptr;
+
+	LONG WINAPI CrashFilter(EXCEPTION_POINTERS* a_info)
+	{
+		static std::atomic_bool once{ false };
+		if (a_info && a_info->ExceptionRecord && !once.exchange(true)) {
+			const auto  code = a_info->ExceptionRecord->ExceptionCode;
+			const void* at = a_info->ExceptionRecord->ExceptionAddress;
+			HMODULE     module = nullptr;
+			char        name[MAX_PATH]{};
+			if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, static_cast<LPCSTR>(at), &module) && module) {
+				GetModuleFileNameA(module, name, MAX_PATH);
+			}
+			const auto offset = reinterpret_cast<std::uintptr_t>(at) - reinterpret_cast<std::uintptr_t>(module);
+			SKSE::log::critical("CRASH: exception {:08X} at {} in {} (+{:X}); the plugin's last stage: {}", static_cast<unsigned>(code), at, name[0] ? name : "unknown module", offset, g_stage.load());
+			if (const auto logger = spdlog::default_logger()) {
+				logger->flush();
+			}
+		}
+		return g_previousFilter ? g_previousFilter(a_info) : EXCEPTION_CONTINUE_SEARCH;
+	}
+
 	void StartLog()
 	{
 		auto path = SKSE::log::log_directory();
@@ -1605,7 +1708,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 8, 3, 0 },
+	.Version = { 1, 9, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
@@ -1617,6 +1720,7 @@ SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* a_skse)
 	SKSE::log::info("Skyrim runtime {} ({})", REL::Module::get().version().string("."),
 		REL::Module::IsVR() ? "VR" : REL::Module::IsAE() ? "Anniversary Edition lineage" : "Special Edition");
 	LoadConfig();
+	g_previousFilter = SetUnhandledExceptionFilter(CrashFilter);
 	SKSE::GetPapyrusInterface()->Register(RegisterPapyrus);
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
 	return true;

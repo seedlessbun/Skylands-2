@@ -327,6 +327,14 @@ Other commands:
   `StaminaMeter` next to `StaminaMeterAnim`); the clips are the "...MeterAnim" ones. 0.23.3 (TestBuild-104, plugin 1.8.3) hides names with "charge" ending in "meteranim", only if `IsDisplayObject()`, and logs
   what it found ("hud: RightChargeMeterAnim found ..., display object ..."). The 0.23.1 crash was most likely `SetDisplayInfo` on a non-display helper object. Aimed gun defaults now AimForward 33, AimDown 6
   (user: "up 1, away from the camera 3"; the user said the gun "looks pretty good"; log: "aim: gun held ... turn 13.3 degrees from the hand's").
+- 0.23.3 in game (log, plugin 183): charge meter clips found and hidden ("hud: RightChargeMeterAnim found true, display object true"; the user's report on the bar after this build is pending); the aimed gun
+  looks right but still trails the player's run; the game CRASHED while the user killed enemies (the log stops at an "aim started" line; one corpse got ammo ("ammo drop: FF000E9B carries 11") a few seconds earlier).
+  0.24.0 (TestBuild-105, plugin 1.9.0): (1) crash handler: `SetUnhandledExceptionFilter` logs "CRASH: exception <code> at <addr> in <module> (+offset); the plugin's last stage: <g_stage>" (breadcrumbs in Tick, UpdateAim,
+  CenterGun, RestoreGun, the death and cast events, Launch, the ammo drop) and calls the previous filter; (2) the corpse ammo drop is no longer made inside the death event: 800 ms later from the game thread, the body
+  looked up again (changing a pack mid-death is a known crash); (3) the aimed gun is placed from the player's position and angles of THIS frame plus the camera's measured offset (`AimPredict`, ini): theory = the camera
+  node is worked out after the plugin's tick, so it is a frame old at the tick, and a run is a visible lag; "aim view:" log lines every 100 ms (actor / root / camera / used positions, forward dot) show the real order;
+  (4) `ReloadMouse` (a mouse button as a second reload key, -1 off); (5) the installer keeps the player's settings-file values while `IniVersion` is the same (`skse.merge_ini`, the old file kept as `.ini.old` otherwise):
+  BUMP `IniVersion` when a default is deliberately changed. UNCONFIRMED in game: all of it.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

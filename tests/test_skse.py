@@ -80,3 +80,18 @@ def test_status_names_the_address_library_file_of_a_1_7_runtime(tmp_path):
     (tmp_path / "skse64_1_7_104.dll").write_bytes(b"MZ")
     st = skse.status(tmp_path)
     assert st.ready and st.runtime == (1, 7, 104, 0) and st.address_library == "versionlib-1-7-104-0.bin"
+
+
+def test_the_settings_file_keeps_the_players_values_while_its_version_is_the_same(tmp_path):
+    old = skse.DEFAULT_INI.replace("AimDown=6", "AimDown=9").replace("ReloadKey=19", "ReloadKey=47")
+    text, kept = skse.merge_ini(skse.DEFAULT_INI, old)
+    assert kept and "AimDown=9" in text and "ReloadKey=47" in text and "AimForward=33" in text and "IniVersion=" in text
+    other = old.replace("IniVersion=2", "IniVersion=1")
+    text, kept = skse.merge_ini(skse.DEFAULT_INI, other)
+    assert not kept and "AimDown=6" in text  # another version: the new defaults
+    bin_dir, stage, game = tmp_path / "bin", tmp_path / "stage", tmp_path / "SkylandsNative.ini"
+    bin_dir.mkdir()
+    (bin_dir / skse.PLUGIN_DLL).write_bytes(b"MZ")
+    game.write_text(other, encoding="utf-8")
+    skse.stage_plugin(stage, bin_dir, game)
+    assert (stage / "Data" / "SKSE" / "Plugins" / "SkylandsNative.ini.old").read_text() == other  # the old file is kept next to the new one

@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.23.3"
+VERSION = "0.24.0"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -295,7 +295,7 @@ def main(argv: list[str]) -> int:
         sk = skse.status(sky)
         for line in skse.describe(sk):
             say(f"  skse: {line}")
-        staged = skse.stage_plugin(stage, bin_dir)
+        staged = skse.stage_plugin(stage, bin_dir, sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI)
         say(f"SkylandsNative plugin: {'staged for install' if staged else 'not in this build (bin/SkylandsNative.dll is missing)'}")
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values
             (sky / "Data" / "Scripts" / old).unlink(missing_ok=True)
