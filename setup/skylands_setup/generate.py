@@ -468,8 +468,8 @@ ENIT_COST_AT, ENIT_FLAGS_AT = 0, 4
 STAFF_REV = "0.15.0"
 STAFF_SCRIPT = "SkylandsStaffGun20"  # the script class has its own name per revision: a saved game keeps old script objects of the same class running as ghosts with empty properties
 STAFF_ID_SHIFT = 380  # ids skipped before the staff gun's records: the second plugin numbers its forms by position, so a saved game would otherwise match the old staff and script effect to the new records and keep their old data  # in the names of the ability, effect and quest: a saved game keeps the script values it was given, so a new revision must be new forms
-# meshes of the plugin's own small effects (shell casing, three strengths of smoke): name, colour, length, width. They glow (additive), so a darker colour is a fainter one.
-STAFF_FX_MESHES = [("Fx_Casing", (255, 190, 70), 4.0, 0.9), ("Fx_Smoke_0", (140, 140, 140), 7.0, 5.0), ("Fx_Smoke_1", (85, 85, 85), 7.0, 5.0), ("Fx_Smoke_2", (40, 40, 40), 7.0, 5.0)]
+# meshes of the plugin's own small effects (the shell casing): name, colour, length, width. They glow (additive), so a darker colour is a fainter one.
+STAFF_FX_MESHES = [("Fx_Casing", (255, 190, 70), 4.0, 0.9)]
 STAFF_TRACER_RGB = {"fire": (255, 140, 40), "shock": (120, 190, 255), "corrosive": (120, 255, 80), "slag": (190, 90, 255), None: (255, 235, 150)}
 PROJ_FLAG_MUZZLE_FLASH = 0x8
 PROJ_LIGHT_AT, PROJ_SOUND_AT, PROJ_SOUND_COUNTDOWN_AT = 16, 40, 56
@@ -551,16 +551,17 @@ def staff_shot_sound(m: "Masters", log: list[str], kind: str = "smg"):
 STAFF_EQUIP_SLOT = 0x00013F42  # Skyrim.esm EQUP RightHand: a staff gun goes in the right hand whatever the hands hold (a vanilla staff is "either hand", and went to the left with a gun in the right)
 STAFF_BULLET_SPEED = 1.25  # the bullets fly this much faster than the Borderlands speed / 3 (the user asked for +25%)
 STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH = 45.0, 0.8  # half the size of the first tracer (90 long, 1.6 wide)
+STAFF_TRACER_SIZE = {"launcher": (110.0, 2.6), "sniper": (70.0, 1.0), "shotgun": (30.0, 0.6)}  # (length, width) of the tracer by gun type; the others use the sizes above
 MGEF_RESIST_AT = 16
 PROJ_MUZZLE_LIGHT_AT, PROJ_MUZZLE_DURATION_AT = 20, 44
 STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, STAFF_FLASH_SECONDS = 26.0, 6.0, 0.05  # the muzzle flash: a short glowing burst ahead of the barrel
-STAFF_FLASH_PERCENT = {"smg": 75, "assault_rifle": 90}  # the muzzle flash's size by gun type, in percent of the first flash (the user asked for 25% and 10% smaller)
-STAFF_AMMO_NAMES = {"smg": "SMG Ammo", "assault_rifle": "Assault Rifle Ammo"}  # the inventory items that are the guns' reserve (the plugin takes a reload's rounds from them)
-STAFF_ZOOM = {"smg": 13, "assault_rifle": 16}  # the magnification when aimed down the sights, in tenths (the user chose 1.3x and 1.6x)
+STAFF_FLASH_PERCENT = {"smg": 75, "assault_rifle": 90, "pistol": 60, "shotgun": 130, "sniper": 100, "launcher": 150}  # the muzzle flash's size by gun type, in percent of the first flash (the user asked for 25% and 10% smaller)
+STAFF_AMMO_NAMES = {"smg": "SMG Ammo", "assault_rifle": "Assault Rifle Ammo", "pistol": "Pistol Ammo", "shotgun": "Shotgun Shells", "sniper": "Sniper Ammo", "launcher": "Rocket"}  # the inventory items that are the guns' reserve (the plugin takes a reload's rounds from them)
+STAFF_ZOOM = {"smg": 13, "assault_rifle": 16, "pistol": 12, "shotgun": 12, "sniper": 30, "launcher": 14}  # the magnification when aimed down the sights, in tenths (the user chose 1.3x and 1.6x)
 RELOAD_PARTS = ("out", "in", "end")  # the magazine comes out, a new one goes in, the gun is made ready (bl2/audio.py RELOAD_PARTS)
 STAFF_FLASH_LIGHT_RADIUS = 260
 STAFF_MUZZLE_FLASH = False  # 0.17.0 turned the projectile's muzzle flash on and the game crashed on the first shot the plugin launched: off until a safer way is tested
-STAFF_KINDS = ("smg", "assault_rifle")  # the gun types that are staff guns (the other types stay crossbows)
+STAFF_KINDS = ("smg", "assault_rifle", "pistol", "shotgun", "sniper", "launcher")  # every gun type is a staff gun (the first two keep their ids from the earlier builds; the gifts are the first two)
 STAFF_NPC_BURST_MAX = 6
 
 
@@ -601,7 +602,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.26.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.27.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -718,35 +719,6 @@ class Armory:
             self.strict[element] = staff_donor(self.m, element, self.log, strict=True)
         return self.strict[element]
 
-    def _blast(self, kind: str, element: str, gt, shot) -> int:
-        """The element's hit on whoever a bullet strikes: an explosion with NO art, sound or light (nothing is seen to explode), that carries
-        the element's status effect and a little splash damage."""
-        if (kind, element) in self.blasts:
-            return self.blasts[(kind, element)]
-        default_radius, frac = SPLASH.get(kind, (80.0, 0.3))
-        radius = float(shot.explosion_radius) if shot and getattr(shot, "explosion_radius", None) else default_radius
-        dmg = max(5, round(float(gt.base_damage) * frac / 5) * 5)
-        edid = f"SkylandsStaffBlast_{kind}_{element}"
-        donor = self.rounds.donor(element)
-        r = esp.Rec("EXPL", self.view.new_id(f"EXPL:{edid}"), [])
-        if donor is not None:
-            r.subs = [(sig, d) for sig, d in donor.subrecords if sig not in ("EDID", "EITM", "MODL", "MODT", "MODS", "MNAM")]
-            r.subs.insert(0, ("EDID", esp.zstr(edid)))
-            data = bytearray(donor.first("DATA"))
-        else:
-            r.add("EDID", esp.zstr(edid)).add("OBND", struct.pack("<6h", 0, 0, 0, 0, 0, 0))
-            data = bytearray(52)
-            struct.pack_into("<I", data, 48, 1)
-        struct.pack_into("<5I", data, 0, 0, 0, 0, 0, 0)  # light, two sounds, impact data set, placed object: none
-        struct.pack_into("<fff", data, EXPL_FORCE_AT, 30.0, float(dmg), radius)
-        struct.pack_into("<f", data, 36, 0.0)  # image space radius
-        r.set("DATA", bytes(data))
-        if self.rounds.enchants.get(element) is not None:
-            insert_ordered(r, "EITM", esp.u32(self.rounds.enchants[element].form_id), EXPL_ORDER)
-        self.view.override(r)
-        self.blasts[(kind, element)] = r.form_id
-        return r.form_id
-
     def _keyword(self, edid: str) -> int:
         if edid not in self.keywords:
             self.keywords[edid] = self.view.new("KYWD", edid).form_id
@@ -764,10 +736,10 @@ class Armory:
         donor = elem_donor or self._donor(None)
         _, _, d_mgef, d_proj = donor
         edid = f"SkylandsStaffBullet_{kind}_{(element or 'plain').lower()}"
-        mesh = f"Skylands\\Tracer_Staff_{(element or 'plain').lower()}.nif"
+        t_len, t_wid = STAFF_TRACER_SIZE.get(kind, (STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH))
+        mesh = f"Skylands\\Tracer_Staff_{(element or 'plain').lower()}{'' if kind not in STAFF_TRACER_SIZE else '_' + kind}.nif"
         if mesh not in self.tracers:
-            self.tracers[mesh] = nif.tracer(STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None]), BEAM_TEXTURE,
-                                            STAFF_TRACER_LENGTH, STAFF_TRACER_WIDTH)
+            self.tracers[mesh] = nif.tracer(STAFF_TRACER_RGB.get(element.lower() if element else None, STAFF_TRACER_RGB[None]), BEAM_TEXTURE, t_len, t_wid)
         pr = esp.Rec("PROJ", self.view.new_id(f"PROJ:{edid}"), [(sig, d) for sig, d in d_proj.subrecords if sig not in ("VMAD", "MODT", "NAM1", "NAM2")])
         pr.set("EDID", esp.zstr(edid))
         pr.set("MODL", esp.zstr(mesh))  # the glowing tracer (nif.tracer) instead of the donor's fireball
@@ -788,8 +760,8 @@ class Armory:
             struct.pack_into("<f", pd, PROJ_MUZZLE_DURATION_AT, STAFF_FLASH_SECONDS)
             flags |= PROJ_FLAG_MUZZLE_FLASH
         explosion = 0
-        if element is not None:  # the element's status effect, delivered by a silent explosion
-            explosion = self._blast(kind, element, gt, shot)
+        if element is not None or kind == "launcher":  # a small explosion with Skyrim's own art for the element (its damage, its status effect), a big one for rockets
+            explosion = self.rounds.expl(kind, element, float(gt.base_damage), shot.explosion_radius if shot else None)
             flags |= 0x2
         else:
             flags &= ~0x2
@@ -834,6 +806,7 @@ class Armory:
         reload_s = max(0.3, float(st["reload"]))
         spread = float(row["spread"]) * float(st.get("spread_mult", 1.0))
         burst = max(1, min(STAFF_NPC_BURST_MAX, int(row["burst"])))
+        pellets = max(1, min(12, int(row.get("pellets", 1) or 1)))  # projectiles in one shot (shotguns)
         text = f"{text} Accuracy: shots spread {spread:.1f} degrees."
         # the effect: this gun's own copy of the bullet effect, which carries its stats text (the crossbow guns show theirs the same way)
         mg = esp.Rec("MGEF", self.view.new_id(f"MGEF:Staff_{edid}"), [("EDID", esp.zstr(f"Staff_{edid}"))])
@@ -855,7 +828,7 @@ class Armory:
         struct.pack_into("<I", enit, ENIT_FLAGS_AT, struct.unpack_from("<I", enit, ENIT_FLAGS_AT)[0] | 1)  # not auto-calculated: cost stays 0
         struct.pack_into("<f", enit, ENIT_CHARGE_AT, 0.0)  # no charge time
         en.set("ENIT", bytes(enit))
-        en.add("EFID", esp.u32(mg.form_id)).add("EFIT", struct.pack("<fII", float(damage), 0, 0))
+        en.add("EFID", esp.u32(mg.form_id)).add("EFIT", struct.pack("<fII", float(max(1, round(damage / pellets * 1.5)) if pellets > 1 else damage), 0, 0))  # a shotgun's pellets each hurt a share of the shot (all hitting: 1.5 times it)
         self.view.override(en)
         # the weapon: a copy of the base staff, with this gun's name, numbers, keywords and model
         base = self.base[0]
@@ -869,7 +842,7 @@ class Armory:
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}_m{self.ammo_ids[kind] & 0xFFFFFF}"
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}_m{self.ammo_ids[kind] & 0xFFFFFF}_p{pellets}"
         self.kinds.add(kind)
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}")]
         mfr = g.get("manufacturer", "")
@@ -927,7 +900,7 @@ class Armory:
             self.view.override(am)
             self.log.append(f"Staff guns: ammo item {STAFF_AMMO_NAMES[kind]} ({am.form_id:08X}); guns of that type use it from the player's pack")
         gifts = [self.gifts.get(kind) or self.first_of.get(kind) or next(iter(self.first_of.values())) for kind in STAFF_KINDS]
-        info = (f"Build {STAFF_INFO_BUILD}. {self.count} staff guns (submachine guns and assault rifles) from the vanilla staff {self.base[0].edid}; "
+        info = (f"Build {STAFF_INFO_BUILD}. {self.count} staff guns (every gun type) from the vanilla staff {self.base[0].edid}; "
                 f"each one's numbers are in its SkylandsGun_ keyword; tracers {len(self.tracers)}; shot sound {sound[1] if sound else 'none found'}; "
                 f"the SKSE plugin launches a bullet from the gun's muzzle when the attack button goes down, then one every interval while it is held.")
         props = [("ChargePerShot", esp.P_FLOAT, STAFF_CHARGE_PER_SHOT),
@@ -952,8 +925,6 @@ class Armory:
                                                                                         forward=True)
         for name, rgb, length, width in STAFF_FX_MESHES:
             self.tracers[f"Skylands\\{name}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, length, width, forward=True)
-        for word, rgb in (("plain", STAFF_TRACER_RGB[None]), *((n.lower(), STAFF_TRACER_RGB[n.lower()]) for n in ELEMENT_NAMES)):
-            self.tracers[f"Skylands\\Fx_Burst_{word}.nif"] = nif.tracer(rgb, BEAM_TEXTURE, 10.0, 7.0, forward=True)  # the small burst where an elemental bullet ends
         self.report["staff_tracer"] = list(self.tracers.items())
         self.report["staff_gun"] = {"guns": self.count, "tracers": len(self.tracers)}
         self.log.append(f"Staff guns: {self.count} built; gifts {[hex(g) for g in gifts]}; {info}")
@@ -1282,6 +1253,12 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     drop_any = gun_any
     drop_good = gun_good
     ammo_drop = leveled_list(p, "SkylandsAmmoDrop", [(bolts.form_id, 12)])
+    if armory is not None and armory.ok and armory.count:  # staff guns: the loot is their own ammo, not crossbow bolts (an override in the second plugin; Skylands.esp is untouched)
+        swap = esp.Rec("LVLI", ammo_drop.form_id, [(sig, d) for sig, d in ammo_drop.subs if sig not in ("LVLO", "LLCT")])
+        swap.set("LLCT", bytes([len(STAFF_KINDS)]))
+        for kind in STAFF_KINDS:
+            swap.add("LVLO", lvlo(armory.ammo_ids[kind], 3))
+        view.override(swap)
     for row in S.LOOT_INJECTION.values():
         target = m.find("LVLI", row.skyrim_lvli)
         if target is None:
@@ -1415,9 +1392,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     (out_data / PLUGIN).write_bytes(p.encode())
     if view.records:
         (out_data / MODELS_PLUGIN).write_bytes(view.encode())
-    (out_data / "Scripts" / "SkylandsHunterQuest.pex").write_bytes(pex.write(scripts.class_choice_quest()))
+    (out_data / "Scripts" / "SkylandsHunterQuest.pex").write_bytes(pex.write(scripts.class_choice_quest(bolts=not (armory is not None and armory.ok and armory.count))))
     (out_data / "Scripts" / "SkylandsHunterPower.pex").write_bytes(pex.write(scripts.respawn_power()))
-    (out_data / "Scripts" / "SkylandsHunter.pex").write_bytes(pex.write(scripts.watcher()))
+    (out_data / "Scripts" / "SkylandsHunter.pex").write_bytes(pex.write(scripts.watcher(bolts=not (armory is not None and armory.ok and armory.count))))  # staff guns need no bolts
     if rounds is not None:
         (out_data / "Meshes" / "Skylands" / "AimPoint.nif").write_bytes(nif.empty())
         (out_data / "Scripts" / "SkylandsGunner.pex").write_bytes(pex.write(scripts.gunner()))

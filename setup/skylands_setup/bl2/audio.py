@@ -63,7 +63,8 @@ RELOAD_NAMES = {  # per gun type: the suffixes of the Borderlands events (after 
                       "end": ("Reload_Bolt", "Reload_Cock", "Anim_Reload_02_Cock", "Reload_End", "Reload_Clip_End", "Reload_Clip_Hit", "Reload_Hammerback",
                               "Bolt_Close", "Clip_Hit")},
 }
-TYPE_WORDS = {"smg": "SMG", "assault_rifle": "Rifle"}
+RELOAD_NAMES.update({k: RELOAD_NAMES["smg"] for k in ("pistol", "shotgun", "sniper", "launcher")})  # the other types: the same guesses as the submachine gun's (unconfirmed: a missing event is a silent part)
+TYPE_WORDS = {"smg": "SMG", "assault_rifle": "Rifle", "pistol": "Pistol", "shotgun": "Shotgun", "sniper": "Sniper", "launcher": "Rocket_Launcher"}
 
 
 def reload_events(kind: str, manufacturer: str, part: str) -> list[str]:

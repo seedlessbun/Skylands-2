@@ -460,8 +460,9 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     old = {r.form_id: r for r in plain["WEAP"]}
     assert len(staff) == rep["staff_gun"]["guns"] and {r.form_id for r in staff} <= set(old)
     assert all(old[r.form_id].first("DNAM")[0] == 9 and r.edid == old[r.form_id].edid for r in staff)  # a crossbow in Skylands.esp, a staff over it
-    assert {r.edid.split("_")[-2] for r in staff} >= {"smg", "ar"} and not recs["LVLI"] and not recs["FLST"]
-    assert any(r.form_id not in {s.form_id for s in staff} for r in recs["WEAP"]) or len(old) > len(staff)  # the pistols stay crossbows
+    assert {r.edid.split("_")[-2] for r in staff} >= {"smg", "ar"} and not recs["FLST"]
+    assert [r.edid for r in recs["LVLI"]] == ["SkylandsAmmoDrop"]  # the only loot list overridden: the ammo drop, which holds the staff guns' ammo instead of crossbow bolts
+    assert len(recs["LVLI"][0].subrecords) and sum(1 for sig, _ in recs["LVLI"][0].subrecords if sig == "LVLO") == len(generate.STAFF_KINDS)
     kw_edid = {r.form_id: r.edid for r in recs["KYWD"]}
     base_kw = {r.form_id: r.edid for r in plain["KYWD"]}
     for w in staff:
@@ -487,14 +488,14 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         names = [kw_edid.get(k) or base_kw.get(k) for k in st.unpack(f"<{len(kwda) // 4}I", kwda)]
         assert "SkylandsGun" in names and any(n and n.startswith("SkylandsRarity_") for n in names)
         numbers = next(n for n in names if n and n.startswith("SkylandsGun_"))
-        kind = "smg" if "_smg_" in w.edid else "assault_rifle"
+        kind = max((g for g in bl2["weapons"]["guns"] if w.edid.startswith("Skylands_" + g["balance"].rsplit(".", 1)[1] + "_")), key=lambda g: len(g["balance"]))["type"]
         row = S.SHOOTING[kind]
         sts = rep["stats"][w.edid]  # the rolled stats of the gun: its description tells them, and they are what it does
         parts = numbers.split("_")
         assert parts[2] == f"i{round(max(0.05, 1.0 / max(1.0, sts['fire_rate'])) * 1000)}" and parts[3] == f"r{round(max(0.3, sts['reload']) * 1000)}", (numbers, sts)
         assert abs(int(parts[4][1:]) - row.spread_deg * sts["spread_mult"] * 10) <= 1.0, (numbers, sts)  # the accuracy roll narrows or widens the spread
         assert st.unpack("<H", w.first("EAMT"))[0] == int(parts[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
-        assert str(row.burst) == parts[-5][1:] and parts[-4] in ("e0", "e1", "e2", "e3", "e4") and parts[-3] == f"f{generate.STAFF_FLASH_PERCENT[kind]}" and parts[-2] == f"z{generate.STAFF_ZOOM[kind]}" and parts[-1].startswith("m")  # burst for enemies, element for the muzzle flash colour, flash size
+        assert str(row.burst) == parts[-6][1:] and parts[-5] in ("e0", "e1", "e2", "e3", "e4") and parts[-4] == f"f{generate.STAFF_FLASH_PERCENT[kind]}" and parts[-3] == f"z{generate.STAFF_ZOOM[kind]}" and parts[-2].startswith("m") and parts[-1] == f"p{row.pellets}"  # burst for enemies, element for the muzzle flash colour, flash size
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
         assert b"SkylandsBreech" in mesh_file.read_bytes() and b"SkylandsTop" in mesh_file.read_bytes()  # the barrel's rear and a point above the muzzle: the plugin holds the aimed gun straight
@@ -520,10 +521,11 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
             assert st.unpack_from("<I", md, 16)[0] == 0xFFFFFFFF  # no fire resistance applies
             assert mg.first("KWDA") is None and mg.first("SNDD") is None
         else:
-            assert st.unpack_from("<H", pd, 0)[0] & 0x2  # the element rides on a silent explosion
+            assert st.unpack_from("<H", pd, 0)[0] & 0x2  # the element rides on a small explosion with Skyrim's own art for it, that hurts
             blast = by_id["EXPL"][st.unpack_from("<I", pd, 36)[0]]
-            assert blast.edid.startswith("SkylandsStaffBlast_") and blast.first("MODL") is None
-            assert st.unpack_from("<5I", blast.first("DATA"), 0) == (0, 0, 0, 0, 0)  # no light, sound, impact art or placed object
+            assert blast.edid.startswith("SkylandsBlast_")
+            force, hurt, radius = st.unpack_from("<fff", blast.first("DATA"), 24)
+            assert hurt >= 5 and 0 < radius <= (500 if kind == "launcher" else 100), (kind, hurt, radius)  # small, except for rockets
             assert st.unpack_from("<I", md, 96)[0] != 0  # the one element's hit art stays
         tracer = tmp_path / "out" / "Data" / "Meshes" / Path(*pj.first("MODL").rstrip(b"\0").decode().split("\\"))
         ys = [p[1] for p in nifread.world_points(tracer.read_bytes())]
@@ -542,7 +544,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     assert b"SkylandsStaffGun20" in vm and all(n in vm for n in (b"GiftA", b"GiftB", b"ChargePerShot", b"OffsetForward", b"ShotSound", b"SpeedMult"))
     assert b"SoundKeywords" in vm and b"Sounds" in vm
     snd = [r for r in recs["KYWD"] if r.edid.startswith("SkylandsSnd_")]
-    assert {r.edid for r in snd} == {"SkylandsSnd_smg", "SkylandsSnd_assault_rifle"}  # one shot sound per gun type, chosen by this keyword
+    assert {r.edid for r in snd} == {"SkylandsSnd_smg", "SkylandsSnd_assault_rifle", "SkylandsSnd_pistol"}  # one shot sound per gun type that the fake game has guns of, chosen by this keyword
     assert all(any(st.unpack("<I", w.first("KWDA")[i:i + 4])[0] in {r.form_id for r in snd} for i in range(0, len(w.first("KWDA")), 4)) for w in staff)
     assert any("smg shot sound WPNCrossbowFire" in l for l in rep["model_log"]) and any("assault_rifle shot sound WPNBowFireShort" in l for l in rep["model_log"]), rep["model_log"]
     assert all(n not in vm for n in (b"BulletSpell", b"MagSize", b"AimPoint"))  # the gun's own numbers are not the script's
@@ -551,7 +553,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
     for word in ("plain", "fire", "shock", "corrosive", "slag"):  # the muzzle flash meshes the plugin spawns, one per element colour and size
         for percent in (75, 90):  # submachine guns 25% smaller, assault rifles 10% smaller
             assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"Flash_Staff_{word}_{percent}.nif").read_bytes().startswith(b"Gamebryo File Format")
-    for mesh in ("Fx_Casing", "Fx_Smoke_0", "Fx_Smoke_1", "Fx_Smoke_2", *(f"Fx_Burst_{w}" for w in ("plain", "fire", "shock", "corrosive", "slag"))):  # casings, smoke, impact bursts
+    for mesh in ("Fx_Casing",):  # the shell casing
         assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / f"{mesh}.nif").read_bytes().startswith(b"Gamebryo File Format")
     keys = {r.edid: r for r in recs["KYWD"]}
     assert any("_f75_" in k for k in keys) and any("_f90_" in k for k in keys), "each gun's flash size is in its numbers keyword"
@@ -611,3 +613,36 @@ def test_staff_model_is_scaled_and_moved_in_the_hand(tmp_path, monkeypatch):
     assert all(abs(b / a - 1.25) < 0.02 for a, b in zip(base_size, big_size) if a > 1e-3), (base_size, big_size)
     shift = sum((m - c) ** 2 for m, c in zip(moved_centre, base_centre)) ** 0.5
     assert abs(shift - 0.1 * 2 ** 0.5 * 33.8) < 0.5, shift  # 10% of the SMG's length forward and 10% up (at right angles)
+
+
+def test_every_gun_type_is_a_staff_gun_and_no_crossbow_is_left(tmp_path):
+    import struct as st
+
+    bl2 = staff_bl2(tmp_path)
+    g0 = bl2["weapons"]["guns"][0]
+    bl2["weapons"]["guns"] += [{**g0, "type": t, "pellets": 6 if t == "shotgun" else 1, "elements": ["Fire"], "balance": g0["balance"] + f"_{t}"} for t in ("shotgun", "sniper", "launcher")]
+    rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff")
+    _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"WEAP", "ENCH", "MGEF", "PROJ", "KYWD", "EXPL", "LVLI"})
+    plain = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"WEAP"})[1]["WEAP"]
+    over = {r.form_id: r for r in recs["WEAP"]}
+    guns = [r for r in plain if r.edid.startswith("Skylands_")]
+    assert guns and all(over[r.form_id].first("DNAM")[0] == 8 for r in guns), "every gun of every type is a staff (animation type 8) over its crossbow"
+    names = {r.form_id: r.edid for r in recs["KYWD"]}
+    ench = {r.form_id: r for r in recs["ENCH"]}
+    mgef = {r.form_id: r for r in recs["MGEF"]}
+    seen = {}
+    for w in over.values():
+        kwda = w.first("KWDA")
+        kw = [names.get(k) for k in st.unpack(f"<{len(kwda) // 4}I", kwda)]
+        numbers = next(n for n in kw if n and n.startswith("SkylandsGun_"))
+        pellets = int(numbers.rsplit("_p", 1)[1])
+        efit = st.unpack_from("<f", ench[st.unpack("<I", w.first("EITM"))[0]].first("EFIT"))[0]
+        damage = st.unpack_from("<H", w.first("DATA"), 8)[0]
+        seen[pellets] = (efit, damage)
+    assert 6 in seen and seen[6][0] < seen[6][1] * 6 and seen[6][0] > 0, seen  # a shotgun: six pellets, each a share of the shot's damage
+    assert 1 in seen and seen[1][0] == seen[1][1]
+    assert {r.edid for r in recs["LVLI"]} == {"SkylandsAmmoDrop"} and sum(1 for s_, _ in recs["LVLI"][0].subrecords if s_ == "LVLO") == len(generate.STAFF_KINDS)
+    rockets = [pj for pj in recs["PROJ"] if pj.edid.startswith("SkylandsStaffBullet_launcher_")]
+    assert rockets and all(st.unpack_from("<H", pj.first("DATA"), 0)[0] & 0x2 for pj in rockets), "every rocket explodes"
+    ammo = {r.edid for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"AMMO"})[1]["AMMO"] if r.edid.startswith("SkylandsAmmo_")}
+    assert ammo == {f"SkylandsAmmo_{k}" for k in generate.STAFF_KINDS}

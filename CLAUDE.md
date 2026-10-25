@@ -360,6 +360,16 @@ Other commands:
   a puff at the muzzle per shot plus a wisp for 1.1 s after, and the small elemental burst where an elemental bullet ends (`TrackBullet`: the launched projectile's handle is watched; when it is gone a burst is
   drawn at the last seen place; this replaces the old explosion records, which stay silent). Ini `Casings/Smoke/ImpactBursts`. UNCONFIRMED in game: all of it (looks, performance of ~15 temp effects a tick, that
   a handle that goes null means the bullet ended, the arm cull hiding the right nodes). Damage text: put on hold by the user.
+- 0.26.0 in game: not reported at 0.27.0 time. 0.27.0 (TestBuild-110, plugin 1.12.0), user requests: (1) smoke removed (not liked); (2) the plugin-drawn impact bursts removed: elemental bullets (and ALL rockets)
+  now ride on real explosion records `SkylandsBlast_<kind>_<element>` (`Rounds.expl`, vanilla explosion art for the element, small radius 60-90, damage = base x 0.25-0.35; rockets radius 420, damage x1.0), the PROJ
+  explosion flag set; `Armory._blast` (the silent one) is gone. (3) EVERY gun type is a staff gun: `STAFF_KINDS` = smg, assault_rifle, pistol, shotgun, sniper, launcher (the first two stay first so GiftA/GiftB and
+  their ids are as before); each Skylands.esp crossbow stays (byte-identical) and is overridden by a staff weapon of the same id in the second plugin; per-type tables `STAFF_FLASH_PERCENT/ZOOM/AMMO_NAMES/TRACER_SIZE`
+  (sniper zoom 3.0x), one ammo item per type (Pistol Ammo, Shotgun Shells, Sniper Ammo, Rocket), keyword `_p<pellets>` (the plugin launches that many projectiles per shot; the effect's magnitude is damage / pellets x 1.5),
+  reload and shot BL2 sound names for the new types (`bl2/audio.py`, reload names are the SMG guesses). No crossbow items are given or equipped any more: the ammo-drop list is overridden in the second plugin
+  with the six ammo items, the Hunter script (`scripts.watcher(bolts=False)`) and class-choice quest (`class_choice_quest(bolts=False)`) no longer add bolts. Installer: `Install-Skylands-GunModels-All-Staff.bat`
+  (`--gun-shooting staff`; the old partial 'Shooting-Staff' bat is gone). With ~4x the guns the second plugin passes 0xFFF ids, so it is no longer ESL-flagged (`esp.py` drops the flag over 0x1000): it takes a normal
+  load-order slot, and the form ids of its records change against earlier builds. The class-choice quest and Hunter keep their old props (Skylands.esp is untouched). UNCONFIRMED in game: all of it (pellet spread and
+  damage, rocket look/explosion, sniper zoom, whether the vanilla explosion art reads as 'small', ammo/mesh/sounds for the new types, ids and load order of the now non-light second plugin).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

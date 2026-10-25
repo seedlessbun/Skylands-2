@@ -37,7 +37,7 @@ MODEL_BATS = {
     "Shooting-BL2": ("native --gun-shooting bl2", "native gun models and Borderlands shooting: each gun gets its own rounds (equipped for you), a magazine and reload time, shotgun pellets, automatic bursts for SMGs and rifles, spread, and rockets/elemental rounds that explode; messages on screen say what it is doing"),
     "Shooting-Bullets": ("native --gun-shooting bullets", "native gun models, and the steel bolt becomes a fast, nearly flat shot (bullet-like)"),
     "Shooting-Both": ("native --gun-shooting both", "Borderlands rounds and the faster steel bolt together"),
-    "Shooting-Staff": ("native --gun-shooting staff", "STAGE 1 TEST, NEEDS SKSE (run Check-SKSE.bat): the Shooting-BL2 install, but every submachine gun and assault rifle is a STAFF gun (same parts, rarity and stats as the crossbow ones, which leave the loot). They drop, lie with their rarity beams and are carried by Pandora's enemies like the other guns; you get two to try. The Skylands SKSE plugin fires the player's bullets from the gun's muzzle while the attack button is down; no ammo, no magicka; the staff's charge bar is the magazine. Enemies cast the gun like a staff and the plugin adds the rest of their burst. Pistols, shotguns, snipers and launchers stay crossbows"),
+    "All-Staff": ("native --gun-shooting staff", "THE STAFF INSTALL, NEEDS SKSE (run Check-SKSE.bat): every Borderlands gun of every type (pistols, SMGs, assault rifles, shotguns, snipers, launchers) is a STAFF gun with the same parts, rarity, element and stats as before; there are no crossbows in the loot, in enemy hands, or in your pack, and no bolts. The Skylands SKSE plugin fires the bullets from the gun's muzzle (shotgun pellets, rockets that explode, small elemental explosions), with ammo items per gun type, recoil, sway, aim down sights, a reload key and the Borderlands-style ammo display. You start with a pistol and two guns to try"),
     "UModel": ("umodel", "Borderlands 2 gun meshes exported with the free UModel tool (downloaded during setup; if that fails, put umodel.exe from gildor.org in the work folder)"),
     "Auto": ("auto", "native, then UModel, then proxy, for each gun"),
 }
@@ -139,7 +139,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-109.zip"
+    out = dist / "Skylands-TestBuild-110.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

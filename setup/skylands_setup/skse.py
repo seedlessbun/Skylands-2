@@ -60,11 +60,9 @@ RecoilYaw=0.22
 RecoilRecover=0.6
 RecoilAim=0.6
 RecoilGun=1.0
-; the arms are hidden while fully aimed (1 on, 0 off); shell casings out of the gun, smoke at the muzzle, a small burst where an elemental bullet ends (1 on, 0 off)
+; the arms are hidden while fully aimed (1 on, 0 off); shell casings out of the gun (1 on, 0 off)
 HideHands=1
 Casings=1
-Smoke=1
-ImpactBursts=1
 ; the aimed gun's sway (breathing, walking, a lag behind turns): 1 is the default, 0 none, 2 twice as much
 Sway=1.0
 """

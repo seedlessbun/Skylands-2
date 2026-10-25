@@ -59,7 +59,7 @@ Burst/automatic fire, shotgun pellets, spread, magazine and reload, rocket fligh
 
 Goal: every gun type gets its own base weapon records instead of a copy of the crossbow, so fire rate, automatic fire and
 feel are not limited by the crossbow's draw-and-reload animation. Stage 1 is one prototype, an SMG on the staff animation
-type (`Install-Skylands-GunModels-Shooting-Staff.bat`, `--gun-shooting staff`). Stage 2 (which animation type for which gun
+type (`Install-Skylands-GunModels-All-Staff.bat`, `--gun-shooting staff`: every type). Stage 2 (which animation type for which gun
 type) is in `stage2-animation-types.md`.
 
 **Needs SKSE** (see `setup/skylands_setup/skse.py`): SKSE64 for the player's Skyrim runtime, Address Library for SKSE Plugins, and

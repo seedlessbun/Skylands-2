@@ -51,7 +51,7 @@ ARRAYS_IF_MISSING = [ins for name, size in ARRAY_SIZES for ins in (
     ("label", f"have_{name}"))]
 
 
-def class_choice_quest() -> Script:
+def class_choice_quest(bolts: bool = True) -> Script:
     """SkylandsHunterQuest extends Quest.
 
     * Shows the vault hunter choice once the player can move, teaches and equips that vault hunter's
@@ -129,8 +129,7 @@ def class_choice_quest() -> Script:
             ("callmethod", ("id", "AddSpell"), ("id", "player"), NONE, ("id", "::LogPower_var"), ("bool", False)),
             ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterGun_var"),
              ("int", 1), ("bool", False)),
-            ("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterAmmo_var"),
-             ("int", 60), ("bool", False)),
+            *([("callmethod", ("id", "AddItem"), ("id", "player"), NONE, ("id", "::StarterAmmo_var"), ("int", 60), ("bool", False))] if bolts else []),
             ("callmethod", ("id", "EquipItem"), ("id", "player"), NONE, ("id", "::StarterGun_var"),
              ("bool", False), ("bool", False)),
             ("assign", ("id", "Chosen"), ("bool", True)),
@@ -940,7 +939,7 @@ def class_choice_quest() -> Script:
     )
 
 
-def watcher() -> Script:
+def watcher(bolts: bool = True) -> Script:
     """SkylandsHunter extends ActiveMagicEffect: the effect of an ability every humanoid race (and so
     every person, and the player) carries. It runs once per person.
 
@@ -1389,10 +1388,9 @@ def watcher() -> Script:
             ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "f"), ("int", 1), ("bool", True)),
             ("callmethod", ("id", "Disable"), ("id", "g"), NONE, ("bool", False)),  # the copy that was placed is not left lying around
             ("callmethod", ("id", "Delete"), ("id", "g"), NONE),
-            ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("int", 30), ("bool", True)),
+            *([("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("int", 30), ("bool", True))] if bolts else []),  # crossbow guns need bolts; staff guns do not
             ("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "f"), ("bool", False), ("bool", True)),
-            ("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("bool", False),
-             ("bool", True)),
+            *([("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("bool", False), ("bool", True))] if bolts else []),
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
             ("callmethod", ("id", "GetDisplayName"), ("id", "Me"), ("id", "name")),
             ("callmethod", ("id", "GetName"), ("id", "f"), ("id", "what")),
