@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 200;  // 1.10.0
+	constexpr std::int32_t kVersion = 201;  // 1.10.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -403,7 +403,14 @@ namespace
 
 	// A short glowing flash where the bullet leaves, spawned by the plugin itself (a temporary effect of our own flash mesh that the game removes after
 	// its lifetime). The projectile record's own muzzle-flash feature crashed the game on the first shot (0.17.0).
-	void SpawnFlash(RE::Actor* a_shooter, const RE::NiPoint3& a_at, float a_pitch, float a_heading, int a_element, int a_percent)
+	// The player's flash follows the gun: it is spawned again every tick for a short while (each one living about a frame) at the muzzle node's place of that tick.
+	struct FlashFollow
+	{
+		std::chrono::steady_clock::time_point until{};
+		int                                   element{ 0 }, percent{ 100 };
+	} g_flashFollow;
+
+	void SpawnFlash(RE::Actor* a_shooter, const RE::NiPoint3& a_at, float a_pitch, float a_heading, int a_element, int a_percent, float a_life = 0.06f)
 	{
 		if (!g_flash || !a_shooter) {
 			return;
@@ -421,7 +428,7 @@ namespace
 		if (tell) {
 			SKSE::log::info("muzzle flash: spawning {}", model);
 		}
-		RE::BSTempEffectParticle::Spawn(cell, 0.06f, model.c_str(), rotation, a_at, 1.0f, 0, nullptr);
+		RE::BSTempEffectParticle::Spawn(cell, a_life, model.c_str(), rotation, a_at, 1.0f, 0, nullptr);
 		if (tell) {
 			SKSE::log::info("muzzle flash: spawned");
 		}
@@ -525,9 +532,43 @@ namespace
 		}
 		// the flash sits on the muzzle itself: the bullet starts a_forward ahead of it, and the flash is moved back past that (and a little more, since
 		// the mesh begins a hair in front of its origin), so there is no gap between the barrel and the flash
-		const float back = a_forward + 5.0f;
-		SpawnFlash(shooter, { origin.x - aim.x * back, origin.y - aim.y * back, origin.z - aim.z * back }, pitch, heading, info.element, info.flash);
+		if (npc) {
+			const float back = a_forward + 5.0f;
+			SpawnFlash(shooter, { origin.x - aim.x * back, origin.y - aim.y * back, origin.z - aim.z * back }, pitch, heading, info.element, info.flash);
+		} else {  // the player's flash is drawn by FollowFlash from the next tick on, glued to the muzzle node
+			g_flashFollow = { std::chrono::steady_clock::now() + std::chrono::milliseconds(60), info.element, info.flash };
+		}
 		return true;
+	}
+
+	// While the player's flash is alive: a flash of about one frame at the muzzle node's place now, along the barrel (muzzle minus breech), 15% of the barrel's length
+	// away from where it used to sit (it sat a little inside the barrel's end).
+	void FollowFlash(RE::PlayerCharacter* a_player, std::chrono::steady_clock::time_point a_now)
+	{
+		if (!g_flash || a_now >= g_flashFollow.until) {
+			return;
+		}
+		g_stage = "muzzle flash follow";
+		const auto camera = RE::PlayerCamera::GetSingleton();
+		const auto root = a_player->Get3D(camera && camera->IsInFirstPerson());
+		const auto muzzle = root ? root->GetObjectByName("SkylandsMuzzle"sv) : nullptr;
+		if (!muzzle) {
+			return;
+		}
+		Vec3  dir{ 0.0f, 1.0f, 0.0f };
+		float length = 50.0f;
+		if (const auto breech = root->GetObjectByName("SkylandsBreech"sv)) {
+			const Vec3 d{ muzzle->world.translate.x - breech->world.translate.x, muzzle->world.translate.y - breech->world.translate.y, muzzle->world.translate.z - breech->world.translate.z };
+			length = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+			dir = Norm(d);
+		} else {
+			RE::NiPoint3 eye{}, look{};
+			a_player->GetEyeVector(eye, look, true);
+			dir = Norm({ look.x, look.y, look.z });
+		}
+		const float push = 0.15f * length - 5.0f;
+		const RE::NiPoint3 at{ muzzle->world.translate.x + dir.x * push, muzzle->world.translate.y + dir.y * push, muzzle->world.translate.z + dir.z * push };
+		SpawnFlash(a_player, at, -std::asin(std::clamp(dir.z, -1.0f, 1.0f)), std::atan2(dir.x, dir.y), g_flashFollow.element, g_flashFollow.percent, 0.03f);
 	}
 
 	void RunOnGameThread(std::function<void()> a_work)
@@ -1581,6 +1622,7 @@ namespace
 		g_reloadMs = static_cast<int>(g_gun.info.reload / quick * 1000.0f + 0.5f);
 		RecoilFrame(player, now);
 		UpdateAim(player, g_gun.info, now);
+		FollowFlash(player, now);
 		g_spreadNowTenths = static_cast<int>(g_gun.info.spread / accuracy * AimFactor() * 10.0f + 0.5f);
 
 		if (g_gun.reloading) {
@@ -1856,7 +1898,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 10, 0, 0 },
+	.Version = { 1, 10, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

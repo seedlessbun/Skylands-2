@@ -349,6 +349,10 @@ Other commands:
   `RecoilGun` units, and works the aimed gun's sway (breathing, walking bob, lag behind turning; `Sway`) into `CenterGun`'s target. Sway is ADS only (the hip gun hangs on the arm animation). Ini keys
   `RecoilPitch/RecoilYaw/RecoilRecover/RecoilAim/RecoilGun/Sway` (IniVersion stays 3: new keys get defaults). UNCONFIRMED in game: that writing `data.angle` moves the first-person view (the log says
   "recoil: first kick moved the view pitch a -> b"), the signs (kick up, sway left when turning right), the strengths.
+- 0.25.0 in game (user): recoil and sway "look great". Wrong: the muzzle flash drifts back into the gun when aiming and lags like the gun used to (it was a fixed world effect spawned at the shot's
+  muzzle place, 5 units inside the barrel end), and it sat slightly on the barrel. 0.25.1 (TestBuild-108, plugin 1.10.1): the player's flash is respawned every tick for 60 ms (`FollowFlash`, `g_flashFollow`, each
+  effect lives 0.03 s) at the muzzle node of THAT tick, along muzzle minus breech, pushed `0.15 x barrel length - 5` units forward (user: "15% away from the gun"); enemies keep the one static flash.
+  UNCONFIRMED in game: that the respawned flashes read as one flash (no flicker or double brightness).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
