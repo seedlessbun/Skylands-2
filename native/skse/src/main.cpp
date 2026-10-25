@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 230;  // 1.13.0
+	constexpr std::int32_t kVersion = 231;  // 1.13.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -852,8 +852,8 @@ namespace
 		std::vector<RE::NiPointer<RE::NiAVObject>> hidden;  // the arm geometry switched off while aimed (switched on again when the aim ends)
 		struct View
 		{
-			bool         have{ false };
-			RE::NiPoint3 camSeen{}, lastActor{}, offset{};
+			bool         have{ false }, haveRest{ false };
+			RE::NiPoint3 camSeen{}, lastActor{}, offset{}, rest{ 0.0f, 0.0f, 120.0f };  // rest: where the camera node sits against the player's position
 		} view;
 	};
 	AimState g_aim;
@@ -1340,18 +1340,25 @@ namespace
 				// The camera node lags the player while moving (measured: about 30 units at a run, actor and first-person root are always equal). Its distance above the player is
 				// constant, so that is measured while the player stands still, and the view is the player's position of this frame plus it.
 				auto&              vp = g_aim.view;
-				static RE::NiPoint3 rest{ 0.0f, 0.0f, 120.0f };
-				static bool         haveRest = false;
 				const RE::NiPoint3  camT = cam->world.translate;
-				const float         moved = std::fabs(actorNow.x - vp.lastActor.x) + std::fabs(actorNow.y - vp.lastActor.y) + std::fabs(actorNow.z - vp.lastActor.z);
-				const bool          still = vp.have && moved < 0.25f && camT.x == vp.camSeen.x && camT.y == vp.camSeen.y && camT.z == vp.camSeen.z;
-				if (!haveRest || still) {
-					rest = { camT.x - actorNow.x, camT.y - actorNow.y, camT.z - actorNow.z };
-					haveRest = true;
+				const float         flat = std::fabs(actorNow.x - vp.lastActor.x) + std::fabs(actorNow.y - vp.lastActor.y);
+				const float         vertical = std::fabs(actorNow.z - vp.lastActor.z);
+				if (!vp.haveRest) {  // the first frame of an aim: the eye's height now (standing, crouched, on a mount ...), no sideways offset known yet
+					vp.rest = { 0.0f, 0.0f, camT.z - actorNow.z };
+					vp.haveRest = true;
+				} else {
+					if (vertical < 0.5f) {  // the eye's height follows a crouch or a stand at once, on the move or not (a jump or a fall keeps the last one)
+						vp.rest.z = camT.z - actorNow.z;
+					}
+					if (flat < 0.25f && vertical < 0.5f) {  // sideways the camera only lags while the player moves: measured when the player stands still
+						vp.rest.x = camT.x - actorNow.x;
+						vp.rest.y = camT.y - actorNow.y;
+					}
 				}
 				vp.camSeen = camT;
 				vp.lastActor = actorNow;
 				vp.have = true;
+				const RE::NiPoint3& rest = vp.rest;
 				origin = { actorNow.x + rest.x, actorNow.y + rest.y, actorNow.z + rest.z };
 			}
 			int   best = 0;
@@ -2192,7 +2199,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 13, 0, 0 },
+	.Version = { 1, 13, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

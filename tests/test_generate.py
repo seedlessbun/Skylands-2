@@ -676,3 +676,14 @@ def test_rockets_are_bigger_and_slower_in_three_looks_and_shotguns_scatter_their
                 trails.add(n.rsplit("_t", 1)[1])
                 pellets.add(int(n.rsplit("_p", 1)[1].split("_")[0]))
     assert 9 in pellets and trails & {"1", "2", "3"}, (pellets, trails)
+
+
+def test_a_staff_gun_whose_native_model_cannot_be_built_gets_the_stylised_one_not_the_staff(tmp_path):
+    bl2 = staff_bl2(tmp_path)
+    g0 = bl2["weapons"]["guns"][0]
+    bl2["weapons"]["guns"] += [{**g0, "type": "shotgun", "pellets": 6, "elements": [], "slots": {}, "balance": g0["balance"] + "_shotgun"}]
+    rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="native", model_sources={}, shooting="staff")
+    meshes = {k: v["mesh"] for k, v in rep["staff_guns"].items()}
+    assert meshes and all(m and "proxy_" in m for m in meshes.values()), meshes  # the real model could not be read: the proxy, never the donor staff (a None mesh)
+    assert any("shotgun" in k.lower() for k in meshes)
+    assert "by gun type" in " ".join(rep["model_log"]) and "'shotgun'" in " ".join(rep["model_log"])

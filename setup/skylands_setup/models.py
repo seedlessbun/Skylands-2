@@ -326,6 +326,7 @@ class GunModels:
         self.shade_notes: dict[str, int] = {}
         self.prepared: dict[str, tuple] = {}  # texture key -> reduced RGB image (decoded once, tinted per manufacturer)
         self.stats = {"built": 0, "shared": 0, "failed": 0}
+        self.by_type: dict[str, dict[str, int]] = {}  # gun type -> method -> guns (none: kept the vanilla mesh)
         self.by_method: dict[str, int] = {}
 
     # --- textures
@@ -369,6 +370,8 @@ class GunModels:
         if self.method == "off":
             return None
         order = ("native", "umodel", "proxy") if self.method == "auto" else (self.method,)
+        if hold is not None and "proxy" not in order:  # a staff gun whose real model cannot be built gets the stylised one, never the staff it is made from
+            order = (*order, "proxy")
         for method in order:
             try:
                 result = self._build(method, g, built, rarity_id, accent, edid, hold)
@@ -377,8 +380,11 @@ class GunModels:
                 continue
             if result:
                 self.by_method[method] = self.by_method.get(method, 0) + 1
+                per_type = self.by_type.setdefault(g.get("type", "?"), {})
+                per_type[method] = per_type.get(method, 0) + 1
                 return result
         self.stats["failed"] += 1
+        self.by_type.setdefault(g.get("type", "?"), {})["none"] = self.by_type.setdefault(g.get("type", "?"), {}).get("none", 0) + 1
         return None
 
     def _build(self, method: str, g: dict, built: dict, rarity_id: str, accent, edid: str, hold: "Hold | None" = None) -> str | None:
@@ -507,7 +513,7 @@ class GunModels:
     def summary(self) -> str:
         sizes = ", ".join(f"{t} {sum(a for a, _ in v) / len(v):.1f}" for t, v in sorted(self.sizes.items()))
         return (f"Gun models: {self.stats['built']} meshes written, {self.stats['shared']} guns share one, "
-                f"{self.stats['failed']} kept the crossbow mesh; by method {self.by_method or 'none'}; {len(self.textures)} textures; "
+                f"{self.stats['failed']} kept the vanilla mesh; by method {self.by_method or 'none'}; by gun type {self.by_type or 'none'}; {len(self.textures)} textures; "
                 f"average length of the meshes written (Skyrim units, a hand is about 8): {sizes or 'none'}")
 
 

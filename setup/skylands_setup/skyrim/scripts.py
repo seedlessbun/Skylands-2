@@ -1265,17 +1265,82 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
             ("return", None),
         ],
     )
-    on_equipped = Function(
-        "OnObjectEquipped",
-        params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
+    clear_one = Function(
+        "ClearOne",
+        params=[("i", "Int"), ("keep", "Form")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("n", "Int"), ("it", "Form"), ("t", "Int")],
+        code=[
+            # one slot of the pack: a weapon other than `keep` is removed (not given back)
+            ("callmethod", ("id", "GetNthForm"), ("id", "Me"), ("id", "it"), ("id", "i")),
+            ("callmethod", ("id", "GetType"), ("id", "it"), ("id", "t")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "t"), ("int", 41)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "it"), ("id", "keep")),
+            ("not", ("id", "::temp0"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "GetItemCount"), ("id", "Me"), ("id", "n"), ("id", "it")),
+            ("callmethod", ("id", "RemoveItem"), ("id", "Me"), NONE, ("id", "it"), ("id", "n"), ("bool", True), NONE),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    clear_weapons = Function(
+        "ClearWeapons",
+        params=[("keep", "Form")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int")],
+        code=[
+            # a person who carries a Skylands gun has no other weapon: every weapon but this one is taken out of the pack
+            ("callmethod", ("id", "GetNumItems"), ("id", "Me"), ("id", "i")),
+            ("isub", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("label", "loop"),
+            ("cmp_gte", ("id", "::temp0"), ("id", "i"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            call("ClearOne", ("id", "i"), ("id", "keep")),
+            ("isub", ("id", "i"), ("id", "i"), ("int", 1)),
+            ("jmp", ("lbl", "loop")),
+            ("label", "done"),
+            ("return", None),
+        ],
+    )
+    npc_equipped = Function(
+        "NpcEquipped",
+        params=[("akBaseObject", "Form")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
         code=[
-            ("jmpf", ("id", "IsPlayer"), ("lbl", "end")),
+            # a person who takes a Skylands gun in hand keeps no other weapon (staff install)
+            ("cast", ("id", "w"), ("id", "akBaseObject")),
+            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("callmethod", ("id", "HasKeyword"), ("id", "w"), ("id", "::temp0"), ("id", "::GunKeyword_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            call("ClearWeapons", ("id", "akBaseObject")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    player_equipped = Function(
+        "PlayerEquipped",
+        params=[("akBaseObject", "Form")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("w", "Weapon")],
+        code=[
             ("cast", ("id", "w"), ("id", "akBaseObject")),
             ("cast", ("id", "::temp0"), ("id", "w")),
             ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             call("ApplySpeed", ("id", "w")),
             ("label", "end"),
+            ("return", None),
+        ],
+    )
+    on_equipped = Function(
+        "OnObjectEquipped",
+        params=[("akBaseObject", "Form"), ("akReference", "ObjectReference")],
+        locals=[("::nonevar", "None")],
+        code=[
+            ("jmpf", ("id", "IsPlayer"), ("lbl", "npc")),
+            call("PlayerEquipped", ("id", "akBaseObject")),
+            ("return", None),
+            ("label", "npc"),
+            *([call("NpcEquipped", ("id", "akBaseObject"))] if everyone else []),
             ("return", None),
         ],
     )
@@ -1521,6 +1586,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
             ("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "f"), ("int", 1), ("bool", True)),
             ("callmethod", ("id", "Disable"), ("id", "g"), NONE, ("bool", False)),  # the copy that was placed is not left lying around
             ("callmethod", ("id", "Delete"), ("id", "g"), NONE),
+            *([call("ClearWeapons", ("id", "f"))] if everyone else []),  # staff install: the gun is the person's only weapon
             *([("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("int", 30), ("bool", True))] if bolts else []),  # crossbow guns need bolts; staff guns do not
             ("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "f"), ("bool", False), ("bool", True)),
             *([("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("bool", False), ("bool", True))] if bolts else []),
@@ -1622,7 +1688,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
                          ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
-        functions=[go, on_start, begin, on_update, wake, give, diag, hand, rare, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+        functions=[go, clear_one, clear_weapons, npc_equipped, player_equipped, on_start, begin, on_update, wake, give, diag, hand, rare, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, held_in, gun_held, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 

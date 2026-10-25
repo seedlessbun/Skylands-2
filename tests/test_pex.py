@@ -319,3 +319,14 @@ def test_nothing_of_skylands_starts_until_the_player_has_control_after_the_intro
     gunner = decompile(tmp_path, scripts.gunner_quest(), "SkylandsGunnerQuest")
     assert gunner.split("Event OnUpdate()")[1].index("Self.Waiting()") < gunner.split("Event OnUpdate()")[1].index("AddSpell")  # the ability (and the guns) after the intro
     assert "Skylands quest started" not in gunner.split("Event OnInit()")[1].split("EndEvent")[0]
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_a_person_with_a_skylands_gun_keeps_no_other_weapon(tmp_path):
+    staff = decompile(tmp_path, scripts.watcher(bolts=False, everyone=True, arm_percent=70), "SkylandsHunter")
+    assert "Self.ClearWeapons(f)" in staff.split("Function Equip()")[1].split("EndFunction")[0]  # handed a gun: the others go before it is put in the hand
+    assert "Self.NpcEquipped(akBaseObject)" in staff.split("Event OnObjectEquipped")[1].split("EndEvent")[0]  # taking a gun up by any other way too
+    clear = staff.split("Function ClearOne(")[1].split("EndFunction")[0]
+    assert "t == 41" in clear and "Me.RemoveItem(it, n, True" in clear  # weapons only (form type 41)
+    plain = decompile(tmp_path, scripts.watcher(), "SkylandsHunter")
+    assert "ClearWeapons" not in plain.split("Function Equip()")[1].split("EndFunction")[0] and "NpcEquipped" not in plain.split("Event OnObjectEquipped")[1].split("EndEvent")[0]

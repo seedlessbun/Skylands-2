@@ -393,6 +393,14 @@ Other commands:
   The MQ101 stage numbers are NOT known (UESP and Nexus are blocked from the container; a Nexus thread says stage 30 = 'Make our way to the Keep', 50 = entering the keep, 900 = finished: unverified), so it keys on the interior, not
   on a stage. UNCONFIRMED in game: that the keep is the first interior of a new game and the first moment of control after the dragon; if the start is still too early or late, `sqs MQ101` in the console lists the stages and
   a stage threshold can replace the interior test.
+- 0.29.1 in game (user): Skylands starts at the right time now. Reported: NPCs carry our guns but dual-wield them with a vanilla one-handed weapon; every shotgun still had the Falmer staff model (the pellets worked);
+  the aimed gun does not follow the camera down when the player crouches. 0.30.0 (TestBuild-114, plugin 1.13.1): (1) the watcher of a staff install clears the pack of every other weapon (form type 41) when a person is handed a gun
+  (`Equip` -> `ClearWeapons`) or takes a Skylands gun in hand any way (`OnObjectEquipped` -> `NpcEquipped`; `ClearOne` per slot, `PlayerEquipped` holds the old player branch; Champollion segfaults when the event holds the branches
+  itself). (2) `GunModels.model_for`: a staff gun (hold given) whose native/UModel model cannot be built falls back to the PROXY model (the old fallback was 'keep the vanilla mesh', which is the staff for staff guns, the
+  cause of the shotgun staffs; WHY the native shotgun parts failed is unknown, the old setup log is from before the all-staff build: look for 'Gun model ... failed' and the new 'by gun type' summary in `skylands-setup.log`);
+  `gunparts.gun_parts` also takes the biggest part as the body when no Body part could be read (two or more parts read). (3) Crouching: the aimed gun's origin is the player's position plus `rest`, the camera's offset measured
+  when the player stood still; the eye's height (rest.z) was only refreshed when the camera was exactly still, so a crouch never updated it. Now `rest.z` follows the camera whenever the player is not jumping/falling (even on the move),
+  `rest.x/y` are measured while the player stands still, and the offset (`g_aim.view`) starts from the current eye height at each aim start. UNCONFIRMED in game: all three.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

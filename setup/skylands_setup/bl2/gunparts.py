@@ -444,11 +444,22 @@ class Bl2Source:
         slots = {k: v for k, v in slots.items() if v}
         if not slots:
             return None
-        if "Body" not in slots:  # a gun made of only a scope or a stock is not a gun: leave it to the next method
+        body_slot = "Body"
+        if "Body" not in slots:
+            # No body mesh could be read. A gun with at least two readable parts takes its biggest part as the body (a shotgun's receiver may be named
+            # otherwise or live where it cannot be read); a lone scope or stock is not a gun: leave it to the next method
             self.stats["no_body"] = self.stats.get("no_body", 0) + 1
-            self.log(f"{g.get('balance', '?')}: no body mesh could be read (parts read: {sorted(slots)}); not building this gun")
-            return None
-        body = slots.get("Body") or next(iter(slots.values()))
+            if len(slots) < 2:
+                self.log(f"{g.get('balance', '?')}: no body mesh could be read (parts read: {sorted(slots)}); not building this gun")
+                return None
+
+            def volume(d):
+                lo, hi = d["mesh"].bounds()
+                return (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2])
+
+            body_slot = max(slots, key=lambda k: volume(slots[k]))
+            self.log(f"{g.get('balance', '?')}: no Body part could be read (parts read: {sorted(slots)}); the biggest, {body_slot}, stands in for it")
+        body = slots[body_slot]
         placed: dict[str, M.Mesh] = {}
         for slot, d in slots.items():
             offset = (0.0, 0.0, 0.0)
@@ -459,7 +470,7 @@ class Bl2Source:
         parts = [M.transformed(m, matrix, 1.0) for m in placed.values()]
         gun_texture = self._gun_material_texture(picked.get("Material"))
         if not gun_texture:  # no Material part: the body's own material stands in
-            for mat in slots["Body"].get("mats", [])[:3]:
+            for mat in slots[body_slot].get("mats", [])[:3]:
                 d, _n = gunmesh.pick_textures(gunmesh.texture_parameters(self.ix, mat))
                 if d:
                     gun_texture = self._texture(d)
