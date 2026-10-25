@@ -51,6 +51,38 @@ ARRAYS_IF_MISSING = [ins for name, size in ARRAY_SIZES for ins in (
     ("label", f"have_{name}"))]
 
 
+def waiting_function(tell: bool = False) -> Function:
+    """Waiting() for a quest: true while the intro of a new game is still on. The player must have been able to move on three polls in a row
+    (Calm counts them); then Begun is set for good and nothing of Skylands has touched the intro (the cart, the keep). `tell` shows a notification
+    when it begins. One Return at the end (Champollion cannot read several)."""
+    return Function(
+        "Waiting",
+        return_type="Bool",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("wait", "Bool"), ("msg", "String")],
+        code=[
+            ("assign", ("id", "wait"), ("bool", True)),
+            ("jmpf", ("id", "Begun"), ("lbl", "intro")),
+            ("assign", ("id", "wait"), ("bool", False)),
+            ("jmp", ("lbl", "done")),
+            ("label", "intro"),
+            ("callstatic", ("id", "Game"), ("id", "IsMovementControlsEnabled"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "moved_not")),
+            ("iadd", ("id", "Calm"), ("id", "Calm"), ("int", 1)),
+            ("jmp", ("lbl", "counted")),
+            ("label", "moved_not"),
+            ("assign", ("id", "Calm"), ("int", 0)),
+            ("label", "counted"),
+            ("cmp_gte", ("id", "::temp0"), ("id", "Calm"), ("int", 3)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "done")),
+            ("assign", ("id", "Begun"), ("bool", True)),
+            ("assign", ("id", "wait"), ("bool", False)),
+            *(notify(("str", "Skylands quest started")) if tell else []),
+            ("label", "done"),
+            ("return", ("id", "wait")),
+        ],
+    )
+
+
 def class_choice_quest(bolts: bool = True) -> Script:
     """SkylandsHunterQuest extends Quest.
 
@@ -85,10 +117,21 @@ def class_choice_quest(bolts: bool = True) -> Script:
             ("return", None),
         ],
     )
+    started = Function(
+        "Started", return_type="Bool",
+        code=[("return", ("id", "Begun"))],
+    )
+    waiting = waiting_function()
     on_update = Function(
         "OnUpdate",
         locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
+            # A new game: nothing of Skylands runs while the intro plays (the cart, the keep): see Waiting
+            ("callmethod", ("id", "Waiting"), SELF, ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "go")),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 1.5)),
+            ("return", None),
+            ("label", "go"),
             call("Bootstrap"),
             ("not", ("id", "::temp0"), ("id", "Chosen")),
             ("jmpf", ("id", "::temp0"), ("lbl", "ready")),
@@ -914,7 +957,7 @@ def class_choice_quest(bolts: bool = True) -> Script:
     return Script(
         name="SkylandsHunterQuest",
         parent="Quest",
-        variables=[("Chosen", "Bool", ("bool", False)), ("PendingPrompt", "Bool", ("bool", False)),
+        variables=[("Chosen", "Bool", ("bool", False)), ("Begun", "Bool", ("bool", False)), ("Calm", "Int", ("int", 0)), ("PendingPrompt", "Bool", ("bool", False)),
                    ("JustLoaded", "Bool", ("bool", False)), ("Refreshed", "Bool", ("bool", False)), ("Mode", "Int", ("int", 0)),
                    ("Generation", "Int", ("int", 0)), ("TrackedNext", "Int", ("int", 0)), ("RosterNext", "Int", ("int", 0)),
                    ("Noted", "Int", ("int", 0)), ("LogHuman", "Int", ("int", 0)), ("LogFoes", "Int", ("int", 0)),
@@ -934,7 +977,7 @@ def class_choice_quest(bolts: bool = True) -> Script:
                    ("::LogRadius_var", "Float", ("float", 5000.0)), ("::Verbose_var", "Bool", ("bool", True))],
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
                          ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("AbilityInit", "Spell")],
-        functions=[on_init, on_update, bootstrap, choose, make_arrays, refresh, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
+        functions=[on_init, on_update, started, waiting, bootstrap, choose, make_arrays, refresh, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
                    entry_index, entrance_for, note_entrance, arrive, consider, place, report, clear, alive, follow, sweep],
     )
 
@@ -955,12 +998,41 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
       Event OnObjectEquipped(Form akBaseObject, ObjectReference akReference)
       Event OnObjectUnequipped(Form akBaseObject, ObjectReference akReference)
     """
+    go = Function(
+        "Go",
+        return_type="Bool",
+        locals=[("::temp0", "Bool"), ("::temp1", "Bool")],
+        code=[
+            # true when Skylands may start: its quest is not running (it will be started), or it says the player has taken control after the intro
+            ("callmethod", ("id", "IsRunning"), ("id", "::Owner_var"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "yes")),
+            ("callmethod", ("id", "Started"), ("id", "::Owner_var"), ("id", "::temp1")),
+            ("return", ("id", "::temp1")),
+            ("label", "yes"),
+            ("return", ("bool", True)),
+        ],
+    )
     on_start = Function(
         "OnEffectStart",
         params=[("akTarget", "Actor"), ("akCaster", "Actor")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("w", "Weapon"), ("delay", "Float")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
             ("assign", ("id", "Me"), ("id", "akTarget")),
+            ("callmethod", ("id", "Go"), SELF, ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "wait")),
+            ("assign", ("id", "Began"), ("bool", True)),
+            call("Begin"),
+            ("return", None),
+            ("label", "wait"),
+            # a new game: the intro (the cart, the keep) is not touched; Skylands starts a few seconds after the player takes control
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 3.0)),
+            ("return", None),
+        ],
+    )
+    begin = Function(
+        "Begin",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("w", "Weapon"), ("delay", "Float")],
+        code=[
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             ("cmp_eq", ("id", "::temp0"), ("id", "Me"), ("id", "player")),
             ("jmpf", ("id", "::temp0"), ("lbl", "other")),
@@ -986,6 +1058,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
         "OnUpdate",
         locals=[("::nonevar", "None"), ("::temp0", "Int"), ("::temp1", "Bool"), ("delay", "Float")],
         code=[
+            ("jmpf", ("id", "Began"), ("lbl", "late")),
             ("jmpf", ("id", "IsPlayer"), ("lbl", "other")),
             call("PlayerTick"),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 0.5)),
@@ -994,6 +1067,15 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
             call("Maintain"),
             ("callstatic", ("id", "Utility"), ("id", "RandomFloat"), ("id", "delay"), ("float", 10.0), ("float", 16.0)),
             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("id", "delay")),
+            ("return", None),
+            ("label", "late"),
+            ("callmethod", ("id", "Go"), SELF, ("id", "::temp1")),
+            ("jmpf", ("id", "::temp1"), ("lbl", "again")),
+            ("assign", ("id", "Began"), ("bool", True)),
+            call("Begin"),
+            ("return", None),
+            ("label", "again"),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 3.0)),
             ("return", None),
         ],
     )
@@ -1487,7 +1569,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
     return Script(
         name="SkylandsHunter",
         parent="ActiveMagicEffect",
-        variables=[("Me", "Actor", None), ("IsPlayer", "Bool", ("bool", False)), ("Armed", "Bool", ("bool", False)),
+        variables=[("Me", "Actor", None), ("IsPlayer", "Bool", ("bool", False)), ("Began", "Bool", ("bool", False)), ("Armed", "Bool", ("bool", False)),
                    ("Foe", "Bool", ("bool", False)), ("Checked", "Bool", ("bool", False)), ("MyGen", "Int", ("int", 0)),
                    ("Ticks", "Int", ("int", 0)), ("Speed", "Float", ("float", 0.0)),
                    ("Told", "Bool", ("bool", False))],
@@ -1497,7 +1579,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
                          ("ScanRadius", "Float"), ("Verbose", "Bool"), ("RarityKeywords", "Keyword[]"), ("Beams", "Form[]"),
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
-        functions=[on_start, on_update, wake, give, diag, hand, rare, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
+        functions=[go, on_start, begin, on_update, wake, give, diag, hand, rare, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
                    worthy, roll, list_for, held_in, gun_held, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
     )
 
@@ -2033,12 +2115,16 @@ def gunner_quest() -> Script:
     """SkylandsGunnerQuest extends Quest (start game enabled, in SkylandsGunModels.esp): makes sure the player has the
     gunner ability, once a few seconds after the plugin is loaded and again every 15 seconds (cheap: one HasSpell)."""
     on_init = Function("OnInit", locals=[("::nonevar", "None"), ("msg", "String")],
-                       code=[*notify(("str", "Skylands quest started")),
-                             ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)])
+                       code=[("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)), ("return", None)])
     on_update = Function(
         "OnUpdate",
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("player", "Actor"), ("msg", "String"), ("f", "Form")],
         code=[
+            ("callmethod", ("id", "Waiting"), SELF, ("id", "::temp0")),  # a new game: nothing starts while the intro plays
+            ("jmpf", ("id", "::temp0"), ("lbl", "go")),
+            ("callmethod", ("id", "RegisterForSingleUpdate"), SELF, NONE, ("float", 2.0)),
+            ("return", None),
+            ("label", "go"),
             ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
             # HasSpell takes a Form: the Spell property passed as it is fails ("Type mismatch for argument 1")
             ("cast", ("id", "f"), ("id", "::Ability_var")),
@@ -2053,7 +2139,8 @@ def gunner_quest() -> Script:
         ],
     )
     return Script(name="SkylandsGunnerQuest", parent="Quest", auto_properties=[("Ability", "Spell")],
-                  functions=[on_init, on_update])
+                  variables=[("Begun", "Bool", ("bool", False)), ("Calm", "Int", ("int", 0))],
+                  functions=[on_init, on_update, waiting_function(tell=True)])
 
 
 # The player's relic variables: actor values of the player that any ability, relic or enchantment can fortify (or a script can set); the SKSE

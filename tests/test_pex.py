@@ -15,6 +15,10 @@ from skylands_setup.skyrim import pex, scripts  # noqa: E402
 CHAMPOLLION = os.environ.get("CHAMPOLLION", "")
 
 QUEST_EXPECTED = """Event OnUpdate()
+  If Self.Waiting()
+    Self.RegisterForSingleUpdate(1.5)
+    Return
+  EndIf
   Self.Bootstrap()
   If !Chosen
     Self.Choose()
@@ -100,8 +104,7 @@ CLEAR = """  Tracked[i] = None
   TrackedLights[i] = None"""
 
 WATCHER = {
-    "start": """Event OnEffectStart(Actor akTarget, Actor akCaster)
-  Me = akTarget
+    "start": """Function Begin()
   Actor player = Game.GetPlayer()
   If Me == player
     IsPlayer = True
@@ -296,3 +299,21 @@ def test_the_staff_install_watcher_arms_everyone_seventy_percent_of_the_time_and
     assert "IsChild" in eligible and "Roll(70)" in psc and "Roll(ArmChance)" not in psc  # the saved property is not used: an old save keeps its old value
     assert "Bolts" not in psc.split("Function Equip()")[1].split("EndFunction")[0]
     assert "Roll(ArmChance)" in decompile(tmp_path, scripts.watcher(), "SkylandsHunter")  # the other installs are as they were
+
+
+@pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
+def test_nothing_of_skylands_starts_until_the_player_has_control_after_the_intro(tmp_path):
+    quest = decompile(tmp_path, scripts.class_choice_quest(), "SkylandsHunterQuest")
+    waiting = quest.split("Function Waiting()")[1].split("EndFunction")[0]
+    assert "Game.IsMovementControlsEnabled()" in waiting and "Calm >= 3" in waiting and "Begun = True" in waiting  # control on three polls in a row
+    assert quest.split("Event OnUpdate()")[1].split("Self.Bootstrap()")[0].count("Self.Waiting()") == 1  # before the ability is given
+    assert "Function Started()" in quest and "Return Begun" in quest
+    watcher = decompile(tmp_path, scripts.watcher(), "SkylandsHunter")
+    start = watcher.split("Event OnEffectStart(Actor akTarget, Actor akCaster)")[1].split("EndEvent")[0]
+    assert "Self.Go()" in start and "Self.Begin()" in start and "RegisterForSingleUpdate(3.0)" in start
+    assert "Owner.Started()" in watcher.split("Function Go()")[1].split("EndFunction")[0] and "Owner.IsRunning()" in watcher
+    update = watcher.split("Event OnUpdate()")[1].split("EndEvent")[0]
+    assert update.index("If Began") < update.index("Self.Go()") < update.index("Self.Begin()")  # a person or the player begins only once Skylands may
+    gunner = decompile(tmp_path, scripts.gunner_quest(), "SkylandsGunnerQuest")
+    assert gunner.split("Event OnUpdate()")[1].index("Self.Waiting()") < gunner.split("Event OnUpdate()")[1].index("AddSpell")  # the ability (and the guns) after the intro
+    assert "Skylands quest started" not in gunner.split("Event OnInit()")[1].split("EndEvent")[0]

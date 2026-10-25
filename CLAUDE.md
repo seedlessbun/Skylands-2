@@ -380,6 +380,13 @@ Other commands:
   saved property keeps its old value), and a person's death can drop a new gun (`Worthy`) whoever killed them; the plugin also gives bodies ammo: the held gun's (10-30) and, for 30-60 percent of humanoid bodies, 6-20 of a random kind
   (`SkylandsAmmos_<id>_..` keyword on every gun lists the six ammo items; log "ammo set"). Chest lists get the six ammo items through the overridden `SkylandsAmmoDrop`. The gun models of all types use the same hold, grip, muzzle and
   breech/top marks as the SMG and rifle (only `models.LENGTH` differs). UNCONFIRMED in game: everything in this entry.
+- 0.28.0 in game (user): the game crashed on the old character (the second plugin's form ids moved: the user accepts a NEW SAVE from now on and says it loads fine on a new save), and all Skylands processes broke the
+  new-game intro cutscene. 0.29.0 (TestBuild-112, pex-only, plugin unchanged 1.13.0): nothing of Skylands starts until the player can move after the intro. `scripts.waiting_function`: `Waiting()` on a quest = true until
+  `Game.IsMovementControlsEnabled()` was true on three polls in a row (`Calm`), then `Begun` stays true; `SkylandsHunterQuest.OnUpdate` (poll 1.5 s) and `SkylandsGunnerQuest.OnUpdate` (poll 2 s; it adds the staff/gunner
+  ability and gifts the guns; its 'Skylands quest started' notification moved to the moment it begins) call it first; the `SkylandsHunter` watcher (the ability every race carries, so it runs on the player and every NPC from the
+  first frame) is split into `Go()` (true when the Owner quest is not running or `Owner.Started()`), `OnEffectStart` (sets `Me`, begins at once if `Go()`, else polls every 3 s), `Begin()` (the old start code) and `OnUpdate`
+  (`Began`). So the vault hunter choice, the ability, NPC arming/enlisting and the player's guns all wait. Tests: `test_pex.py::test_nothing_of_skylands_starts_until_the_player_has_control_after_the_intro`. UNCONFIRMED in game:
+  that `IsMovementControlsEnabled` is false for the whole cart/keep intro and true at the moment of control (if the choice box still comes too early or too late, tune `Calm` (3 polls) or add an MQ101 stage check).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
