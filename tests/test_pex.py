@@ -305,7 +305,9 @@ def test_the_staff_install_watcher_arms_everyone_seventy_percent_of_the_time_and
 def test_nothing_of_skylands_starts_until_the_player_has_control_after_the_intro(tmp_path):
     quest = decompile(tmp_path, scripts.class_choice_quest(), "SkylandsHunterQuest")
     waiting = quest.split("Function Waiting()")[1].split("EndFunction")[0]
-    assert "Game.IsMovementControlsEnabled()" in waiting and "Calm >= 3" in waiting and "Begun = True" in waiting  # control on three polls in a row
+    assert "Game.IsMovementControlsEnabled()" in waiting and "Self.IntroOver()" in waiting and "Calm >= 3" in waiting and "Begun = True" in waiting  # control on three polls in a row, and the intro over
+    over = quest.split("Function IntroOver()")[1].split("EndFunction")[0]
+    assert 'Game.GetFormFromFile(210731, "Skyrim.esm")' in over and "q.IsCompleted()" in over and "IsInInterior()" in over and "GetCurrentRealTime()" in over  # Unbound (MQ101), the keep, a fallback
     assert quest.split("Event OnUpdate()")[1].split("Self.Bootstrap()")[0].count("Self.Waiting()") == 1  # before the ability is given
     assert "Function Started()" in quest and "Return Begun" in quest
     watcher = decompile(tmp_path, scripts.watcher(), "SkylandsHunter")

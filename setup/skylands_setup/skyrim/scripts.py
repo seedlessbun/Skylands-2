@@ -51,6 +51,47 @@ ARRAYS_IF_MISSING = [ins for name, size in ARRAY_SIZES for ins in (
     ("label", f"have_{name}"))]
 
 
+MQ101_ID = 0x0003372B  # "Unbound", the opening quest of a new game (Skyrim.esm): the cart, the block, the dragon, the keep
+
+
+def intro_over_function() -> Function:
+    """IntroOver() for a quest: true once a new game's opening is behind the player. The opening quest (MQ101, Unbound) is found by its form id: if it cannot be found,
+    or is finished, the intro is over; if it has begun, it is over once the player is inside a building again (the Helgen keep: after the cart, the block and the dragon's
+    arrival, the player has control and runs there); if it has not begun (a start that skips the intro), after a minute of real time, so the quest has had its chance to
+    begin. One Return at the end."""
+    return Function(
+        "IntroOver",
+        return_type="Bool",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("ok", "Bool"), ("f", "Form"), ("q", "Quest"), ("stage", "Int"), ("t", "Float"), ("player", "Actor")],
+        code=[
+            ("assign", ("id", "ok"), ("bool", False)),
+            ("callstatic", ("id", "Game"), ("id", "GetFormFromFile"), ("id", "f"), ("int", MQ101_ID), ("str", "Skyrim.esm")),
+            ("cast", ("id", "q"), ("id", "f")),
+            ("cast", ("id", "::temp0"), ("id", "q")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "missing")),
+            ("callmethod", ("id", "IsCompleted"), ("id", "q"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "running")),
+            ("assign", ("id", "ok"), ("bool", True)),
+            ("jmp", ("lbl", "done")),
+            ("label", "running"),
+            ("callmethod", ("id", "GetStage"), ("id", "q"), ("id", "stage")),
+            ("cmp_gt", ("id", "::temp0"), ("id", "stage"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "unborn")),
+            ("callstatic", ("id", "Game"), ("id", "GetPlayer"), ("id", "player")),
+            ("callmethod", ("id", "IsInInterior"), ("id", "player"), ("id", "ok")),
+            ("jmp", ("lbl", "done")),
+            ("label", "unborn"),
+            ("callstatic", ("id", "Utility"), ("id", "GetCurrentRealTime"), ("id", "t")),
+            ("cmp_gt", ("id", "ok"), ("id", "t"), ("float", 60.0)),
+            ("jmp", ("lbl", "done")),
+            ("label", "missing"),
+            ("assign", ("id", "ok"), ("bool", True)),
+            ("label", "done"),
+            ("return", ("id", "ok")),
+        ],
+    )
+
+
 def waiting_function(tell: bool = False) -> Function:
     """Waiting() for a quest: true while the intro of a new game is still on. The player must have been able to move on three polls in a row
     (Calm counts them); then Begun is set for good and nothing of Skylands has touched the intro (the cart, the keep). `tell` shows a notification
@@ -66,6 +107,8 @@ def waiting_function(tell: bool = False) -> Function:
             ("jmp", ("lbl", "done")),
             ("label", "intro"),
             ("callstatic", ("id", "Game"), ("id", "IsMovementControlsEnabled"), ("id", "::temp0")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "moved_not")),
+            ("callmethod", ("id", "IntroOver"), SELF, ("id", "::temp0")),  # moving is not enough: after the cart the player may walk about the courtyard
             ("jmpf", ("id", "::temp0"), ("lbl", "moved_not")),
             ("iadd", ("id", "Calm"), ("id", "Calm"), ("int", 1)),
             ("jmp", ("lbl", "counted")),
@@ -977,7 +1020,7 @@ def class_choice_quest(bolts: bool = True) -> Script:
                    ("::LogRadius_var", "Float", ("float", 5000.0)), ("::Verbose_var", "Bool", ("bool", True))],
         auto_properties=[("ClassChoice", "Message"), ("Shouts", "Shout[]"), ("Words", "WordOfPower[]"),
                          ("StarterGun", "Form"), ("StarterAmmo", "Form"), ("AbilityInit", "Spell")],
-        functions=[on_init, on_update, started, waiting, bootstrap, choose, make_arrays, refresh, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
+        functions=[on_init, on_update, started, waiting, intro_over_function(), bootstrap, choose, make_arrays, refresh, upgrade, loaded, prompt, settings, generation, in_range, remove, spawn, respawn_one, respawn, find_lost, enlist, known_count, stage, adopt, log_around, log_now,
                    entry_index, entrance_for, note_entrance, arrive, consider, place, report, clear, alive, follow, sweep],
     )
 
@@ -2140,7 +2183,7 @@ def gunner_quest() -> Script:
     )
     return Script(name="SkylandsGunnerQuest", parent="Quest", auto_properties=[("Ability", "Spell")],
                   variables=[("Begun", "Bool", ("bool", False)), ("Calm", "Int", ("int", 0))],
-                  functions=[on_init, on_update, waiting_function(tell=True)])
+                  functions=[on_init, on_update, waiting_function(tell=True), intro_over_function()])
 
 
 # The player's relic variables: actor values of the player that any ability, relic or enchantment can fortify (or a script can set); the SKSE

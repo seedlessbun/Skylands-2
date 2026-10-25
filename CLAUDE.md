@@ -387,6 +387,12 @@ Other commands:
   first frame) is split into `Go()` (true when the Owner quest is not running or `Owner.Started()`), `OnEffectStart` (sets `Me`, begins at once if `Go()`, else polls every 3 s), `Begin()` (the old start code) and `OnUpdate`
   (`Began`). So the vault hunter choice, the ability, NPC arming/enlisting and the player's guns all wait. Tests: `test_pex.py::test_nothing_of_skylands_starts_until_the_player_has_control_after_the_intro`. UNCONFIRMED in game:
   that `IsMovementControlsEnabled` is false for the whole cart/keep intro and true at the moment of control (if the choice box still comes too early or too late, tune `Calm` (3 polls) or add an MQ101 stage check).
+- 0.29.0 in game (user): Skylands started right after the cart (the player can walk about the courtyard then, so `IsMovementControlsEnabled` alone is not the end of the intro). 0.29.1 (TestBuild-113, pex-only):
+  `Waiting()` also needs `IntroOver()` (`scripts.intro_over_function`) on each of the three polls: the opening quest MQ101 "Unbound" (Skyrim.esm 0x0003372B, `Game.GetFormFromFile(210731, "Skyrim.esm")`) not found or `IsCompleted()` =
+  over; stage > 0 = over only when the player is in an INTERIOR (the Helgen keep: after the cart, the block, the dragon, the player has control and runs there); stage 0 (an intro-skipping start) = over after 60 s of real time.
+  The MQ101 stage numbers are NOT known (UESP and Nexus are blocked from the container; a Nexus thread says stage 30 = 'Make our way to the Keep', 50 = entering the keep, 900 = finished: unverified), so it keys on the interior, not
+  on a stage. UNCONFIRMED in game: that the keep is the first interior of a new game and the first moment of control after the dragon; if the start is still too early or late, `sqs MQ101` in the console lists the stages and
+  a stage threshold can replace the interior test.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
