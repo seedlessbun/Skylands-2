@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 231;  // 1.13.1
+	constexpr std::int32_t kVersion = 240;  // 1.14.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -320,6 +320,7 @@ namespace
 		int   burst{ 1 };        // rounds per burst of an enemy
 		int   element{ 0 };      // 0 none, 1 fire, 2 shock, 3 corrosive, 4 slag (the colour of the muzzle flash)
 		int   flash{ 100 };      // the size of the muzzle flash in percent (the flash mesh's file name carries it)
+		std::uint32_t sndOwn{ 0 }, sndVanilla{ 0 };  // the shot sound: this plugin's record (local id, 0 none) and the vanilla stand-in (full id, 0 none); an enemy's shots are played from these
 		int   pellets{ 1 };      // bullets in one shot (a shotgun's pellets)
 		int   trail{ 0 };        // a rocket's exhaust look: 0 none (not a rocket), 1 flame and thin smoke, 2 heavy smoke, 3 sparks
 		int   zoom{ 10 };        // the magnification when aimed, in tenths (13 is 1.3x)
@@ -330,10 +331,26 @@ namespace
 	std::vector<std::uint32_t> g_ammoLocals;  // the form ids (without the file) of every ammo item of the set, read from the SkylandsAmmos_ keyword of a gun
 	RE::FormID                 g_ammoEnch = 0;  // the enchantment of a gun it was read from: it tells which file the ammo items are in
 
+	// a record of this plugin from its local id, given the id of another record of it (the gun's enchantment): the plugin may or may not be a light one
+	RE::FormID ResolveLocal(RE::FormID a_sibling, std::uint32_t a_local)
+	{
+		return (a_sibling >> 24) == 0xFE ? ((a_sibling & 0xFFFFF000u) | (a_local & 0xFFFu)) : ((a_sibling & 0xFF000000u) | (a_local & 0xFFFFFFu));
+	}
+
+	void PlaySound(RE::FormID id, const RE::NiPoint3& a_at);  // below
+
 	std::mutex                                     g_gunLock;
 	std::unordered_map<RE::FormID, GunInfo>        g_guns;
 
 	// The numbers of a gun weapon from its keywords; false when it is not a Skylands staff gun.
+	RE::FormID ShotSoundOf(RE::TESObjectWEAP* a_weapon, const GunInfo& a_info)
+	{
+		if (a_info.sndOwn && a_weapon && a_weapon->formEnchanting) {
+			return ResolveLocal(a_weapon->formEnchanting->GetFormID(), a_info.sndOwn);
+		}
+		return a_info.sndVanilla;
+	}
+
 	bool GunOf(RE::TESObjectWEAP* a_weapon, GunInfo& a_out)
 	{
 		if (!a_weapon) {
@@ -397,6 +414,8 @@ namespace
 					case 'z': info.zoom = value; break;
 					case 'm': info.ammo = static_cast<std::uint32_t>(value); break;
 					case 'p': info.pellets = std::clamp(value, 1, 24); break;
+					case 'o': info.sndOwn = static_cast<std::uint32_t>(value); break;
+					case 'v': info.sndVanilla = static_cast<std::uint32_t>(value); break;
 					case 't': info.trail = std::clamp(value, 0, 3); break;
 					default: break;
 					}
@@ -563,6 +582,9 @@ namespace
 			if (info.trail > 0) {
 				TrackRocket(handle, origin, info.trail);
 			}
+		}
+		if (npc && a_pellets < 0) {  // an enemy's shot is heard (the player's is played by the tick)
+			PlaySound(ShotSoundOf(weapon, info), origin);
 		}
 		if (a_originOut) {
 			*a_originOut = origin;
@@ -743,6 +765,11 @@ namespace
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const RE::FormID shooter = actor->GetFormID();
+			{  // the game's own cast sends the first bullet: its sound is played here, at the actor's chest height a little ahead
+				RE::NiPoint3 at = actor->GetPosition();
+				at.z += actor->GetHeight() * 0.8f;
+				PlaySound(ShotSoundOf(weapon, info), at);
+			}
 			if (info.pellets > 1) {  // the game's own cast sent one pellet: the rest of the shot's pellets follow it at once
 				const int rest = info.pellets - 1;
 				RunOnGameThread([shooter, rest]() {
@@ -2199,7 +2226,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 13, 1, 0 },
+	.Version = { 1, 14, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

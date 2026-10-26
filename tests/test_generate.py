@@ -495,7 +495,7 @@ def test_staff_guns_replace_the_crossbow_smgs_and_rifles(tmp_path):
         assert parts[2] == f"i{round(max(0.05, 1.0 / max(1.0, sts['fire_rate'])) * 1000)}" and parts[3] == f"r{round(max(0.3, sts['reload']) * 1000)}", (numbers, sts)
         assert abs(int(parts[4][1:]) - row.spread_deg * sts["spread_mult"] * 10) <= 1.0, (numbers, sts)  # the accuracy roll narrows or widens the spread
         assert st.unpack("<H", w.first("EAMT"))[0] == int(parts[1][1:]) * 100  # the charge gauge is the magazine, 100 a round
-        assert str(row.burst) == parts[-7][1:] and parts[-6] in ("e0", "e1", "e2", "e3", "e4") and parts[-5] == f"f{generate.STAFF_FLASH_PERCENT[kind]}" and parts[-4] == f"z{generate.STAFF_ZOOM[kind]}" and parts[-3].startswith("m") and parts[-2] == f"p{row.pellets}" and parts[-1] in ("t0", "t1", "t2", "t3")  # burst for enemies, element for the muzzle flash colour, flash size
+        assert str(row.burst) == parts[-9][1:] and parts[-8] in ("e0", "e1", "e2", "e3", "e4") and parts[-7] == f"f{generate.STAFF_FLASH_PERCENT[kind]}" and parts[-6] == f"z{generate.STAFF_ZOOM[kind]}" and parts[-5].startswith("m") and parts[-4] == f"p{row.pellets}" and parts[-3] in ("t0", "t1", "t2", "t3") and parts[-2].startswith("o") and parts[-1].startswith("v")  # burst for enemies, element for the muzzle flash colour, flash size
         mesh_file = tmp_path / "out" / "Data" / "Meshes" / Path(*w.first("MODL").rstrip(b"\0").decode().split("\\"))
         assert b"SkylandsMuzzle" in mesh_file.read_bytes()  # the node the plugin starts the bullets from
         assert b"SkylandsBreech" in mesh_file.read_bytes() and b"SkylandsTop" in mesh_file.read_bytes()  # the barrel's rear and a point above the muzzle: the plugin holds the aimed gun straight
@@ -673,7 +673,7 @@ def test_rockets_are_bigger_and_slower_in_three_looks_and_shotguns_scatter_their
         for k in st.unpack(f"<{len(kwda) // 4}I", kwda):
             n = names.get(k, "")
             if n.startswith("SkylandsGun_"):
-                trails.add(n.rsplit("_t", 1)[1])
+                trails.add(n.rsplit("_t", 1)[1].split("_")[0])
                 pellets.add(int(n.rsplit("_p", 1)[1].split("_")[0]))
     assert 9 in pellets and trails & {"1", "2", "3"}, (pellets, trails)
 

@@ -610,7 +610,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.30.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.31.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -661,6 +661,14 @@ class Armory:
             self.hold = models_mod.staff_hold(models_mod.find_vanilla_mesh(data_dir, self.base[0].first("MODL"), self.log.append, "staff"), hold_turn,
                                               self.log.append, STAFF_SCALE, STAFF_FORWARD, STAFF_LIFT)
             self.log.append(f"Staff guns: fit {self.hold.note}; turn {hold_turn}; extra data {self.hold.extra}")
+
+    def stand_in_sound(self, kind: str):
+        """The vanilla firing sound that stands in for a gun type's shot (form id, editor id) or None; found once per type."""
+        if not hasattr(self, "_stand_ins"):
+            self._stand_ins = {}
+        if kind not in self._stand_ins:
+            self._stand_ins[kind] = staff_shot_sound(self.m, self.log, kind)
+        return self._stand_ins[kind]
 
     def _donor(self, element: str | None):
         if element not in self.donors:
@@ -862,7 +870,10 @@ class Armory:
         dd = w.get("DATA") or b"\0" * 10
         insert_ordered(w, "DATA", struct.pack("<IfH", value, float(gt.weight), damage) + dd[10:], WEAP_ORDER)
         kwda = w.get("KWDA") or b""
-        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}_m{self.ammo_ids[kind] & 0xFFFFFF}_p{pellets}_t{0 if style is None else ROCKET_TRAIL[style]}"
+        mfr0 = g.get("manufacturer", "")
+        shot_own = self._shot_sndr(kind, mfr0)  # an enemy's shots are played by the plugin from these two numbers: the Borderlands shot (this plugin's local id) or the vanilla stand-in
+        stand_in = self.stand_in_sound(kind)
+        numbers = f"SkylandsGun_c{magazine}_i{round(interval * 1000)}_r{round(reload_s * 1000)}_s{round(spread * 10)}_b{burst}_e{ELEMENT_NAMES.index(element) + 1 if element in ELEMENT_NAMES else 0}_f{STAFF_FLASH_PERCENT.get(kind, 100)}_z{STAFF_ZOOM.get(kind, 10)}_m{self.ammo_ids[kind] & 0xFFFFFF}_p{pellets}_t{0 if style is None else ROCKET_TRAIL[style]}_o{(shot_own or 0) & 0xFFFFFF}_v{(stand_in[0] if stand_in else 0)}"
         self.kinds.add(kind)
         ids = [*struct.unpack(f"<{len(kwda) // 4}I", kwda), gun_kw, rarity_kw, self._keyword(numbers), self._keyword(f"SkylandsSnd_{kind}"),
                self._keyword("SkylandsAmmos_" + "_".join(str(self.ammo_ids[k] & 0xFFFFFF) for k in STAFF_KINDS))]  # every ammo item of the set: the plugin gives bodies some of any kind
@@ -898,7 +909,7 @@ class Armory:
         sound = staff_shot_sound(m, self.log, "smg")
         snd_kw, snd_ids = [], []
         reload_ids: dict[str, list[int]] = {part: [] for part in RELOAD_PARTS}  # parallel to snd_ids: the three parts of the reload (0: silent)
-        stand_in = {kind: staff_shot_sound(m, self.log, kind) for kind in sorted(self.kinds)}
+        stand_in = {kind: self.stand_in_sound(kind) for kind in sorted(self.kinds)}
         for kind, mfr in sorted({k[:2] for k in self.sndr}):  # the Borderlands sounds of a gun type and manufacturer, tried before the stand-ins
             snd_kw.append(self._keyword(f"SkylandsSnd_{kind}_{re.sub('[^A-Za-z0-9]+', '_', mfr)}"))
             snd_ids.append(self.sndr.get((kind, mfr)) or (stand_in[kind][0] if stand_in.get(kind) else 0))

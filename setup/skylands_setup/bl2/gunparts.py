@@ -172,6 +172,7 @@ class Bl2Source:
         order = sorted(files, key=lambda f: (f.stat().st_size, f.name))
         self.log(f"looking for the real meshes in {len(order)} packages", force=True)
         left = set(wanted)
+        unreadable: list[str] = []
         for k, f in enumerate(order):
             if not left or time.time() - t0 > 480:
                 break
@@ -180,7 +181,8 @@ class Bl2Source:
             try:
                 pkg = self.ix.package(f)
                 pkg._indexes()  # noqa: SLF001
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                unreadable.append(f"{f.name}: {type(e).__name__}: {str(e)[:70]}")
                 continue
             for name in list(left):
                 for i in pkg._by_name.get(name, ()):  # noqa: SLF001
@@ -190,6 +192,13 @@ class Bl2Source:
                         break
         self.log(f"{len(self.mesh_index)} of {len(wanted)} meshes located in {time.time() - t0:.0f} s; "
                  f"never found: {sorted(left)[:12]}{'...' if len(left) > 12 else ''}", force=True)
+        if unreadable:
+            self.log(f"{len(unreadable)} of those packages could not be opened: {unreadable[:6]}", force=True)
+        if left:  # every name, so a gun type whose meshes are all missing can be told apart (a type's name appears in its parts)
+            by_prefix: dict[str, list[str]] = {}
+            for n in sorted(left):
+                by_prefix.setdefault(n.split("_")[0], []).append(n)
+            self.log("never found, by prefix: " + "; ".join(f"{k} ({len(v)}): {v[:6]}" for k, v in sorted(by_prefix.items())), force=True)
         if cache is not None and (not left or time.time() - t0 <= 480):
             try:
                 cache.write_text(json.dumps({"key": self.ix.key, "wanted": len(wanted),
@@ -366,6 +375,11 @@ class Bl2Source:
         path = self.mesh_path(part)
         if not path:
             self.stats["no_mesh"] += 1
+            kind = part.split(".")[0].lower()
+            seen = self.stats.setdefault("no_mesh_kinds", {})
+            seen[kind] = seen.get(kind, 0) + 1
+            if seen[kind] <= 2:  # the first two of each gun type, whatever the log's throttle says
+                self.log(f"{part}: no mesh ({kind}, number {seen[kind]}); " + self.describe(part) + "; " + self.diagnose(part), force=True)
             self.log(f"{part}: no mesh object found; " + self.describe(part), force=self.stats["no_mesh"] <= 3)
             if self.stats["no_mesh"] <= 10:
                 self.log(f"  where the named mesh is: {self.diagnose(part)}", force=True)
@@ -537,7 +551,7 @@ class Bl2Source:
         extra = f"; {len(errs)} packages could not be opened, e.g. {dict(list(errs.items())[:3])}" if errs else ""
         return (f"native: {s['parts']} parts looked at, {s['meshes']} meshes read, {s['no_mesh']} without a mesh object, "
                 f"{s['no_geometry']} whose geometry could not be found, {s['textured']} textures decoded, "
-                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh, {s.get('stand_ins', 0)} parts using another manufacturer's mesh{extra}")
+                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh, {s.get('stand_ins', 0)} parts using another manufacturer's mesh; parts without a mesh by package {s.get('no_mesh_kinds', {})}{extra}")
 
 
 def orientation(placed: dict[str, M.Mesh]) -> tuple[M.Vec, M.Vec, M.Vec]:

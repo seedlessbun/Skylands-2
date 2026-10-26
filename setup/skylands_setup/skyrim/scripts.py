@@ -1270,15 +1270,18 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
         params=[("i", "Int"), ("keep", "Form")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("n", "Int"), ("it", "Form"), ("t", "Int")],
         code=[
-            # one slot of the pack: a weapon other than `keep` is removed (not given back)
+            # one slot of the pack: a weapon other than `keep` is removed (not given back); of `keep` itself one copy stays (two copies were put in both hands)
             ("callmethod", ("id", "GetNthForm"), ("id", "Me"), ("id", "it"), ("id", "i")),
             ("callmethod", ("id", "GetType"), ("id", "it"), ("id", "t")),
             ("cmp_eq", ("id", "::temp0"), ("id", "t"), ("int", 41)),
             ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("cmp_eq", ("id", "::temp0"), ("id", "it"), ("id", "keep")),
-            ("not", ("id", "::temp0"), ("id", "::temp0")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             ("callmethod", ("id", "GetItemCount"), ("id", "Me"), ("id", "n"), ("id", "it")),
+            ("cmp_eq", ("id", "::temp0"), ("id", "it"), ("id", "keep")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "take")),
+            ("isub", ("id", "n"), ("id", "n"), ("int", 1)),
+            ("label", "take"),
+            ("cmp_gt", ("id", "::temp0"), ("id", "n"), ("int", 0)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
             ("callmethod", ("id", "RemoveItem"), ("id", "Me"), NONE, ("id", "it"), ("id", "n"), ("bool", True), NONE),
             ("label", "end"),
             ("return", None),
@@ -1644,6 +1647,44 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
             ("return", None),
         ],
     )
+    death_drop = Function(
+        "DeathDrop",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("list", "Form"), ("drop", "ObjectReference")],
+        code=[
+            # one roll: with the chance, the gun the person held (half the time, when they held one) or a random gun lands on the ground; nothing is left in the pack
+            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::DropChance_var")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "random")),
+            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("int", 50)),
+            ("jmpf", ("id", "::temp0"), ("lbl", "random")),
+            ("cast", ("id", "f"), ("id", "w")),
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "drop"), ("id", "f"), ("int", 1), ("bool", False), ("bool", False)),
+            ("jmp", ("lbl", "placed")),
+            ("label", "random"),
+            ("callmethod", ("id", "ListFor"), SELF, ("id", "list")),
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "drop"), ("id", "list"), ("int", 1), ("bool", False), ("bool", False)),
+            ("label", "placed"),
+            ("cast", ("id", "::temp0"), ("id", "drop")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
+            call("Announce", ("id", "drop")),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
+    cleanup_staff = Function(
+        "Cleanup",
+        params=[("akKiller", "Actor")],
+        locals=[("::nonevar", "None"), ("w", "Weapon")],
+        code=[
+            # a staff install: the gun the person held is noted, every weapon is taken out of the pack (nothing to loot from the body), then one drop roll
+            ("callmethod", ("id", "GunHeld"), SELF, ("id", "w")),
+            call("ClearWeapons", NONE),
+            call("DeathDrop", ("id", "w")),
+            ("return", None),
+        ],
+    )
     cleanup = Function(
         "Cleanup",
         params=[("akKiller", "Actor")],
@@ -1689,7 +1730,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
         functions=[go, clear_one, clear_weapons, npc_equipped, player_equipped, on_start, begin, on_update, wake, give, diag, hand, rare, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
-                   worthy, roll, list_for, held_in, gun_held, carrying, try_arm, equip, own_drop, bonus_drop, announce, cleanup],
+                   worthy, roll, list_for, held_in, gun_held, carrying, try_arm, equip, own_drop, bonus_drop, announce, *([death_drop, cleanup_staff] if everyone else [cleanup])],
     )
 
 

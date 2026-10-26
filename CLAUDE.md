@@ -401,6 +401,15 @@ Other commands:
   `gunparts.gun_parts` also takes the biggest part as the body when no Body part could be read (two or more parts read). (3) Crouching: the aimed gun's origin is the player's position plus `rest`, the camera's offset measured
   when the player stood still; the eye's height (rest.z) was only refreshed when the camera was exactly still, so a crouch never updated it. Now `rest.z` follows the camera whenever the player is not jumping/falling (even on the move),
   `rest.x/y` are measured while the player stands still, and the offset (`g_aim.view`) starts from the current eye height at each aim start. UNCONFIRMED in game: all three.
+- 0.30.0 in game (user, setup log 509bb60c): enemies dual-wield our guns, their shots make no sound, bodies keep their gun in the pack and sometimes drop a second one, shotguns still not native models. 0.31.0
+  (TestBuild-115, plugin 1.14.0): (1) the log: `Gun models ... by gun type {... 'shotgun': {'proxy': 89} ...}` - the proxy fallback worked (shotguns are proxy boxes, never the staff); EVERY shotgun part had no mesh
+  ("native: 550 parts looked at, 212 meshes read, 338 without a mesh object ... 39 of 207 meshes located in 43 s" from 124 packages: the shotgun meshes are not among the located ones, reason unknown: the setup log
+  now prints the first two parts without a mesh of each gun type with `describe` + `diagnose`, the packages that cannot be opened, and the never-found mesh names by prefix; read those lines in the next log).
+  (2) dual wield: cause NOT proven (no Papyrus log). `ClearOne` now keeps ONE copy of the kept gun (two copies of one gun go to both hands) and removes every other weapon. (3) bodies (staff install only,
+  `scripts.watcher(everyone=True)`): `Cleanup` = note `GunHeld`, `ClearWeapons(None)` (every weapon out of the pack), `DeathDrop` = ONE roll of `DropChance` (25 from the sheet): half the time the held gun (if any) is
+  placed on the ground, else a random gun from `ListFor`; `OwnDrop`/`BonusDrop` (drop the held gun always, plus a bonus one) are not used there. Other installs keep the old `Cleanup`. (4) enemy shot sounds: each gun's
+  keyword gained `_o<local id of its Borderlands shot SNDR>` and `_v<vanilla stand-in form id>`; the plugin plays them (`ShotSoundOf`/`PlaySound`) at the muzzle for an enemy's `Launch` and in `CastSink` for the
+  game's own first bullet (not for the extra pellets). UNCONFIRMED in game: all of it.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
