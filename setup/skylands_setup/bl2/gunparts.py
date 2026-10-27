@@ -16,6 +16,7 @@ from pathlib import Path
 from .. import meshes as M
 from . import gunmesh, upk
 
+MESH_INDEX_VERSION = 2  # the saved mesh locations are only used when written by this version of the search
 MESH_KEYS = ("GestaltModeSkeletalMeshName", "Mesh", "SkeletalMesh", "StaticMesh", "GearModel", "Model", "WeaponMesh")
 WEAPON_PACKAGES = re.compile(r"(wpn|weapon|weap_|pistol|smg|shotgun|sniper|launcher|assault|rifle|gun)", re.I)
 SLOT_ORDER = ("Body", "Barrel", "Grip", "Stock", "Sight", "Magazine", "Accessory", "Material", "Elemental")
@@ -155,7 +156,7 @@ class Bl2Source:
             cache = Path(self.ix.cache_path).with_name("gun_mesh_index.json")
             try:
                 saved = json.loads(cache.read_text(encoding="utf-8"))
-                if saved.get("key") == self.ix.key and saved.get("wanted", 0) >= len(wanted):
+                if saved.get("key") == self.ix.key and saved.get("wanted", 0) >= len(wanted) and saved.get("v") == MESH_INDEX_VERSION:
                     for name, (rel, path) in saved["found"].items():
                         f = self.ix.root / rel
                         if f.is_file():
@@ -199,13 +200,74 @@ class Bl2Source:
             for n in sorted(left):
                 by_prefix.setdefault(n.split("_")[0], []).append(n)
             self.log("never found, by prefix: " + "; ".join(f"{k} ({len(v)}): {v[:6]}" for k, v in sorted(by_prefix.items())), force=True)
+        if left:
+            try:
+                self._fuzzy_meshes(left)
+            except Exception as e:  # noqa: BLE001 - a guess at best: never stop the install
+                self.log(f"fuzzy mesh search failed: {type(e).__name__}: {str(e)[:100]}", force=True)
         if cache is not None and (not left or time.time() - t0 <= 480):
             try:
-                cache.write_text(json.dumps({"key": self.ix.key, "wanted": len(wanted),
+                cache.write_text(json.dumps({"key": self.ix.key, "wanted": len(wanted), "v": MESH_INDEX_VERSION,
                                              "found": {n: [str(f.relative_to(self.ix.root)), p] for n, (f, p) in self.mesh_index.items()}}),
                                  encoding="utf-8")
             except OSError:
                 pass
+
+    ALIASES = {"sg": ("shotgun", "shotguns", "sg"), "smg": ("smg", "smgs"), "pistol": ("pistol", "pistols"), "ar": ("assaultrifle", "ar", "rifle"),
+               "sr": ("sniper", "sniperrifle", "sr"), "l": ("launcher", "launchers", "rocketlauncher")}
+
+    def _fuzzy_meshes(self, left: set[str]) -> None:
+        """Meshes whose exact name was never found: the files may name them differently (Shotgun_Body_Bandit for SG_Body_Bandit). Look through
+        every package's name table for names of the same gun type, slot and manufacturer under another prefix, open those packages and take the
+        mesh exports. Everything seen is logged, so the next log shows what the files really call these meshes."""
+        t0 = time.time()
+        prefixes = {n.split("_")[0] for n in left} & set(self.ALIASES)
+        wanted_tail: dict[str, list[str]] = {}  # "body_bandit" -> wanted names
+        for n in left:
+            pre, _, tail = n.partition("_")
+            if pre in prefixes and tail:
+                wanted_tail.setdefault(tail, []).append(n)
+        if not wanted_tail:
+            return
+        aliases = {a for pre in prefixes for a in self.ALIASES[pre]}
+        hit_files: dict[Path, set[str]] = {}
+        similar: set[str] = set()
+        for f in self.ix.files:
+            try:
+                names = upk.read_name_set(f)
+            except Exception:  # noqa: BLE001
+                continue
+            near = {n for n in names if n.partition("_")[0] in aliases and n.partition("_")[2] in wanted_tail}
+            for n in names:  # what the files call things of these gun types at all, for the log
+                if n.partition("_")[0] in aliases and re.search(r"(body|barrel|grip|stock|mag|sight|receiver)", n) and len(similar) < 60:
+                    similar.add(n)
+            if near:
+                hit_files[f] = near
+        self.log(f"fuzzy search: {len(hit_files)} packages hold names like a missing mesh's under another prefix "
+                 f"({time.time() - t0:.0f} s); sample {[(f.stem, sorted(v)[:3]) for f, v in list(hit_files.items())[:4]]}", force=True)
+        self.log(f"fuzzy search: names of these gun types that look like parts: {sorted(similar)[:40]}", force=True)
+        weapon_groups = sorted(k for k in self.ix.groups if re.search(r"shotgun|weap_sg|^sg_", k))[:30]
+        self.log(f"fuzzy search: package groups named for shotguns: {weapon_groups}; packages the index could not read: {sorted(self.ix.errors)[:12]}", force=True)
+        found = 0
+        for f in sorted(hit_files, key=lambda f: (f.stat().st_size, f.name))[:80]:
+            if time.time() - t0 > 240:
+                break
+            try:
+                pkg = self.ix.package(f)
+                pkg._indexes()  # noqa: SLF001
+            except Exception as e:  # noqa: BLE001
+                self.log(f"fuzzy search: {f.name} cannot be opened: {type(e).__name__}: {str(e)[:60]}", force=True)
+                continue
+            for nm in hit_files[f]:
+                for i in pkg._by_name.get(nm, ()):  # noqa: SLF001
+                    if pkg.obj_class(i) not in gunmesh.MESH_CLASSES:
+                        continue
+                    for w in wanted_tail.get(nm.partition("_")[2], []):
+                        if w in left:
+                            self.mesh_index[w] = (f, pkg.path_of(i))
+                            left.discard(w)
+                            found += 1
+        self.log(f"fuzzy search: {found} more meshes located; still missing {len(left)}", force=True)
 
     def _by_gestalt(self, part: str) -> str | None:
         if part in self.by_gestalt:

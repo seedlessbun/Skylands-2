@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 250;  // 1.14.1
+	constexpr std::int32_t kVersion = 260;  // 1.14.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -731,6 +731,43 @@ namespace
 		}
 	};
 
+	// An enemy with a Skylands gun in BOTH hands (seen in game: two of the same weapon): the extra copy is taken out of the pack and the left hand is
+	// emptied, on the game thread. The first few cases tell what the hands held and how many copies the pack had.
+	void OneGunOnly(RE::FormID a_actorId)
+	{
+		RunOnGameThread([a_actorId]() {
+			const auto who = RE::TESForm::LookupByID<RE::Actor>(a_actorId);
+			if (!who || who->IsDead()) {
+				return;
+			}
+			const auto right = who->GetEquippedObject(false);
+			const auto left  = who->GetEquippedObject(true);
+			static std::atomic_int told{ 0 };
+			GunInfo                info{};
+			const auto             leftWeapon = left ? left->As<RE::TESObjectWEAP>() : nullptr;
+			if (!leftWeapon || !leftWeapon->formEnchanting || !GunOf(leftWeapon, info)) {
+				return;
+			}
+			const auto rightWeapon = right ? right->As<RE::TESObjectWEAP>() : nullptr;
+			GunInfo    other{};
+			if (!rightWeapon || !rightWeapon->formEnchanting || !GunOf(rightWeapon, other)) {
+				return;  // a lone gun in the left hand stays
+			}
+			const int copies = CountOf(who, leftWeapon);
+			if (told.fetch_add(1) < 12) {
+				SKSE::log::info("enemy {:08X}: left hand holds gun {:08X}, right hand {:08X}, {} copies in the pack: emptying the left hand",
+					a_actorId, leftWeapon->GetFormID(), right ? right->GetFormID() : 0, copies);
+			}
+			if (right && right->GetFormID() == leftWeapon->GetFormID() && copies > 1) {
+				who->RemoveItem(leftWeapon, copies - 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+			}
+			if (const auto manager = RE::ActorEquipManager::GetSingleton()) {
+				const auto slot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F43);  // LeftHand
+				manager->UnequipObject(who, leftWeapon, nullptr, 1, slot, false, true, false, false, nullptr);
+			}
+		});
+	}
+
 	class CastSink : public RE::BSTEventSink<RE::TESSpellCastEvent>
 	{
 	public:
@@ -764,6 +801,7 @@ namespace
 			if (!ours) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
+			OneGunOnly(actor->GetFormID());
 			const RE::FormID shooter = actor->GetFormID();
 			{  // the game's own cast sends the first bullet: its sound is played here, at the actor's chest height a little ahead
 				RE::NiPoint3 at = actor->GetPosition();

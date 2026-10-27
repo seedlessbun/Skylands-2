@@ -414,6 +414,11 @@ Other commands:
   second watcher instance, no ClearOne error). 0.32.0 (TestBuild-116, plugin 1.14.1): the player's shot sound is chosen by the plugin from the gun's own keywords (`ShotSoundOf`) first, the script's
   `SetShotSound` hand-over is the fallback; log "player shot sound: own .. script .. playing ..". Papyrus: `Maintain` assigned `Remember`'s Bool to None (NoneVar mismatch, fixed), the quest's `Place` passed a Light as a
   Form (cast, fixed), `Equip` clears other weapons again after EquipItem. Dual-wield cause still UNPROVEN: if it persists ask for `SkylandsNative.log` + which items the second hand holds.
+- 0.32.0 in game (user, SkylandsNative.log plugin 250): player shot sound is back; enemies hold TWO OF THE SAME gun whatever the weapon. Setup log 44b4fb53: all 26 shotgun mesh names (`sg_*`) are in
+  the name tables of ~10 packages but NO package exports a mesh of that name (the 39 located meshes are other types), so shotguns are proxy boxes. 0.33.0 (TestBuild-117, plugin 1.14.2): (1) `gunparts._fuzzy_meshes`
+  (after the exact search; `MESH_INDEX_VERSION` 2 so the saved list is redone): looks in every name table for the same slot+manufacturer under another prefix (`shotgun_body_bandit`), opens those packages, takes
+  mesh exports; logs `fuzzy search:` lines (names of the type that look like parts, shotgun-named groups, unreadable packages). READ THOSE LINES in the next setup log. (2) plugin `OneGunOnly`: on an enemy's cast, a
+  Skylands gun in BOTH hands: the extra copy is removed and the left hand emptied; log "enemy ..: left hand holds gun ..., right hand .., N copies in the pack". UNCONFIRMED in game.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
