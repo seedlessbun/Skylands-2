@@ -858,7 +858,7 @@ def class_choice_quest(bolts: bool = True) -> Script:
         "Place",
         params=[("r", "ObjectReference"), ("k", "Int")],
         locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("i", "Int"), ("e", "ObjectReference"), ("bs", "Form"),
-                ("lt", "Light"), ("ln", "Int"), ("b", "ObjectReference"), ("lr", "ObjectReference"), ("slot", "Int")],
+                ("lt", "Light"), ("lf", "Form"), ("ln", "Int"), ("b", "ObjectReference"), ("lr", "ObjectReference"), ("slot", "Int")],
         code=[
             ("assign", ("id", "i"), ("int", 0)),
             ("label", "find"),
@@ -879,7 +879,8 @@ def class_choice_quest(bolts: bool = True) -> Script:
             ("cmp_gt", ("id", "::temp0"), ("id", "ln"), ("id", "k")),
             ("jmpf", ("id", "::temp0"), ("lbl", "nolight")),
             ("array_getelement", ("id", "lt"), ("id", "::Lights_var"), ("id", "k")),
-            ("callmethod", ("id", "PlaceAtMe"), ("id", "r"), ("id", "lr"), ("id", "lt"), ("int", 1), ("bool", False),
+            ("cast", ("id", "lf"), ("id", "lt")),  # a Light passed where a Form is wanted is "Type mismatch for argument 1"
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "r"), ("id", "lr"), ("id", "lf"), ("int", 1), ("bool", False),
              ("bool", False)),
             ("label", "nolight"),
             ("assign", ("id", "slot"), ("id", "TrackedNext")),
@@ -1249,7 +1250,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
             ("assign", ("id", "Checked"), ("bool", True)),
             ("callmethod", ("id", "Eligible"), SELF, ("id", "Foe")),
             ("jmpf", ("id", "Foe"), ("lbl", "checked")),
-            ("callmethod", ("id", "Remember"), ("id", "::Owner_var"), NONE, ("id", "Me")),
+            ("callmethod", ("id", "Remember"), ("id", "::Owner_var"), ("id", "::temp0"), ("id", "Me")),
             ("label", "checked"),
             ("jmpf", ("id", "Foe"), ("lbl", "end")),
             ("callmethod", ("id", "GenerationNow"), ("id", "::Owner_var"), ("id", "g")),
@@ -1593,6 +1594,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
             *([("callmethod", ("id", "AddItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("int", 30), ("bool", True))] if bolts else []),  # crossbow guns need bolts; staff guns do not
             ("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "f"), ("bool", False), ("bool", True)),
             *([("callmethod", ("id", "EquipItem"), ("id", "Me"), NONE, ("id", "::Bolts_var"), ("bool", False), ("bool", True))] if bolts else []),
+            *([call("ClearWeapons", ("id", "f"))] if everyone else []),  # equipping can bring an outfit weapon back: the gun stays the only one
             ("jmpf", ("id", "::Verbose_var"), ("lbl", "end")),
             ("callmethod", ("id", "GetDisplayName"), ("id", "Me"), ("id", "name")),
             ("callmethod", ("id", "GetName"), ("id", "f"), ("id", "what")),

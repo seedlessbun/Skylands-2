@@ -410,6 +410,10 @@ Other commands:
   placed on the ground, else a random gun from `ListFor`; `OwnDrop`/`BonusDrop` (drop the held gun always, plus a bonus one) are not used there. Other installs keep the old `Cleanup`. (4) enemy shot sounds: each gun's
   keyword gained `_o<local id of its Borderlands shot SNDR>` and `_v<vanilla stand-in form id>`; the plugin plays them (`ShotSoundOf`/`PlaySound`) at the muzzle for an enemy's `Launch` and in `CastSink` for the
   game's own first bullet (not for the extra pellets). UNCONFIRMED in game: all of it.
+- 0.31.0 in game (user, logs 44b4fb53 / 4283eada): enemy shots are heard; the player's own shots are silent (cause unproven: the player path was unchanged); enemies still dual-wield (Papyrus log shows no
+  second watcher instance, no ClearOne error). 0.32.0 (TestBuild-116, plugin 1.14.1): the player's shot sound is chosen by the plugin from the gun's own keywords (`ShotSoundOf`) first, the script's
+  `SetShotSound` hand-over is the fallback; log "player shot sound: own .. script .. playing ..". Papyrus: `Maintain` assigned `Remember`'s Bool to None (NoneVar mismatch, fixed), the quest's `Place` passed a Light as a
+  Form (cast, fixed), `Equip` clears other weapons again after EquipItem. Dual-wield cause still UNPROVEN: if it persists ask for `SkylandsNative.log` + which items the second hand holds.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

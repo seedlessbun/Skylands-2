@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 240;  // 1.14.0
+	constexpr std::int32_t kVersion = 250;  // 1.14.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -2013,7 +2013,20 @@ namespace
 			if (!Launch(player->GetFormID(), 0, 0.0f, 0.0f, kOffsetForward, AimFactor() / accuracy, &at)) {
 				break;
 			}
-			PlayShot(at);
+			{
+				// The gun's own sound from its keywords first (the script's hand-over can be missing: a ghost script object, a load without the hook);
+				// the script's sound is the fallback.
+				RE::FormID sid = ShotSoundOf(weapon, g_gun.info);
+				if (!sid) {
+					sid = g_shotSound.load();
+				}
+				static int told = 0;
+				if (told < 6) {
+					++told;
+					SKSE::log::info("player shot sound: own {:08X} (keywords), script {:08X}, playing {:08X}", ShotSoundOf(weapon, g_gun.info), g_shotSound.load(), sid);
+				}
+				PlaySound(sid, at);
+			}
 			AddKick(g_gun.info, now);
 			--g_gun.mag;
 			++g_gun.holdShots;
