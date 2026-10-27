@@ -425,6 +425,9 @@ Other commands:
   `tests/test_fuzzy_meshes.py`), `MESH_INDEX_VERSION` 3 (the bad saved list is ignored). Dual wield: the plugin log shows ONE copy of the gun in the pack and the SAME gun reported in BOTH hands (`GetEquippedObject`) at every cast, and
   the left unequip did not hold; the weapon carries keyword `WeapTypeStaff`. 0.33.1 tries three times per person: left unequip, then 500 ms later if still both: unequip and `EquipObject` into the RightHand slot only; logs
   "half a second later left .., right ..". UNCONFIRMED. Offer to the user: borrow a real rifle/sniper mesh for shotguns.
+- 0.33.2 (TestBuild-119): same as 0.33.1 plus `shotgunprobe.py` / `Check-BL2-Shotguns.bat` (`python -m skylands_setup bl2shotguns`, writes `work\bl2-shotgun-report.txt`): the user is SURE the shotgun data is in their
+  BL2 install. It lists weapon-named files, every package with a shotgun-looking name (`sg_`, `shotgun`, ...), then opens those packages and lists the exports and imports with class, path, size and (imports) which package
+  they point to and whether that package is in the install, plus the weapon meshes that do exist for the other types. Read it, then teach `gunparts` where the shotgun meshes live.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

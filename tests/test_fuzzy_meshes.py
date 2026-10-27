@@ -41,3 +41,17 @@ def test_other_gun_types_are_never_mapped(monkeypatch, tmp_path):
     got = _run(monkeypatch, tmp_path, ["pistol_body_bandit", "ar_body_bandit", "smg_body_bandit", "launcher_body_bandit"],
                {"sg_body_bandit", "sr_body_bandit"})
     assert got == {}
+
+
+def test_shotgun_survey_runs_on_a_fake_install(tmp_path):
+    import fake_bl2
+    from skylands_setup import shotgunprobe
+
+    bl2 = tmp_path / "bl2"
+    fake_bl2.pandora_install(bl2)
+    cooked = bl2 / "WillowGame" / "CookedPCConsole"
+    fake_bl2.level_package_importing(cooked / "Weap_Shotgun_Test.upk", ["SG_Body_Bandit", "shotgun_body_x"])
+    out = tmp_path / "report.txt"
+    assert shotgunprobe.main(["--bl2", str(bl2), "--out", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "Weap_Shotgun_Test.upk" in text and "sg_body_bandit" in text and "Report written" in text
