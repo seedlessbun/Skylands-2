@@ -16,7 +16,7 @@ from pathlib import Path
 from .. import meshes as M
 from . import gunmesh, upk
 
-MESH_INDEX_VERSION = 2  # the saved mesh locations are only used when written by this version of the search
+MESH_INDEX_VERSION = 3  # the saved mesh locations are only used when written by this version of the search
 MESH_KEYS = ("GestaltModeSkeletalMeshName", "Mesh", "SkeletalMesh", "StaticMesh", "GearModel", "Model", "WeaponMesh")
 WEAPON_PACKAGES = re.compile(r"(wpn|weapon|weap_|pistol|smg|shotgun|sniper|launcher|assault|rifle|gun)", re.I)
 SLOT_ORDER = ("Body", "Barrel", "Grip", "Stock", "Sight", "Magazine", "Accessory", "Material", "Elemental")
@@ -221,15 +221,17 @@ class Bl2Source:
         every package's name table for names of the same gun type, slot and manufacturer under another prefix, open those packages and take the
         mesh exports. Everything seen is logged, so the next log shows what the files really call these meshes."""
         t0 = time.time()
-        prefixes = {n.split("_")[0] for n in left} & set(self.ALIASES)
-        wanted_tail: dict[str, list[str]] = {}  # "body_bandit" -> wanted names
+        # (alias prefix, tail) -> the wanted names of THAT gun type only: a pistol's magazine must never become a shotgun's (0.33.0 mixed the types)
+        by_alias: dict[tuple[str, str], list[str]] = {}
         for n in left:
             pre, _, tail = n.partition("_")
-            if pre in prefixes and tail:
-                wanted_tail.setdefault(tail, []).append(n)
-        if not wanted_tail:
+            for alias in self.ALIASES.get(pre, ()):
+                if alias != pre and tail:
+                    by_alias.setdefault((alias, tail), []).append(n)
+        if not by_alias:
             return
-        aliases = {a for pre in prefixes for a in self.ALIASES[pre]}
+        aliases = {a for a, _ in by_alias}
+        wanted_tail = {t: [] for _, t in by_alias}
         hit_files: dict[Path, set[str]] = {}
         similar: set[str] = set()
         for f in self.ix.files:
@@ -237,7 +239,7 @@ class Bl2Source:
                 names = upk.read_name_set(f)
             except Exception:  # noqa: BLE001
                 continue
-            near = {n for n in names if n.partition("_")[0] in aliases and n.partition("_")[2] in wanted_tail}
+            near = {n for n in names if (n.partition("_")[0], n.partition("_")[2]) in by_alias}
             for n in names:  # what the files call things of these gun types at all, for the log
                 if n.partition("_")[0] in aliases and re.search(r"(body|barrel|grip|stock|mag|sight|receiver)", n) and len(similar) < 60:
                     similar.add(n)
@@ -262,7 +264,7 @@ class Bl2Source:
                 for i in pkg._by_name.get(nm, ()):  # noqa: SLF001
                     if pkg.obj_class(i) not in gunmesh.MESH_CLASSES:
                         continue
-                    for w in wanted_tail.get(nm.partition("_")[2], []):
+                    for w in by_alias.get((nm.partition("_")[0], nm.partition("_")[2]), []):
                         if w in left:
                             self.mesh_index[w] = (f, pkg.path_of(i))
                             left.discard(w)

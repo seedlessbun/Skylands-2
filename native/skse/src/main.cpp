@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 260;  // 1.14.2
+	constexpr std::int32_t kVersion = 270;  // 1.14.3
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -753,6 +753,14 @@ namespace
 			if (!rightWeapon || !rightWeapon->formEnchanting || !GunOf(rightWeapon, other)) {
 				return;  // a lone gun in the left hand stays
 			}
+			{  // at most three tries per person: a fix that does not hold must not keep unequipping a gun in the middle of a fight
+				static std::mutex                            lock;
+				static std::unordered_map<RE::FormID, int> tries;
+				const std::lock_guard                        guard(lock);
+				if (++tries[a_actorId] > 3) {
+					return;
+				}
+			}
 			const int copies = CountOf(who, leftWeapon);
 			if (told.fetch_add(1) < 12) {
 				SKSE::log::info("enemy {:08X}: left hand holds gun {:08X}, right hand {:08X}, {} copies in the pack: emptying the left hand",
@@ -762,8 +770,37 @@ namespace
 				who->RemoveItem(leftWeapon, copies - 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
 			}
 			if (const auto manager = RE::ActorEquipManager::GetSingleton()) {
-				const auto slot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F43);  // LeftHand
-				manager->UnequipObject(who, leftWeapon, nullptr, 1, slot, false, true, false, false, nullptr);
+				const auto leftSlot  = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F43);  // LeftHand
+				const auto rightSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42);  // RightHand
+				manager->UnequipObject(who, leftWeapon, nullptr, 1, leftSlot, false, true, false, false, nullptr);
+				// The left-hand unequip did not hold in 0.33.0 (the same gun was reported in both hands at every cast): after a moment, if both hands
+				// still hold it, the gun is taken off altogether and equipped again into the RIGHT hand slot only. What the hands hold then is logged.
+				const auto weaponId = leftWeapon->GetFormID();
+				std::thread([a_actorId, weaponId]() {
+					std::this_thread::sleep_for(std::chrono::milliseconds(500));
+					RunOnGameThread([a_actorId, weaponId]() {
+						const auto w   = RE::TESForm::LookupByID<RE::Actor>(a_actorId);
+						const auto gun = RE::TESForm::LookupByID<RE::TESObjectWEAP>(weaponId);
+						if (!w || !gun || w->IsDead()) {
+							return;
+						}
+						const auto l = w->GetEquippedObject(true);
+						const auto r = w->GetEquippedObject(false);
+						static std::atomic_int again{ 0 };
+						const bool both = l && r && l->GetFormID() == weaponId && r->GetFormID() == weaponId;
+						if (again.fetch_add(1) < 12) {
+							SKSE::log::info("enemy {:08X}: half a second later left {:08X}, right {:08X}{}", a_actorId, l ? l->GetFormID() : 0,
+								r ? r->GetFormID() : 0, both ? ": still both, equipping it again into the right hand only" : "");
+						}
+						if (both) {
+							if (const auto m = RE::ActorEquipManager::GetSingleton()) {
+								m->UnequipObject(w, gun, nullptr, 1, nullptr, false, true, false, false, nullptr);
+								m->EquipObject(w, gun, nullptr, 1, RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42), false, true, false, false);
+							}
+						}
+					});
+				}).detach();
+				(void)rightSlot;
 			}
 		});
 	}

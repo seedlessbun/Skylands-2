@@ -419,6 +419,12 @@ Other commands:
   (after the exact search; `MESH_INDEX_VERSION` 2 so the saved list is redone): looks in every name table for the same slot+manufacturer under another prefix (`shotgun_body_bandit`), opens those packages, takes
   mesh exports; logs `fuzzy search:` lines (names of the type that look like parts, shotgun-named groups, unreadable packages). READ THOSE LINES in the next setup log. (2) plugin `OneGunOnly`: on an enemy's cast, a
   Skylands gun in BOTH hands: the extra copy is removed and the left hand emptied; log "enemy ..: left hand holds gun ..., right hand .., N copies in the pack". UNCONFIRMED in game.
+- 0.33.0 in game (user, logs 3271a474 / f0a3cefa): BAD. The fuzzy search mapped other gun types' meshes onto missing names (it matched the tail `body_bandit` against ANY gun type's `pistol_`/`ar_`/`smg_` names: "57 more meshes located"),
+  so guns had parts from other types (a pistol with rifle magazines), a launcher 70 units long (was 48). Truth about shotguns: the files hold NO shotgun mesh at all (names `shotgun_*` do not exist; only `sg_*` names as references,
+  in the part definitions), so real shotgun models cannot be had from this install; 0.32.0 behaviour (proxy boxes) is right. 0.33.1 (TestBuild-118, plugin 1.14.3): the fuzzy search is per gun type (a test in
+  `tests/test_fuzzy_meshes.py`), `MESH_INDEX_VERSION` 3 (the bad saved list is ignored). Dual wield: the plugin log shows ONE copy of the gun in the pack and the SAME gun reported in BOTH hands (`GetEquippedObject`) at every cast, and
+  the left unequip did not hold; the weapon carries keyword `WeapTypeStaff`. 0.33.1 tries three times per person: left unequip, then 500 ms later if still both: unequip and `EquipObject` into the RightHand slot only; logs
+  "half a second later left .., right ..". UNCONFIRMED. Offer to the user: borrow a real rifle/sniper mesh for shotguns.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
