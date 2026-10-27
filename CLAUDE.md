@@ -435,6 +435,13 @@ Other commands:
   are probably in remaster gestalt meshes too. 0.33.3 (TestBuild-120): `gestaltprobe.py` / `Check-BL2-Gestalt.bat` (`python -m skylands_setup bl2gestalt`, writes `work\bl2-gestalt-report.txt` and raw
   `work\gestalt\GestaltDef_Shotgun.bin` + `GestaltMesh_Shotgun.bin`): lists every gestalt object, decodes the definitions' properties, shows names stored in the mesh blob, the bytes after the properties, what the heuristic mesh reader finds.
   NEXT: read that report, write a real SkeletalMesh parser (sections/chunks/bone map or the definition's part table) to cut one part out of a gestalt mesh, and hook it into `gunparts` (`mesh_index` for `sg_*`).
+- 0.33.3 gestalt report (eadf438c) READ: every gun type has a `GestaltSkeletalMeshDefinition` (`Weap_<Type>.GestaltDef_<Type>` in `Startup.upk`, copies `Remaster_*` in `Mancana_StartupRemaster.upk`) with props
+  `GestaltSkeletalMesh` (path), `GestaltInfos[0].Parts[]` = {`SkeletalMeshFragmentName` (e.g. SG_Body_Bandit = the part's `GestaltModeSkeletalMeshName`), `MaterialIndex` (always 0), `FirstIndex` (index-buffer offset),
+  `NumPrimitives` (triangles)}, `GestaltSocketMappings`, `GestaltPartBounds`. Parts are CONTIGUOUS (FirstIndex + 3 x NumPrimitives = next FirstIndex) and the sum equals what `gunmesh.read_mesh_blob` finds as the whole
+  mesh's triangle count (shotgun: 25227 in Startup, 33904 in the remaster), vertices already sit in assembled-gun space (all manufacturers overlap). 0.34.0 (TestBuild-121, pex/plugin unchanged, plugin 1.14.3):
+  `gunparts.Bl2Source._load_gestalt_defs` (Startup first, Mancana fills gaps), `_gestalt_path` (used BEFORE `_stand_in`, after a standalone located mesh), `_gestalt_mesh` (reads the whole mesh once; refuses it if the triangle count differs
+  from the definition's total), `_read_gestalt_part` (slice `tris[first//3 : +count]`, compact vertices, `placed: True` so no socket offsets). Log lines `gestalt: ...`, summary '... parts cut from gestalt meshes'.
+  UNCONFIRMED in game: textures (the gun's Material part supplies one; the gestalt UV layout may need `Weap_Shotguns.Tex.Weap_Shotgun_Comp`), orientation/size, that variants (`_VarA/_VarB`) are picked by the balances.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

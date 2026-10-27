@@ -67,3 +67,29 @@ def test_gestalt_survey_runs_on_a_fake_install(tmp_path):
     out = tmp_path / "report.txt"
     assert gestaltprobe.main(["--bl2", str(bl2), "--out", str(out)]) == 0
     assert "gestalt" in out.read_text(encoding="utf-8").lower()
+
+
+def test_a_gestalt_part_is_a_run_of_triangles_of_the_combined_mesh():
+    from skylands_setup import meshes as M
+
+    src = gunparts.Bl2Source.__new__(gunparts.Bl2Source)
+    src.log = lambda m, force=False: None
+    src.stats = {"meshes": 0}
+    # a combined mesh of two quads (4 triangles); part "a" is triangles 0-1, part "b" triangles 2-3
+    pos = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0), (5, 0, 0), (6, 0, 0), (6, 1, 0), (5, 1, 0)]
+    full = M.Mesh(positions=pos, uvs=[(i / 8, 0.0) for i in range(8)], tris=[(0, 1, 2), (0, 2, 3), (4, 5, 6), (4, 6, 7)])
+    src._gestalt_mesh = lambda key: full
+    src.gestalt_table = {"a": ("k", 0, 2), "b": ("k", 6, 2)}
+    b = src._read_gestalt_part("sg_x", "b")
+    assert b["placed"] and len(b["mesh"].tris) == 2 and len(b["mesh"].positions) == 4
+    assert min(p[0] for p in b["mesh"].positions) == 5 and len(b["mesh"].uvs) == 4
+    assert max(max(t) for t in b["mesh"].tris) == 3
+
+
+def test_gestalt_definition_parts_are_registered_by_fragment_name(tmp_path):
+    src = gunparts.Bl2Source.__new__(gunparts.Bl2Source)
+    src.log = lambda m, force=False: None
+    items = {"type": "Array", "count": 2, "items": [
+        {"SkeletalMeshFragmentName": "SG_Body_Bandit", "MaterialIndex": 0, "FirstIndex": 0, "NumPrimitives": 10},
+        {"SkeletalMeshFragmentName": "SG_Barrel_Bandit", "MaterialIndex": 0, "FirstIndex": 30, "NumPrimitives": 5}]}
+    assert len(src._items(items)) == 2 and src._items([1, 2]) == [1, 2] and src._items(None) == []

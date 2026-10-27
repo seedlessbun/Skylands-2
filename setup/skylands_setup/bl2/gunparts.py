@@ -54,6 +54,12 @@ class Bl2Source:
         self._meshes_by_name: dict[str, list[str]] | None = None
         self.name_files: dict[str, list] | None = None  # lower-case mesh name -> packages whose name table holds it
         self.by_gestalt: dict[str, str | None] = {}
+        # Borderlands 2 keeps most weapon parts inside ONE combined "gestalt" mesh per gun type (Weap_Shotguns.GestaltDef_Shotgun_GestaltSkeletalMesh);
+        # its GestaltSkeletalMeshDefinition lists every part as a run of triangles: fragment name -> (mesh key, first index, number of triangles)
+        self.gestalt_files: list[Path] = []
+        self.gestalt_table: dict[str, tuple[str, int, int]] = {}
+        self.gestalt_meshes: dict[str, dict] = {}  # mesh key -> {"file", "path", "total"}
+        self._gestalt_full: dict[str, M.Mesh | None] = {}
         self.deadline = time.time() + 10 * 60  # then the remaining guns fall back to the next method
 
     def log(self, msg: str, force: bool = False) -> None:
@@ -74,6 +80,9 @@ class Bl2Source:
         for name in self.gestalt_names(part):  # the located real mesh first: no package hunting
             if name in self.mesh_index:
                 return self._by_gestalt(part)
+        g = self._gestalt_path(part)
+        if g:
+            return g
         if self.index_ready:  # every package that names a wanted mesh has been opened: nothing more to find by path
             return self._stand_in(part)
         seen = []
@@ -91,7 +100,7 @@ class Bl2Source:
             if found and found[0].obj_class(found[1]) in gunmesh.MESH_CLASSES:
                 return c
         t1 = time.time()
-        r = self._by_gestalt(part) or self._stand_in(part)
+        r = self._by_gestalt(part) or self._gestalt_path(part) or self._stand_in(part)
         self.prof["lookup_s"] = self.prof.get("lookup_s", 0) + time.time() - t1
         return r
 
@@ -139,11 +148,17 @@ class Bl2Source:
                 continue
             for hit in wanted & names:
                 self.name_files.setdefault(hit, []).append(f)
+            if "startup" in f.stem.lower() and "gestaltskeletalmeshdefinition" in names and any(n.startswith("gestaltdef_") for n in names):
+                self.gestalt_files.append(f)
             n += 1
             if n % 400 == 0:
                 self.log(f"scanned {n}/{len(self.ix.files)} package name tables ({time.time() - t0:.0f} s)", force=True)
         self.log(f"{len(wanted)} mesh names wanted; {sum(1 for w in wanted if w in self.name_files)} found in a package name table "
                  f"({time.time() - t0:.0f} s); sample {sorted(wanted)[:5]}", force=True)
+        try:
+            self._load_gestalt_defs()
+        except Exception as e:  # noqa: BLE001 - the stand-ins still work without it
+            self.log(f"gestalt definitions could not be read: {type(e).__name__}: {str(e)[:100]}", force=True)
         self._index_meshes(wanted)
         self.index_ready = True
 
@@ -270,6 +285,126 @@ class Bl2Source:
                             left.discard(w)
                             found += 1
         self.log(f"fuzzy search: {found} more meshes located; still missing {len(left)}", force=True)
+
+    # --- gestalt meshes (one combined mesh per gun type, parts are runs of triangles)
+    @staticmethod
+    def _items(value) -> list:
+        """The elements of a decoded array property ({'type': 'Array', 'items': [...]} or a plain list)."""
+        if isinstance(value, dict):
+            value = value.get("items", [])
+        return value if isinstance(value, list) else []
+
+    def _load_gestalt_defs(self) -> None:
+        t0 = time.time()
+        # the base game's own definitions first; the DLC remaster copies only fill what is missing
+        files = sorted(self.gestalt_files, key=lambda f: (("mancana" in str(f).lower()), f.stat().st_size))
+        defs = 0
+        for f in files:
+            try:
+                pkg = self.ix.package(f)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"gestalt: {f.name} cannot be opened: {type(e).__name__}: {str(e)[:60]}", force=True)
+                continue
+            for i, e in enumerate(pkg.exports, 1):
+                if pkg.obj_class(i) != "GestaltSkeletalMeshDefinition" or not e.name.lower().startswith("gestaltdef_"):
+                    continue
+                path = pkg.path_of(i)
+                if "weap_" not in path.lower():
+                    continue
+                try:
+                    props = upk.object_properties(pkg, i)
+                except Exception as err:  # noqa: BLE001
+                    self.log(f"gestalt: {path}: {type(err).__name__}: {str(err)[:60]}", force=True)
+                    continue
+                mesh = props.get("GestaltSkeletalMesh")
+                infos = self._items(props.get("GestaltInfos"))
+                if not isinstance(mesh, str) or not infos or not isinstance(infos[0], dict):
+                    continue
+                parts = [p for p in self._items(infos[0].get("Parts")) if isinstance(p, dict)]
+                key = f"{f.name}|{mesh}"
+                total = 0
+                added = 0
+                for part in parts:
+                    try:
+                        name = str(part["SkeletalMeshFragmentName"]).lower()
+                        first, count = int(part["FirstIndex"]), int(part["NumPrimitives"])
+                    except (KeyError, ValueError, TypeError):
+                        continue
+                    total += count
+                    if name not in self.gestalt_table:
+                        self.gestalt_table[name] = (key, first, count)
+                        added += 1
+                self.gestalt_meshes[key] = {"file": f, "path": mesh, "total": total}
+                defs += 1
+                self.log(f"gestalt: {path} in {f.name}: {len(parts)} parts, {total} triangles, {added} new names", force=True)
+        self.log(f"gestalt: {defs} definitions, {len(self.gestalt_table)} part names ({time.time() - t0:.0f} s)", force=True)
+
+    def _gestalt_path(self, part: str) -> str | None:
+        for name in self.gestalt_names(part):
+            if name in self.gestalt_table:
+                return "gestalt:" + name
+        return None
+
+    def _gestalt_mesh(self, key: str) -> M.Mesh | None:
+        if key in self._gestalt_full:
+            return self._gestalt_full[key]
+        info = self.gestalt_meshes[key]
+        result = None
+        try:
+            pkg = self.ix.package(info["file"])
+            idx = pkg.find(info["path"])
+            data = pkg.export_data(idx) if idx else b""
+            props_end = 4
+            for start in (4, 0, 8):
+                try:
+                    _p, props_end = upk.read_properties(pkg, data, start)
+                    break
+                except Exception:  # noqa: BLE001
+                    continue
+            raw = gunmesh.read_mesh_blob(data, props_end, info["path"]) if data else None
+            if raw is None:
+                self.log(f"gestalt mesh {info['path']}: could not find geometry ({len(data)} bytes)", force=True)
+            elif len(raw.mesh.tris) != info["total"]:
+                self.log(f"gestalt mesh {info['path']}: {len(raw.mesh.tris)} triangles read but its definition lists {info['total']}; not used", force=True)
+            else:
+                self.log(f"gestalt mesh {info['path']}: {raw.note}", force=True)
+                result = raw.mesh
+        except Exception as e:  # noqa: BLE001
+            self.log(f"gestalt mesh {info['path']}: {type(e).__name__}: {str(e)[:100]}", force=True)
+        self._gestalt_full[key] = result
+        return result
+
+    def _read_gestalt_part(self, part: str, name: str) -> dict | None:
+        key, first, count = self.gestalt_table[name]
+        full = self._gestalt_mesh(key)
+        if full is None:
+            return None
+        lo = first // 3
+        tris = full.tris[lo : lo + count]
+        if not tris:
+            return None
+        remap: dict[int, int] = {}
+        positions: list = []
+        uvs: list = []
+        out_tris = []
+        for tri in tris:
+            row = []
+            for v in tri:
+                n = remap.get(v)
+                if n is None:
+                    n = remap[v] = len(positions)
+                    positions.append(full.positions[v])
+                    if full.uvs:
+                        uvs.append(full.uvs[v])
+                row.append(n)
+            out_tris.append((row[0], row[1], row[2]))
+        mesh = M.Mesh(positions=positions, uvs=uvs, tris=out_tris)
+        mesh.texture = None
+        mesh.normal_map = "flat_n"
+        self.stats["meshes"] += 1
+        self.stats["gestalt_parts"] = self.stats.get("gestalt_parts", 0) + 1
+        self.log(f"{part}: gestalt part {name}: {len(positions)} vertices, {len(out_tris)} triangles")
+        return {"mesh": mesh, "sockets": {}, "path": "gestalt:" + name, "texture": None, "mats": [], "placed": True}
 
     def _by_gestalt(self, part: str) -> str | None:
         if part in self.by_gestalt:
@@ -448,6 +583,8 @@ class Bl2Source:
             if self.stats["no_mesh"] <= 10:
                 self.log(f"  where the named mesh is: {self.diagnose(part)}", force=True)
             return None
+        if path.startswith("gestalt:"):
+            return self._read_gestalt_part(part, path[8:])
         t1 = time.time()
         if path in self.located:
             pkg = self.ix.package(self.located[path])
@@ -586,6 +723,8 @@ class Bl2Source:
     def _use_sockets(self, part: dict, body: dict) -> bool:
         """Parts modelled around their own attach point need the socket offset; parts already placed in the weapon's space do not.
         In auto mode a part whose centre sits far from its own origin (relative to the body's size) is taken as already placed."""
+        if part.get("placed"):  # a piece of a gestalt mesh already sits where it belongs on the assembled gun
+            return False
         if self.attach == "sockets":
             return True
         if self.attach == "none":
@@ -615,7 +754,7 @@ class Bl2Source:
         extra = f"; {len(errs)} packages could not be opened, e.g. {dict(list(errs.items())[:3])}" if errs else ""
         return (f"native: {s['parts']} parts looked at, {s['meshes']} meshes read, {s['no_mesh']} without a mesh object, "
                 f"{s['no_geometry']} whose geometry could not be found, {s['textured']} textures decoded, "
-                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh, {s.get('stand_ins', 0)} parts using another manufacturer's mesh; parts without a mesh by package {s.get('no_mesh_kinds', {})}{extra}")
+                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh, {s.get('stand_ins', 0)} parts using another manufacturer's mesh, {s.get('gestalt_parts', 0)} parts cut from gestalt meshes; parts without a mesh by package {s.get('no_mesh_kinds', {})}{extra}")
 
 
 def orientation(placed: dict[str, M.Mesh]) -> tuple[M.Vec, M.Vec, M.Vec]:
