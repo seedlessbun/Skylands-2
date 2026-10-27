@@ -70,6 +70,16 @@ echo.
 echo Send work\bl2-shotgun-report.txt back to Claude.
 pause
 """
+GESTALT_PROBE = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+echo Looking inside the Borderlands 2 combined gun meshes (changes nothing; a few minutes) ...
+"%~dp0python\python.exe" -X utf8 -m skylands_setup bl2gestalt --out "%~dp0work\bl2-gestalt-report.txt" %*
+echo.
+echo Send work\bl2-gestalt-report.txt back to Claude.
+pause
+"""
 SHOOTING_SURVEY = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -150,7 +160,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-119.zip"
+    out = dist / "Skylands-TestBuild-120.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -169,6 +179,7 @@ def main() -> int:
         z.writestr("Run-GunModelSurvey.bat", SURVEY.replace("\n", "\r\n"))
         z.writestr("Run-ShootingSurvey.bat", SHOOTING_SURVEY.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Audio.bat", AUDIO_PROBE.replace("\n", "\r\n"))
+        z.writestr("Check-BL2-Gestalt.bat", GESTALT_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Shotguns.bat", SHOTGUN_PROBE.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))

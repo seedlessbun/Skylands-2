@@ -428,6 +428,13 @@ Other commands:
 - 0.33.2 (TestBuild-119): same as 0.33.1 plus `shotgunprobe.py` / `Check-BL2-Shotguns.bat` (`python -m skylands_setup bl2shotguns`, writes `work\bl2-shotgun-report.txt`): the user is SURE the shotgun data is in their
   BL2 install. It lists weapon-named files, every package with a shotgun-looking name (`sg_`, `shotgun`, ...), then opens those packages and lists the exports and imports with class, path, size and (imports) which package
   they point to and whether that package is in the install, plus the weapon meshes that do exist for the other types. Read it, then teach `gunparts` where the shotgun meshes live.
+- 0.33.2 in game (user report 4c91c184, 6180 lines): THE SHOTGUN MESH IS A GESTALT MESH. `Mancana_StartupRemaster.upk` (DLC remaster pack, 19 MB) exports `Remaster_Weap_Shotguns.GestaltDef_Shotgun`
+  (GestaltSkeletalMeshDefinition, 18720 bytes), `Remaster_Weap_Shotguns.GestaltDef_Shotgun_GestaltSkeletalMesh` (SkeletalMesh, 1.7 MB, all shotgun parts in ONE mesh) and textures `Remaster_Weap_Shotguns.Tex.Weap_Shotgun_Comp/Nor`.
+  The base game imports `Weap_Shotguns.*` (69 packages) but no file exports that package (the survey's "NOT in this install" check compares FILE names; most top-level packages live inside files, so ignore it for
+  `gd_*`). Part definitions name their piece with `GestaltModeSkeletalMeshName` (`SG_Body_Bandit`): probably a bone/section of the combined mesh. Other types' missing meshes (168 of 207 never found: ar_/smg_/pistol_/sr_/l_/acc_)
+  are probably in remaster gestalt meshes too. 0.33.3 (TestBuild-120): `gestaltprobe.py` / `Check-BL2-Gestalt.bat` (`python -m skylands_setup bl2gestalt`, writes `work\bl2-gestalt-report.txt` and raw
+  `work\gestalt\GestaltDef_Shotgun.bin` + `GestaltMesh_Shotgun.bin`): lists every gestalt object, decodes the definitions' properties, shows names stored in the mesh blob, the bytes after the properties, what the heuristic mesh reader finds.
+  NEXT: read that report, write a real SkeletalMesh parser (sections/chunks/bone map or the definition's part table) to cut one part out of a gestalt mesh, and hook it into `gunparts` (`mesh_index` for `sg_*`).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

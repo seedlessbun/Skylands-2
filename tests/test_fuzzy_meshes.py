@@ -55,3 +55,15 @@ def test_shotgun_survey_runs_on_a_fake_install(tmp_path):
     assert shotgunprobe.main(["--bl2", str(bl2), "--out", str(out)]) == 0
     text = out.read_text(encoding="utf-8")
     assert "Weap_Shotgun_Test.upk" in text and "sg_body_bandit" in text and "Report written" in text
+
+
+def test_gestalt_survey_runs_on_a_fake_install(tmp_path):
+    import fake_bl2
+    from skylands_setup import gestaltprobe
+
+    bl2 = tmp_path / "bl2"
+    fake_bl2.pandora_install(bl2)
+    fake_bl2.level_package_importing(bl2 / "WillowGame" / "CookedPCConsole" / "G_Test.upk", ["GestaltDef_Shotgun"])
+    out = tmp_path / "report.txt"
+    assert gestaltprobe.main(["--bl2", str(bl2), "--out", str(out)]) == 0
+    assert "gestalt" in out.read_text(encoding="utf-8").lower()
