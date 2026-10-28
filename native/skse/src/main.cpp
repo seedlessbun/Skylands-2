@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 270;  // 1.14.3
+	constexpr std::int32_t kVersion = 280;  // 1.14.4
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -731,76 +731,86 @@ namespace
 		}
 	};
 
-	// An enemy with a Skylands gun in BOTH hands (seen in game: two of the same weapon): the extra copy is taken out of the pack and the left hand is
-	// emptied, on the game thread. The first few cases tell what the hands held and how many copies the pack had.
+	// The game reports a two-handed (staff-type) weapon in BOTH hand slots of an actor whose pack holds ONE copy; that is not what makes the second gun
+	// people see on an enemy (unequipping it did not hold). Looked at from the model instead: every copy of the gun's mesh in the actor's 3D is found by its
+	// SkylandsMuzzle node and the chain of nodes up to the actor is logged; a copy that hangs under the LEFT hand is hidden.
+	void CollectNamed(RE::NiAVObject* a_obj, std::string_view a_name, std::vector<RE::NiAVObject*>& a_out, int a_depth = 0)
+	{
+		if (!a_obj || a_depth > 80 || a_out.size() > 8) {
+			return;
+		}
+		if (const char* n = a_obj->name.c_str(); n && a_name == n) {
+			a_out.push_back(a_obj);
+		}
+		if (const auto node = a_obj->AsNode()) {
+			for (auto& child : node->GetChildren()) {
+				CollectNamed(child.get(), a_name, a_out, a_depth + 1);
+			}
+		}
+	}
+
 	void OneGunOnly(RE::FormID a_actorId)
 	{
+		static std::mutex                                                   lock;
+		static std::unordered_map<RE::FormID, std::chrono::steady_clock::time_point> last;
+		{
+			const std::lock_guard guard(lock);
+			const auto            now = std::chrono::steady_clock::now();
+			auto&                 at  = last[a_actorId];
+			if (now - at < std::chrono::seconds(3)) {
+				return;
+			}
+			at = now;
+		}
 		RunOnGameThread([a_actorId]() {
 			const auto who = RE::TESForm::LookupByID<RE::Actor>(a_actorId);
-			if (!who || who->IsDead()) {
+			if (!who || who->IsDead() || !who->Is3DLoaded()) {
 				return;
 			}
-			const auto right = who->GetEquippedObject(false);
-			const auto left  = who->GetEquippedObject(true);
+			const auto root = who->Get3D(false);
+			if (!root) {
+				return;
+			}
+			std::vector<RE::NiAVObject*> muzzles;
+			CollectNamed(root, "SkylandsMuzzle"sv, muzzles);
 			static std::atomic_int told{ 0 };
-			GunInfo                info{};
-			const auto             leftWeapon = left ? left->As<RE::TESObjectWEAP>() : nullptr;
-			if (!leftWeapon || !leftWeapon->formEnchanting || !GunOf(leftWeapon, info)) {
-				return;
+			const bool             tell = told.fetch_add(1) < 16;
+			if (tell) {
+				const auto right = who->GetEquippedObject(false);
+				const auto left  = who->GetEquippedObject(true);
+				SKSE::log::info("enemy {:08X}: hands hold {:08X} (right) and {:08X} (left); {} gun model(s) in its 3D", a_actorId,
+					right ? right->GetFormID() : 0, left ? left->GetFormID() : 0, muzzles.size());
 			}
-			const auto rightWeapon = right ? right->As<RE::TESObjectWEAP>() : nullptr;
-			GunInfo    other{};
-			if (!rightWeapon || !rightWeapon->formEnchanting || !GunOf(rightWeapon, other)) {
-				return;  // a lone gun in the left hand stays
-			}
-			{  // at most three tries per person: a fix that does not hold must not keep unequipping a gun in the middle of a fight
-				static std::mutex                            lock;
-				static std::unordered_map<RE::FormID, int> tries;
-				const std::lock_guard                        guard(lock);
-				if (++tries[a_actorId] > 3) {
-					return;
+			for (const auto muzzle : muzzles) {
+				std::string  chain;
+				RE::NiAVObject* weaponRoot = nullptr;  // the node just below the hand's attach point
+				bool         underLeft     = false;
+				RE::NiAVObject* previous   = muzzle;
+				for (auto up = muzzle->parent; up; previous = up, up = up->parent) {
+					const std::string name = up->name.c_str() ? up->name.c_str() : "";
+					chain += (chain.empty() ? "" : " < ") + name;
+					if (name.find("L Hand") != std::string::npos || name == "SHIELD") {
+						underLeft = true;
+						if (!weaponRoot) {
+							weaponRoot = previous;
+						}
+					}
+					if (name.find("R Hand") != std::string::npos || name == "WEAPON") {
+						break;
+					}
+					if (chain.size() > 600) {
+						break;
+					}
 				}
-			}
-			const int copies = CountOf(who, leftWeapon);
-			if (told.fetch_add(1) < 12) {
-				SKSE::log::info("enemy {:08X}: left hand holds gun {:08X}, right hand {:08X}, {} copies in the pack: emptying the left hand",
-					a_actorId, leftWeapon->GetFormID(), right ? right->GetFormID() : 0, copies);
-			}
-			if (right && right->GetFormID() == leftWeapon->GetFormID() && copies > 1) {
-				who->RemoveItem(leftWeapon, copies - 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
-			}
-			if (const auto manager = RE::ActorEquipManager::GetSingleton()) {
-				const auto leftSlot  = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F43);  // LeftHand
-				const auto rightSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42);  // RightHand
-				manager->UnequipObject(who, leftWeapon, nullptr, 1, leftSlot, false, true, false, false, nullptr);
-				// The left-hand unequip did not hold in 0.33.0 (the same gun was reported in both hands at every cast): after a moment, if both hands
-				// still hold it, the gun is taken off altogether and equipped again into the RIGHT hand slot only. What the hands hold then is logged.
-				const auto weaponId = leftWeapon->GetFormID();
-				std::thread([a_actorId, weaponId]() {
-					std::this_thread::sleep_for(std::chrono::milliseconds(500));
-					RunOnGameThread([a_actorId, weaponId]() {
-						const auto w   = RE::TESForm::LookupByID<RE::Actor>(a_actorId);
-						const auto gun = RE::TESForm::LookupByID<RE::TESObjectWEAP>(weaponId);
-						if (!w || !gun || w->IsDead()) {
-							return;
-						}
-						const auto l = w->GetEquippedObject(true);
-						const auto r = w->GetEquippedObject(false);
-						static std::atomic_int again{ 0 };
-						const bool both = l && r && l->GetFormID() == weaponId && r->GetFormID() == weaponId;
-						if (again.fetch_add(1) < 12) {
-							SKSE::log::info("enemy {:08X}: half a second later left {:08X}, right {:08X}{}", a_actorId, l ? l->GetFormID() : 0,
-								r ? r->GetFormID() : 0, both ? ": still both, equipping it again into the right hand only" : "");
-						}
-						if (both) {
-							if (const auto m = RE::ActorEquipManager::GetSingleton()) {
-								m->UnequipObject(w, gun, nullptr, 1, nullptr, false, true, false, false, nullptr);
-								m->EquipObject(w, gun, nullptr, 1, RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42), false, true, false, false);
-							}
-						}
-					});
-				}).detach();
-				(void)rightSlot;
+				if (tell) {
+					SKSE::log::info("  gun model under {}: {}", underLeft ? "the LEFT hand" : "another node", chain.substr(0, 400));
+				}
+				if (underLeft && weaponRoot && !weaponRoot->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+					weaponRoot->SetAppCulled(true);
+					if (tell) {
+						SKSE::log::info("  hid the left-hand copy ({})", weaponRoot->name.c_str() ? weaponRoot->name.c_str() : "?");
+					}
+				}
 			}
 		});
 	}

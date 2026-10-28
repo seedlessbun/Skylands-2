@@ -442,6 +442,12 @@ Other commands:
   `gunparts.Bl2Source._load_gestalt_defs` (Startup first, Mancana fills gaps), `_gestalt_path` (used BEFORE `_stand_in`, after a standalone located mesh), `_gestalt_mesh` (reads the whole mesh once; refuses it if the triangle count differs
   from the definition's total), `_read_gestalt_part` (slice `tris[first//3 : +count]`, compact vertices, `placed: True` so no socket offsets). Log lines `gestalt: ...`, summary '... parts cut from gestalt meshes'.
   UNCONFIRMED in game: textures (the gun's Material part supplies one; the gestalt UV layout may need `Weap_Shotguns.Tex.Weap_Shotgun_Comp`), orientation/size, that variants (`_VarA/_VarB`) are picked by the balances.
+- 0.34.0 in game (user logs f33e6543 / a541592d): the setup log says "Skylands 0.33.3 setup": the user ran TestBuild-120 (the survey build), NOT 121, so shotguns were still the proxy boxes (no `gestalt:` lines) - check the
+  first line of `skylands-setup.log` for the version before reading anything else. Dual wield: the plugin's log shows ONE copy in the pack and the SAME gun in both hand slots (`GetEquippedObject(false/true)`), which is
+  probably just how the engine reports a two-handed/staff-type weapon, so 0.33.1's unequip/re-equip was chasing a false positive. 0.34.1 (TestBuild-122, plugin 1.14.4): `OneGunOnly` no longer touches equipment; at an
+  enemy's cast (at most every 3 s per actor) it walks the actor's 3D, finds every `SkylandsMuzzle` node, logs "enemy ..: hands hold .. (right) and .. (left); N gun model(s) in its 3D" and, per copy, the chain of node names
+  up to the hand, and hides (`SetAppCulled`) a copy hanging under the LEFT hand (`L Hand` / `SHIELD`). UNCONFIRMED: that the second gun is a second model in the left-hand attach node. If the second gun persists, the log lines
+  "gun model under ..." say where it hangs.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
