@@ -448,6 +448,11 @@ Other commands:
   enemy's cast (at most every 3 s per actor) it walks the actor's 3D, finds every `SkylandsMuzzle` node, logs "enemy ..: hands hold .. (right) and .. (left); N gun model(s) in its 3D" and, per copy, the chain of node names
   up to the hand, and hides (`SetAppCulled`) a copy hanging under the LEFT hand (`L Hand` / `SHIELD`). UNCONFIRMED: that the second gun is a second model in the left-hand attach node. If the second gun persists, the log lines
   "gun model under ..." say where it hangs.
+- 0.34.1 in game (user, screenshots + log c6f0e8a5, plugin 280): the gestalt models WORK (shotguns present, parts/attachments of every gun type filled in: "I barely realized how many were missing"). Dual wield is now PROVEN from the plugin log:
+  an enemy's 3D holds TWO gun models, one under `WEAPON` (right hand) and one under `SHIELD < NPC L Hand [LHnd]` (the game puts the staff-type weapon in BOTH hand slots: `GetEquippedObject` right = left = gun). 0.34.1 hid the left copy
+  unconditionally, which made enemies whose RIGHT slot was EMPTY (right 00000000, left = gun, one model under the left hand) shoot from an invisible gun. 0.34.2 (TestBuild-123, plugin 1.14.5): the left copy is hidden only when a right-hand
+  model also exists; when the gun is ONLY in the left hand (no model under WEAPON) it stays visible and is unequipped/re-equipped into the RightHand slot (2 tries per person, log "the gun is only in the left hand: equipped again ..."). UNCONFIRMED.
+  If enemies still show a gun in the left hand and none in the right while the log says 2 models, the right model may be present but invisible (not explained yet).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

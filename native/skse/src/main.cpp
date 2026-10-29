@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 280;  // 1.14.4
+	constexpr std::int32_t kVersion = 290;  // 1.14.5
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -781,18 +781,23 @@ namespace
 				SKSE::log::info("enemy {:08X}: hands hold {:08X} (right) and {:08X} (left); {} gun model(s) in its 3D", a_actorId,
 					right ? right->GetFormID() : 0, left ? left->GetFormID() : 0, muzzles.size());
 			}
+			struct Copy
+			{
+				RE::NiAVObject* weaponRoot{ nullptr };  // the node just below the hand's attach point
+				bool            underLeft{ false };
+			};
+			std::vector<Copy> copies;
 			for (const auto muzzle : muzzles) {
-				std::string  chain;
-				RE::NiAVObject* weaponRoot = nullptr;  // the node just below the hand's attach point
-				bool         underLeft     = false;
-				RE::NiAVObject* previous   = muzzle;
+				std::string     chain;
+				Copy            copy;
+				RE::NiAVObject* previous = muzzle;
 				for (auto up = muzzle->parent; up; previous = up, up = up->parent) {
 					const std::string name = up->name.c_str() ? up->name.c_str() : "";
 					chain += (chain.empty() ? "" : " < ") + name;
 					if (name.find("L Hand") != std::string::npos || name == "SHIELD") {
-						underLeft = true;
-						if (!weaponRoot) {
-							weaponRoot = previous;
+						copy.underLeft = true;
+						if (!copy.weaponRoot) {
+							copy.weaponRoot = previous;
 						}
 					}
 					if (name.find("R Hand") != std::string::npos || name == "WEAPON") {
@@ -803,12 +808,44 @@ namespace
 					}
 				}
 				if (tell) {
-					SKSE::log::info("  gun model under {}: {}", underLeft ? "the LEFT hand" : "another node", chain.substr(0, 400));
+					SKSE::log::info("  gun model under {}: {}", copy.underLeft ? "the LEFT hand" : "another node", chain.substr(0, 400));
 				}
-				if (underLeft && weaponRoot && !weaponRoot->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
-					weaponRoot->SetAppCulled(true);
-					if (tell) {
-						SKSE::log::info("  hid the left-hand copy ({})", weaponRoot->name.c_str() ? weaponRoot->name.c_str() : "?");
+				copies.push_back(copy);
+			}
+			bool rightModel = false;
+			bool leftModel  = false;
+			for (const auto& c : copies) {
+				(c.underLeft ? leftModel : rightModel) = true;
+			}
+			if (leftModel && rightModel) {
+				// Both hands carry the gun's model (the game puts a staff-type weapon in both slots): the left one goes.
+				for (const auto& c : copies) {
+					if (c.underLeft && c.weaponRoot && !c.weaponRoot->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+						c.weaponRoot->SetAppCulled(true);
+						if (tell) {
+							SKSE::log::info("  hid the left-hand copy ({})", c.weaponRoot->name.c_str() ? c.weaponRoot->name.c_str() : "?");
+						}
+					}
+				}
+			} else if (leftModel) {
+				// The gun is ONLY in the left hand (the right slot is empty): hiding it would leave the enemy shooting from nothing, so it stays
+				// visible and the gun is put into the right-hand slot instead (twice at most per person); the next cast then hides the left copy.
+				static std::mutex                            tryLock;
+				static std::unordered_map<RE::FormID, int> tries;
+				bool                                         go = false;
+				{
+					const std::lock_guard guard(tryLock);
+					go = ++tries[a_actorId] <= 2;
+				}
+				const auto left = who->GetEquippedObject(true);
+				const auto gun  = left ? left->As<RE::TESObjectWEAP>() : nullptr;
+				if (go && gun) {
+					if (const auto manager = RE::ActorEquipManager::GetSingleton()) {
+						const auto leftSlot  = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F43);
+						const auto rightSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42);
+						manager->UnequipObject(who, gun, nullptr, 1, leftSlot, false, true, false, false, nullptr);
+						manager->EquipObject(who, gun, nullptr, 1, rightSlot, false, true, false, false);
+						SKSE::log::info("  the gun is only in the left hand: equipped again into the right-hand slot");
 					}
 				}
 			}
