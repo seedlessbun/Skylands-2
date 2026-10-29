@@ -472,6 +472,17 @@ Other commands:
   The 4 s `Follow` stays as a fallback. UNCONFIRMED in game (that moving the REFR's 3D that way is allowed for these statics, that the beam stays attached while the gun rolls).
 - 0.36.0 in game: the user says the beams "look better"; some beams are HORIZONTAL (PlaceAtMe copies the gun's angles to the beam ref). 0.36.1 (TestBuild-127, plugin 1.15.3): `PlaceRef` also clears the beam's and light's turn every frame
   (`data.angle` = 0, node `local.rotate.SetEulerAnglesXYZ(0,0,0)`), assuming the beam mesh points up along z at zero turn. UNCONFIRMED: if a beam is then pointing sideways always, the mesh axis is not z.
+- 0.37.0 (TestBuild-128, plugin unchanged 1.15.3, pex/esp unchanged): SHIELDS, PHASE 1 (planning; no feature code). The user asked for BL2-style shields (capacity, damage hits the shield first,
+  delayed recharge, shield items with rarity/models/stats from BL2 that enemies spawn with and drop like guns, a HUD bar). Phase 1 = survey, then `docs/shield-roadmap.md`, then WAIT for approval.
+  `shieldprobe.py` (`python -m skylands_setup bl2shields`, `Check-BL2-Shields.bat`, writes `work\bl2-shield-report.txt`, `--minutes` 25, `--no-audio`) is driven by NAMES and CLASSES, not guessed paths
+  (nothing about BL2's shield objects had been seen): name-table pass over every package (class-like / HUD-art-like / sound-like names), packages that define shield groups first, every export whose class,
+  name or enclosing group says 'shield' (census by class), one-line dump of each, a breadth-first follow of references (attributes, resolvers/formulas first, nested Behavior children, part lists capped
+  at 30 refs) from a spread of seeds, attribute groups and `GD_Globals`, the item-pool graph (which pools hold shields directly or through other pools, with sample pools in full), pawn balances that refer
+  to a shield pool or have a shield-named property, the `Item_Shields.GestaltDef_Shields` gestalt cut into parts (triangles, extents, UV ranges, materials/textures; shield parts' `GestaltModeSkeletalMeshName`
+  checked against the fragments), textures/movies, text inside HUD Flash movies (`swf_strings`), and shield sound event names checked against the Wwise banks. Every section runs on its own (`run`), the report is
+  saved after each. Tested on a fake install (`tests/test_shieldprobe.py`); UNCONFIRMED on a real install: all of it (class names, group names, how long it takes, memory with ~70 packages open).
+  Branch note: this session's branch `claude/sharp-wright-sxhjzr` started at the old 0.13.11 commit; the real latest work (0.36.1, SKSE plugin, relics, probes) was on `origin/claude/bold-ritchie-aw0mh2`,
+  so the branch was fast-forwarded to it before any work. The Standing rules' "work on branch ..." means: the branch the harness gives you, after checking it is not behind.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
