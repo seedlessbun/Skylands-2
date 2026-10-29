@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 290;  // 1.14.5
+	constexpr std::int32_t kVersion = 300;  // 1.15.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -46,6 +46,7 @@ namespace
 	float g_recoilRecover = 0.6f;  // the share of the kick the view comes back down by once the shooting stops (ini: RecoilRecover)
 	float g_recoilAim = 0.6f;      // the kick's share while fully aimed (ini: RecoilAim)
 	float g_recoilGun = 1.0f;      // how far the aimed gun model jerks back with a shot, in units, at the reference rate (ini: RecoilGun)
+	bool  g_hideLeft = true;       // the first-person left arm is hidden while a gun is held (ini: HideLeftHand=0 keeps it)
 	bool  g_hideHands = true;      // the arms are hidden while fully aimed, so only the gun is in front of the view (ini: HideHands=0 turns it off)
 	bool  g_fxRocket = true;       // a rocket's exhaust trail and the back-blast of its launcher (ini: Rockets=0 turns them off)
 	bool  g_fxCasing = true;       // shell casings fly out of the gun (ini: Casings=0 turns them off)
@@ -128,6 +129,8 @@ namespace
 					(key == "RecoilPitch" ? g_recoilPitch : key == "RecoilYaw" ? g_recoilYaw : key == "RecoilRecover" ? g_recoilRecover : key == "RecoilAim" ? g_recoilAim : key == "RecoilGun" ? g_recoilGun : g_sway) = v;
 				} catch (...) {
 				}
+			} else if (key == "HideLeftHand") {
+				g_hideLeft = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
@@ -434,6 +437,42 @@ namespace
 		return info.clip > 0;
 	}
 
+	void CollectNamed(RE::NiAVObject* a_obj, std::string_view a_name, std::vector<RE::NiAVObject*>& a_out, int a_depth = 0)
+	{
+		if (!a_obj || a_depth > 80 || a_out.size() > 8) {
+			return;
+		}
+		if (const char* n = a_obj->name.c_str(); n && a_name == n) {
+			a_out.push_back(a_obj);
+		}
+		if (const auto node = a_obj->AsNode()) {
+			for (auto& child : node->GetChildren()) {
+				CollectNamed(child.get(), a_name, a_out, a_depth + 1);
+			}
+		}
+	}
+
+	// The muzzle node of the gun copy that is actually drawn: an enemy's model can hold the gun twice (right and left hand), and the copy hidden by the plugin
+	// or the game must not be where the bullets start.
+	RE::NiAVObject* VisibleMuzzle(RE::NiAVObject* a_root)
+	{
+		std::vector<RE::NiAVObject*> all;
+		CollectNamed(a_root, "SkylandsMuzzle"sv, all);
+		for (const auto m : all) {
+			bool hidden = false;
+			for (auto n = m; n && n != a_root; n = n->parent) {
+				if (n->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+					hidden = true;
+					break;
+				}
+			}
+			if (!hidden) {
+				return m;
+			}
+		}
+		return all.empty() ? nullptr : all.front();
+	}
+
 	// The gun in an actor's hands (right hand first, then left): the weapon, and its numbers.
 	RE::TESObjectWEAP* HeldGun(RE::Actor* a_actor, GunInfo& a_out)
 	{
@@ -522,7 +561,7 @@ namespace
 		RE::NiPoint3 origin = eye;
 		const char*  found = "none";
 		if (const auto root = shooter->Get3D(first)) {
-			if (const auto node = root->GetObjectByName("SkylandsMuzzle"sv)) {
+			if (const auto node = npc ? VisibleMuzzle(root) : root->GetObjectByName("SkylandsMuzzle"sv)) {
 				origin = node->world.translate;
 				found = "muzzle";
 			} else if (const auto hand = root->GetObjectByName("NPC R MagicNode [RMag]"sv)) {
@@ -734,21 +773,6 @@ namespace
 	// The game reports a two-handed (staff-type) weapon in BOTH hand slots of an actor whose pack holds ONE copy; that is not what makes the second gun
 	// people see on an enemy (unequipping it did not hold). Looked at from the model instead: every copy of the gun's mesh in the actor's 3D is found by its
 	// SkylandsMuzzle node and the chain of nodes up to the actor is logged; a copy that hangs under the LEFT hand is hidden.
-	void CollectNamed(RE::NiAVObject* a_obj, std::string_view a_name, std::vector<RE::NiAVObject*>& a_out, int a_depth = 0)
-	{
-		if (!a_obj || a_depth > 80 || a_out.size() > 8) {
-			return;
-		}
-		if (const char* n = a_obj->name.c_str(); n && a_name == n) {
-			a_out.push_back(a_obj);
-		}
-		if (const auto node = a_obj->AsNode()) {
-			for (auto& child : node->GetChildren()) {
-				CollectNamed(child.get(), a_name, a_out, a_depth + 1);
-			}
-		}
-	}
-
 	void OneGunOnly(RE::FormID a_actorId)
 	{
 		static std::mutex                                                   lock;
@@ -801,6 +825,9 @@ namespace
 						}
 					}
 					if (name.find("R Hand") != std::string::npos || name == "WEAPON") {
+						if (!copy.underLeft) {
+							copy.weaponRoot = previous;  // the gun's own root just below the right-hand attach node
+						}
 						break;
 					}
 					if (chain.size() > 600) {
@@ -818,34 +845,19 @@ namespace
 				(c.underLeft ? leftModel : rightModel) = true;
 			}
 			if (leftModel && rightModel) {
-				// Both hands carry the gun's model (the game puts a staff-type weapon in both slots): the left one goes.
+				// Both hands carry the gun's model (the game puts a staff-type weapon in both slots). The enemy's staff animation is the LEFT-hand one and the game
+				// keeps showing the left copy (0.34.2 hid it and left the right one invisible: the person fired from a gun nobody saw), so the left copy stays and the
+				// right-hand one goes. Bullets start at the visible copy's muzzle (VisibleMuzzle).
 				for (const auto& c : copies) {
-					if (c.underLeft && c.weaponRoot && !c.weaponRoot->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+					if (c.underLeft) {
+						if (c.weaponRoot && c.weaponRoot->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+							c.weaponRoot->SetAppCulled(false);
+						}
+					} else if (c.weaponRoot && !c.weaponRoot->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
 						c.weaponRoot->SetAppCulled(true);
 						if (tell) {
-							SKSE::log::info("  hid the left-hand copy ({})", c.weaponRoot->name.c_str() ? c.weaponRoot->name.c_str() : "?");
+							SKSE::log::info("  hid the right-hand copy ({})", c.weaponRoot->name.c_str() ? c.weaponRoot->name.c_str() : "?");
 						}
-					}
-				}
-			} else if (leftModel) {
-				// The gun is ONLY in the left hand (the right slot is empty): hiding it would leave the enemy shooting from nothing, so it stays
-				// visible and the gun is put into the right-hand slot instead (twice at most per person); the next cast then hides the left copy.
-				static std::mutex                            tryLock;
-				static std::unordered_map<RE::FormID, int> tries;
-				bool                                         go = false;
-				{
-					const std::lock_guard guard(tryLock);
-					go = ++tries[a_actorId] <= 2;
-				}
-				const auto left = who->GetEquippedObject(true);
-				const auto gun  = left ? left->As<RE::TESObjectWEAP>() : nullptr;
-				if (go && gun) {
-					if (const auto manager = RE::ActorEquipManager::GetSingleton()) {
-						const auto leftSlot  = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F43);
-						const auto rightSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42);
-						manager->UnequipObject(who, gun, nullptr, 1, leftSlot, false, true, false, false, nullptr);
-						manager->EquipObject(who, gun, nullptr, 1, rightSlot, false, true, false, false);
-						SKSE::log::info("  the gun is only in the left hand: equipped again into the right-hand slot");
 					}
 				}
 			}
@@ -1394,6 +1406,49 @@ namespace
 				}
 			}
 		}
+	}
+
+	// The first-person left arm just hangs there while a gun is held in the right hand: its upper-arm bone is scaled down to (almost) nothing, which takes the
+	// forearm and hand with it, and given back when the gun goes away (ini HideLeftHand=0 turns it off).
+	struct LeftArm
+	{
+		RE::NiPointer<RE::NiAVObject> node;
+		float                         scale{ 1.0f };
+		bool                          shrunk{ false };
+	} g_leftArm;
+
+	void RestoreLeftArm()
+	{
+		if (g_leftArm.node && g_leftArm.shrunk) {
+			g_leftArm.node->local.scale = g_leftArm.scale;
+		}
+		g_leftArm.shrunk = false;
+		g_leftArm.node.reset();
+	}
+
+	void HideLeftArm(RE::PlayerCharacter* a_player)
+	{
+		if (!g_hideLeft) {
+			return;
+		}
+		const auto camera = RE::PlayerCamera::GetSingleton();
+		if (!camera || !camera->IsInFirstPerson()) {
+			RestoreLeftArm();
+			return;
+		}
+		const auto root = a_player->Get3D(true);
+		const auto node = root ? root->GetObjectByName("NPC L UpperArm [LUar]"sv) : nullptr;
+		if (!node) {
+			return;
+		}
+		if (g_leftArm.node.get() != node) {
+			RestoreLeftArm();
+			g_leftArm.node.reset(node);
+			g_leftArm.scale = node->local.scale;
+			SKSE::log::info("left arm: upper arm bone found, scale {:.2f}, hiding it while the gun is held", g_leftArm.scale);
+		}
+		node->local.scale = 0.001f;
+		g_leftArm.shrunk = true;
 	}
 
 	void RestoreGun()
@@ -2019,6 +2074,7 @@ namespace
 			if (player) {  // gun put away, menu open, 3D gone: the aim ends and the gun goes back to the hand
 				ReleaseAim(player);
 			}
+			RestoreLeftArm();
 			return;
 		}
 		GunInfo    info{};
@@ -2027,6 +2083,7 @@ namespace
 			g_gun.wasHeld = false;
 			ResetKick();
 			ReleaseAim(player);
+			RestoreLeftArm();
 			return;
 		}
 		const auto now = Clock::now();
@@ -2072,6 +2129,7 @@ namespace
 		g_reloadMs = static_cast<int>(g_gun.info.reload / quick * 1000.0f + 0.5f);
 		RecoilFrame(player, now);
 		UpdateAim(player, g_gun.info, now);
+		HideLeftArm(player);
 		FollowFlash(player, now);
 		g_spreadNowTenths = static_cast<int>(g_gun.info.spread / accuracy * AimFactor() * 10.0f + 0.5f);
 

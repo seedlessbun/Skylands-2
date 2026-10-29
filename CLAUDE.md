@@ -453,6 +453,12 @@ Other commands:
   unconditionally, which made enemies whose RIGHT slot was EMPTY (right 00000000, left = gun, one model under the left hand) shoot from an invisible gun. 0.34.2 (TestBuild-123, plugin 1.14.5): the left copy is hidden only when a right-hand
   model also exists; when the gun is ONLY in the left hand (no model under WEAPON) it stays visible and is unequipped/re-equipped into the RightHand slot (2 tries per person, log "the gun is only in the left hand: equipped again ..."). UNCONFIRMED.
   If enemies still show a gun in the left hand and none in the right while the log says 2 models, the right model may be present but invisible (not explained yet).
+- 0.34.2 in game (log 7526821d, plugin 290): enemies show their gun in the LEFT hand but fire from the invisible RIGHT one. Log: every shooting enemy has two models (`WEAPON` and `SHIELD < NPC L Hand`) and the left-hand copy gets re-shown
+  by the game now and then ("hid the left-hand copy" again for the same actor a minute later, so the engine re-attaches/re-shows it on draw). Reading: the game keeps the LEFT copy visible (the staff animation is the left-hand one) and the right
+  copy is the one nobody sees. 0.35.0 (TestBuild-124, plugin 1.15.0): (1) the enemy policy is reversed: both copies -> the RIGHT (`WEAPON`) copy is culled, the left one kept/uncovered; bullets and flash start at `VisibleMuzzle(root)` (the first
+  `SkylandsMuzzle` with no hidden ancestor) for NPCs; the re-equip experiment is gone. (2) player: `HideLeftArm` scales the first-person `NPC L UpperArm [LUar]` bone to 0.001 every tick while a gun is held in first person
+  (`RestoreLeftArm` gives the scale back when the gun goes away, a menu opens, third person, ...; ini `HideLeftHand=1`; log "left arm: upper arm bone found ..."). UNCONFIRMED: that animation does not rewrite the bone's scale each frame
+  (if the arm flickers back, the scale needs a different node or the arm meshes must be culled), that the hand is skinned to that bone. Dual wield: still no proof why the right copy is invisible.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

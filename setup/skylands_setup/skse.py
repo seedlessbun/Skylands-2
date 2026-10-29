@@ -62,6 +62,8 @@ RecoilAim=0.6
 RecoilGun=1.0
 ; the arms are hidden while fully aimed (1 on, 0 off); shell casings out of the gun (1 on, 0 off)
 HideHands=1
+; the first-person left arm is hidden while a gun is held in the right hand (1 on, 0 off)
+HideLeftHand=1
 Casings=1
 ; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
 Rockets=1
