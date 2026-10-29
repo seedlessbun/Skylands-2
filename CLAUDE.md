@@ -470,6 +470,8 @@ Other commands:
   position data can lag its physics-moved 3D. 0.36.0 (TestBuild-126, plugin 1.15.2): natives `TrackBeam(gun, beam, light)` / `UntrackBeam(gun)` (declared in `native_stub`, called from the quest's `Place` and `Clear`); the plugin keeps
   a list of handles (max 96) and a 33 ms thread queues `FollowBeams` on the game thread: beam and light are set to the gun's 3D `world.translate` (`PlaceRef`: `data.location`, the node's local translate, `Update`). Log "beam: following gun ..".
   The 4 s `Follow` stays as a fallback. UNCONFIRMED in game (that moving the REFR's 3D that way is allowed for these statics, that the beam stays attached while the gun rolls).
+- 0.36.0 in game: the user says the beams "look better"; some beams are HORIZONTAL (PlaceAtMe copies the gun's angles to the beam ref). 0.36.1 (TestBuild-127, plugin 1.15.3): `PlaceRef` also clears the beam's and light's turn every frame
+  (`data.angle` = 0, node `local.rotate.SetEulerAnglesXYZ(0,0,0)`), assuming the beam mesh points up along z at zero turn. UNCONFIRMED: if a beam is then pointing sideways always, the mesh axis is not z.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

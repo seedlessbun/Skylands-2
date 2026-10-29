@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 320;  // 1.15.2
+	constexpr std::int32_t kVersion = 330;  // 1.15.3
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -2278,6 +2278,8 @@ namespace
 	std::mutex             g_beamLock;
 	std::vector<BeamEntry> g_beams;
 
+	// The beam stands upright whatever the gun does: PlaceAtMe gave it the gun's own angles, so a gun lying on its side had a horizontal beam. The beam's mesh points
+	// up along z with no turn, so its turn is cleared (the light's turn does not matter and is cleared the same way).
 	void PlaceRef(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_at)
 	{
 		if (!a_ref) {
@@ -2287,12 +2289,16 @@ namespace
 		if (!node) {
 			return;
 		}
-		const auto d = node->world.translate - a_at;
-		if (d.x * d.x + d.y * d.y + d.z * d.z < 1.0f) {
+		const auto  d      = node->world.translate - a_at;
+		const auto& r      = node->local.rotate;
+		const bool  tilted = std::fabs(r.entry[2][2] - 1.0f) > 0.001f || std::fabs(r.entry[0][0] - 1.0f) > 0.001f;
+		if (d.x * d.x + d.y * d.y + d.z * d.z < 1.0f && !tilted) {
 			return;
 		}
 		a_ref->data.location = a_at;
+		a_ref->data.angle    = { 0.0f, 0.0f, 0.0f };
 		node->local.translate = a_at;
+		node->local.rotate.SetEulerAnglesXYZ(0.0f, 0.0f, 0.0f);
 		RE::NiUpdateData update;
 		node->Update(update);
 	}
