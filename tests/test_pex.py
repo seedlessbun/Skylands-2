@@ -274,13 +274,14 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
                  "Int Function Magazine() Global Native", "Int Function ShotsFired() Global Native", "Bool Function Reloading() Global Native", "Int Function RateTenths() Global Native",
                  "Int Function MeasuredTenths() Global Native", "Int Function ReloadMsNow() Global Native", "Int Function SpreadNowTenths() Global Native",
                  "Bool Function SetShotSound(Form akSound) Global Native", "Bool Function TriggerHeld() Global Native",
-                 "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native"):
+                 "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native",
+                 "Bool Function TrackBeam(ObjectReference akGun, ObjectReference akBeam, ObjectReference akLight) Global Native", "Bool Function UntrackBeam(ObjectReference akGun) Global Native"):
         assert text in psc, text
     assert "String" not in psc and "afSpreadMult" in psc  # no native takes a string: 0.15.1's GunStat(Weapon, String) always read 0 in the game's script
     main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
     for text in ('"FireGun"sv', '"GunClip"sv', '"GunIntervalMs"sv', '"GunReloadMs"sv', '"GunSpreadTenths"sv', '"Magazine"sv', '"ShotsFired"sv', '"Reloading"sv', '"RateTenths"sv', '"MeasuredTenths"sv', '"ReloadMsNow"sv', '"SpreadNowTenths"sv', '"SetShotSound"sv', "BSTempEffectParticle::Spawn", "Variable06", '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv',
                  '"Version"sv', "RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult", "RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)",
-                 "TESSpellCastEvent", "SkylandsGun_", "holder->AddEventSink(CastSink::Get())", "RE::ActorValue::kVariable06", "RE::ActorValue::kVariable07", "RE::ActorValue::kVariable08", "StartPump();"):
+                 "TESSpellCastEvent", '"TrackBeam"sv', '"UntrackBeam"sv', "SkylandsGun_", "holder->AddEventSink(CastSink::Get())", "RE::ActorValue::kVariable06", "RE::ActorValue::kVariable07", "RE::ActorValue::kVariable08", "StartPump();"):
         assert text in main, text  # the stub and the plugin's registrations say the same thing
     assert "GunStat" not in main
 
@@ -350,3 +351,9 @@ def test_a_dead_person_keeps_no_weapon_and_one_roll_decides_the_drop(tmp_path):
     assert "If it == keep" in clear and "n -= 1" in clear  # of the kept gun one copy stays
     plain = decompile(tmp_path, scripts.watcher(), "SkylandsHunter")
     assert "Self.OwnDrop()" in plain.split("Function Cleanup(")[1].split("EndFunction")[0]  # the other installs drop as before
+
+
+def test_the_quest_hands_each_beam_to_the_plugin_and_takes_it_back():
+    src = (Path(__file__).resolve().parent.parent / "setup" / "skylands_setup" / "skyrim" / "scripts.py").read_text(encoding="utf-8")
+    assert '"TrackBeam"), ("id", "::temp0"), ("id", "r"), ("id", "b"), ("id", "lr")' in src  # Place: the gun, its beam and its light
+    assert '"UntrackBeam"), ("id", "::temp0"), ("id", "g")' in src  # Clear: the entry goes when the gun does

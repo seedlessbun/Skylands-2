@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 310;  // 1.15.1
+	constexpr std::int32_t kVersion = 320;  // 1.15.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -2267,6 +2267,91 @@ namespace
 		}
 	}
 
+	// ---- rarity beams that follow their gun -------------------------------------------------------------------------------
+	// A gun lying in the world carries a beam (and a light), two references the Papyrus quest places. The quest moved them to the gun every few seconds, so a gun
+	// that was dropped and still rolling, or one pushed about, left its beam behind. The quest now hands the three references over (TrackBeam) and the plugin sets
+	// the beam and light to the gun's 3D position every 33 ms; UntrackBeam when the gun is taken or gone.
+	struct BeamEntry
+	{
+		RE::ObjectRefHandle gun, beam, light;
+	};
+	std::mutex             g_beamLock;
+	std::vector<BeamEntry> g_beams;
+
+	void PlaceRef(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_at)
+	{
+		if (!a_ref) {
+			return;
+		}
+		const auto node = a_ref->Get3D();
+		if (!node) {
+			return;
+		}
+		const auto d = node->world.translate - a_at;
+		if (d.x * d.x + d.y * d.y + d.z * d.z < 1.0f) {
+			return;
+		}
+		a_ref->data.location = a_at;
+		node->local.translate = a_at;
+		RE::NiUpdateData update;
+		node->Update(update);
+	}
+
+	void FollowBeams()
+	{
+		g_stage = "beams follow";
+		std::vector<BeamEntry> list;
+		{
+			const std::lock_guard guard(g_beamLock);
+			list = g_beams;
+		}
+		for (auto& e : list) {
+			const auto gun = e.gun.get();
+			if (!gun || !gun->Get3D()) {
+				continue;  // in a pack, or its cell is gone: the quest's sweep clears the entry
+			}
+			const auto at = gun->Get3D()->world.translate;
+			PlaceRef(e.beam.get().get(), at);
+			PlaceRef(e.light.get().get(), at);
+		}
+	}
+
+	bool TrackBeam(RE::StaticFunctionTag*, RE::TESObjectREFR* a_gun, RE::TESObjectREFR* a_beam, RE::TESObjectREFR* a_light)
+	{
+		if (!a_gun) {
+			return false;
+		}
+		const std::lock_guard guard(g_beamLock);
+		const BeamEntry       entry{ a_gun->GetHandle(), a_beam ? a_beam->GetHandle() : RE::ObjectRefHandle{}, a_light ? a_light->GetHandle() : RE::ObjectRefHandle{} };
+		for (auto& e : g_beams) {
+			if (e.gun == entry.gun) {
+				e = entry;
+				return true;
+			}
+		}
+		if (g_beams.size() >= 96) {
+			g_beams.erase(g_beams.begin());
+		}
+		g_beams.push_back(entry);
+		static std::atomic_int told{ 0 };
+		if (told.fetch_add(1) < 6) {
+			SKSE::log::info("beam: following gun {:08X} ({} tracked)", a_gun->GetFormID(), g_beams.size());
+		}
+		return true;
+	}
+
+	bool UntrackBeam(RE::StaticFunctionTag*, RE::TESObjectREFR* a_gun)
+	{
+		if (!a_gun) {
+			return false;
+		}
+		const auto            handle = a_gun->GetHandle();
+		const std::lock_guard guard(g_beamLock);
+		std::erase_if(g_beams, [&](const BeamEntry& e) { return e.gun == handle; });
+		return true;
+	}
+
+
 	// A thread asks for a tick a few milliseconds apart (the game thread runs it once the task queue comes round, a frame at a time; a tick still
 	// waiting is not asked for again).
 	void StartPump()
@@ -2284,6 +2369,25 @@ namespace
 				RunOnGameThread([]() {
 					Tick();
 					g_tickQueued = false;
+				});
+			}
+		}).detach();
+		std::thread([]() {
+			for (;;) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(33));
+				static std::atomic_bool beamQueued{ false };
+				{
+					const std::lock_guard guard(g_beamLock);
+					if (g_beams.empty()) {
+						continue;
+					}
+				}
+				if (beamQueued.exchange(true)) {
+					continue;
+				}
+				RunOnGameThread([]() {
+					FollowBeams();
+					beamQueued = false;
 				});
 			}
 		}).detach();
@@ -2386,6 +2490,8 @@ namespace
 	bool RegisterPapyrus(RE::BSScript::IVirtualMachine* a_vm)
 	{
 		a_vm->RegisterFunction("Version"sv, "SkylandsNative"sv, Version);
+		a_vm->RegisterFunction("TrackBeam"sv, "SkylandsNative"sv, TrackBeam);
+		a_vm->RegisterFunction("UntrackBeam"sv, "SkylandsNative"sv, UntrackBeam);
 		a_vm->RegisterFunction("SetGunMode"sv, "SkylandsNative"sv, SetGunMode);
 		a_vm->RegisterFunction("TriggerHeld"sv, "SkylandsNative"sv, TriggerHeld);
 		a_vm->RegisterFunction("TriggerPressed"sv, "SkylandsNative"sv, TriggerPressed);

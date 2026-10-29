@@ -465,6 +465,11 @@ Other commands:
   Papyrus `DeathDrop` was read again and its logic is right (one roll of `DropChance` (25): then 50/50 held gun or random gun from the `ListFor` list; so about 12% of deaths drop the held gun and 12% a random one); it was split into
   `WantHeld`/`DropHeld`/`DropRandom`/`Placed` (Champollion segfaults on the one-function version with three branches) and every step writes `Debug.Trace("Skylands drop: ...")` to the Papyrus log. The cause of "never random" is NOT
   found: read `Papyrus.0.log` for the "Skylands drop:" lines (held / random / PlaceAtMe gave no object / no drop).
+- 0.35.1 in game (user, Papyrus.0.log 1afaca36 checked): the "Skylands drop:" lines show held/random/no-drop paths all working (10 "no drop this time", 2 "random gun from the drop list", no errors from our scripts): the user was just unlucky.
+  New report: when an enemy drops the gun it held, the rarity beam stays where the enemy died. Cause (likely): the quest's `Sweep` moves beam and light to the gun (`MoveTo`) only every ~4 s, and a ref's
+  position data can lag its physics-moved 3D. 0.36.0 (TestBuild-126, plugin 1.15.2): natives `TrackBeam(gun, beam, light)` / `UntrackBeam(gun)` (declared in `native_stub`, called from the quest's `Place` and `Clear`); the plugin keeps
+  a list of handles (max 96) and a 33 ms thread queues `FollowBeams` on the game thread: beam and light are set to the gun's 3D `world.translate` (`PlaceRef`: `data.location`, the node's local translate, `Update`). Log "beam: following gun ..".
+  The 4 s `Follow` stays as a fallback. UNCONFIRMED in game (that moving the REFR's 3D that way is allowed for these statics, that the beam stays attached while the gun rolls).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

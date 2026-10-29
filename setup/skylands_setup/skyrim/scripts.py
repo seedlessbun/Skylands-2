@@ -895,6 +895,7 @@ def class_choice_quest(bolts: bool = True) -> Script:
             ("array_setelement", ("id", "TrackedLights"), ("id", "slot"), ("id", "lr")),
             ("iadd", ("id", "TrackedNext"), ("id", "slot"), ("int", 1)),
             ("imod", ("id", "TrackedNext"), ("id", "TrackedNext"), ("int", 48)),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "TrackBeam"), ("id", "::temp0"), ("id", "r"), ("id", "b"), ("id", "lr")),  # the plugin keeps them on the gun every frame
             call("Report", ("id", "r"), ("id", "b"), ("id", "lr")),
             ("return", None),
         ],
@@ -929,8 +930,10 @@ def class_choice_quest(bolts: bool = True) -> Script:
     clear = Function(
         "Clear",
         params=[("i", "Int")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("b", "ObjectReference"), ("lr", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("b", "ObjectReference"), ("lr", "ObjectReference"), ("g", "ObjectReference")],
         code=[
+            ("array_getelement", ("id", "g"), ("id", "Tracked"), ("id", "i")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "UntrackBeam"), ("id", "::temp0"), ("id", "g")),
             ("array_getelement", ("id", "b"), ("id", "TrackedBeams"), ("id", "i")),
             ("cast", ("id", "::temp0"), ("id", "b")),
             ("jmpf", ("id", "::temp0"), ("lbl", "lamp")),
@@ -2772,6 +2775,8 @@ def native_stub() -> Script:
         parent="",
         functions=[
             Function("Version", return_type="Int", flags=both),
+            Function("TrackBeam", return_type="Bool", flags=both, params=[("akGun", "ObjectReference"), ("akBeam", "ObjectReference"), ("akLight", "ObjectReference")]),
+            Function("UntrackBeam", return_type="Bool", flags=both, params=[("akGun", "ObjectReference")]),
             Function("SetGunMode", return_type="Bool", flags=both, params=[("abOn", "Bool")]),
             Function("TriggerHeld", return_type="Bool", flags=both),
             Function("TriggerPressed", return_type="Bool", flags=both),
