@@ -26,6 +26,11 @@ def ret_unless(cond, tag, tmp=("id", "::temp0")):
     return [("not", tmp, cond), ("jmpf", tmp, ("lbl", tag)), ("return", None), ("label", tag)]
 
 
+def trace(text):
+    """Debug.Trace(text): one line in the Papyrus log (Skyrim.ini [Papyrus] bEnableLogging=1)."""
+    return ("callstatic", ("id", "Debug"), ("id", "Trace"), NONE, ("str", text), ("int", 0))
+
+
 def notify(*parts, msg=("id", "msg")):
     """Debug.Notification(a + b + ...) for string literals and string variables."""
     code = [("assign", msg, ("str", ""))]
@@ -1649,28 +1654,76 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
             ("return", None),
         ],
     )
+    want_held = Function(
+        "WantHeld",
+        return_type="Bool",
+        params=[("w", "Weapon")],
+        locals=[("::temp0", "Bool")],
+        code=[
+            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "no")),
+            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("int", 50)),
+            ("return", ("id", "::temp0")),
+            ("label", "no"),
+            ("return", ("bool", False)),
+        ],
+    )
+    drop_held = Function(
+        "DropHeld",
+        params=[("w", "Weapon")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("drop", "ObjectReference")],
+        code=[
+            trace("Skylands drop: the gun the person held goes on the ground"),
+            ("cast", ("id", "f"), ("id", "w")),
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "drop"), ("id", "f"), ("int", 1), ("bool", False), ("bool", False)),
+            call("Placed", ("id", "drop")),
+            ("return", None),
+        ],
+    )
+    drop_random = Function(
+        "DropRandom",
+        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("list", "Form"), ("drop", "ObjectReference")],
+        code=[
+            trace("Skylands drop: a random gun from the drop list goes on the ground"),
+            ("callmethod", ("id", "ListFor"), SELF, ("id", "list")),
+            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "drop"), ("id", "list"), ("int", 1), ("bool", False), ("bool", False)),
+            call("Placed", ("id", "drop")),
+            ("return", None),
+        ],
+    )
+    placed = Function(
+        "Placed",
+        params=[("drop", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
+        code=[
+            ("cast", ("id", "::temp0"), ("id", "drop")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "nothing")),
+            call("Announce", ("id", "drop")),
+            ("jmp", ("lbl", "end")),
+            ("label", "nothing"),
+            trace("Skylands drop: PlaceAtMe gave no object (the list or the gun is empty)"),
+            ("label", "end"),
+            ("return", None),
+        ],
+    )
     death_drop = Function(
         "DeathDrop",
         params=[("w", "Weapon")],
-        locals=[("::nonevar", "None"), ("::temp0", "Bool"), ("f", "Form"), ("list", "Form"), ("drop", "ObjectReference")],
+        locals=[("::nonevar", "None"), ("::temp0", "Bool")],
         code=[
-            # one roll: with the chance, the gun the person held (half the time, when they held one) or a random gun lands on the ground; nothing is left in the pack
+            # one roll: with the chance, the gun the person held (half the time, when they held one) or a random gun lands on the ground; nothing is left in the pack.
+            # Each step is written to the Papyrus log ("Skylands drop: ...") so a missing drop can be explained.
             ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("id", "::DropChance_var")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            ("cast", ("id", "::temp0"), ("id", "w")),
+            ("jmpf", ("id", "::temp0"), ("lbl", "nodrop")),
+            ("callmethod", ("id", "WantHeld"), SELF, ("id", "::temp0"), ("id", "w")),
             ("jmpf", ("id", "::temp0"), ("lbl", "random")),
-            ("callmethod", ("id", "Roll"), SELF, ("id", "::temp0"), ("int", 50)),
-            ("jmpf", ("id", "::temp0"), ("lbl", "random")),
-            ("cast", ("id", "f"), ("id", "w")),
-            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "drop"), ("id", "f"), ("int", 1), ("bool", False), ("bool", False)),
-            ("jmp", ("lbl", "placed")),
+            call("DropHeld", ("id", "w")),
+            ("jmp", ("lbl", "end")),
             ("label", "random"),
-            ("callmethod", ("id", "ListFor"), SELF, ("id", "list")),
-            ("callmethod", ("id", "PlaceAtMe"), ("id", "Me"), ("id", "drop"), ("id", "list"), ("int", 1), ("bool", False), ("bool", False)),
-            ("label", "placed"),
-            ("cast", ("id", "::temp0"), ("id", "drop")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "end")),
-            call("Announce", ("id", "drop")),
+            call("DropRandom"),
+            ("jmp", ("lbl", "end")),
+            ("label", "nodrop"),
+            trace("Skylands drop: no drop this time (the roll missed the drop chance)"),
             ("label", "end"),
             ("return", None),
         ],
@@ -1732,7 +1785,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
                          ("Lights", "Light[]"), ("PromptMsg", "Message"), ("SettingsMsg", "Message"), ("MarkerForm", "Form"),
                          ("RespawnPower", "Spell"), ("LogPower", "Spell"), ("Ability", "Spell")],
         functions=[go, clear_one, clear_weapons, npc_equipped, player_equipped, on_start, begin, on_update, wake, give, diag, hand, rare, player_tick, on_load, maintain, on_equipped, on_unequipped, on_death, apply_speed, speed_of, scan, eligible,
-                   worthy, roll, list_for, held_in, gun_held, carrying, try_arm, equip, own_drop, bonus_drop, announce, *([death_drop, cleanup_staff] if everyone else [cleanup])],
+                   worthy, roll, list_for, held_in, gun_held, carrying, try_arm, equip, own_drop, bonus_drop, announce, *([want_held, drop_held, drop_random, placed, death_drop, cleanup_staff] if everyone else [cleanup])],
     )
 
 

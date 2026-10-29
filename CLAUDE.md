@@ -459,6 +459,12 @@ Other commands:
   `SkylandsMuzzle` with no hidden ancestor) for NPCs; the re-equip experiment is gone. (2) player: `HideLeftArm` scales the first-person `NPC L UpperArm [LUar]` bone to 0.001 every tick while a gun is held in first person
   (`RestoreLeftArm` gives the scale back when the gun goes away, a menu opens, third person, ...; ini `HideLeftHand=1`; log "left arm: upper arm bone found ..."). UNCONFIRMED: that animation does not rewrite the bone's scale each frame
   (if the arm flickers back, the scale needs a different node or the arm meshes must be culled), that the hand is skinned to that bone. Dual wield: still no proof why the right copy is invisible.
+- 0.35.1 (TestBuild-125, plugin 1.15.1), user: enemies sometimes SPAWN with two guns (the extra goes after a few seconds, i.e. at their first shot), and "enemies only ever drop the gun they hold, the random roll never happens".
+  (1) the model fix is no longer tied to the first cast: `ScanArmed` (a thread queues it on the game thread every 400 ms, started in `StartPump`) walks `ProcessLists::highActorHandles` within 6000 units, and for every person
+  whose hands hold a Skylands gun runs `FixModels` (the old `OneGunOnly` body; `OneGunOnly(id)` still runs it from a cast). Log lines: first sighting per person (max 40) and "enemy ..: hid the right-hand copy". (2) drops: the
+  Papyrus `DeathDrop` was read again and its logic is right (one roll of `DropChance` (25): then 50/50 held gun or random gun from the `ListFor` list; so about 12% of deaths drop the held gun and 12% a random one); it was split into
+  `WantHeld`/`DropHeld`/`DropRandom`/`Placed` (Champollion segfaults on the one-function version with three branches) and every step writes `Debug.Trace("Skylands drop: ...")` to the Papyrus log. The cause of "never random" is NOT
+  found: read `Papyrus.0.log` for the "Skylands drop:" lines (held / random / PlaceAtMe gave no object / no drop).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

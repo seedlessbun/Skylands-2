@@ -339,7 +339,12 @@ def test_a_dead_person_keeps_no_weapon_and_one_roll_decides_the_drop(tmp_path):
     assert "Self.GunHeld()" in cleanup and "Self.ClearWeapons(::nonevar)" in cleanup and "Self.DeathDrop(w)" in cleanup  # note the gun, empty the pack of weapons, then one roll
     assert cleanup.index("GunHeld") < cleanup.index("ClearWeapons") < cleanup.index("DeathDrop")
     drop = staff.split("Function DeathDrop(")[1].split("EndFunction")[0]
-    assert "Self.Roll(DropChance)" in drop and "Self.Roll(50)" in drop and "Me.PlaceAtMe(f, 1" in drop and "Me.PlaceAtMe(list, 1" in drop  # the held gun or a random one, on the ground
+    assert "Self.Roll(DropChance)" in drop and "Self.WantHeld(w)" in drop and "Self.DropHeld(w)" in drop and "Self.DropRandom()" in drop  # one roll, then the held gun or a random one
+    assert "Self.Roll(50)" in staff.split("Function WantHeld(")[1].split("EndFunction")[0]
+    assert "Me.PlaceAtMe(f, 1" in staff.split("Function DropHeld(")[1].split("EndFunction")[0]  # the held gun, on the ground
+    random = staff.split("Function DropRandom(")[1].split("EndFunction")[0]
+    assert "Me.PlaceAtMe(list, 1" in random and "Self.ListFor()" in random  # a random gun from the drop list, on the ground
+    assert 'Debug.Trace("Skylands drop:' in staff  # each step says what it did in the Papyrus log
     assert "OwnDrop" not in cleanup and "BonusDrop" not in cleanup  # the old always-drop and the second drop are gone
     clear = staff.split("Function ClearOne(")[1].split("EndFunction")[0]
     assert "If it == keep" in clear and "n -= 1" in clear  # of the kept gun one copy stays

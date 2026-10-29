@@ -12,7 +12,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 300;  // 1.15.0
+	constexpr std::int32_t kVersion = 310;  // 1.15.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -773,32 +773,30 @@ namespace
 	// The game reports a two-handed (staff-type) weapon in BOTH hand slots of an actor whose pack holds ONE copy; that is not what makes the second gun
 	// people see on an enemy (unequipping it did not hold). Looked at from the model instead: every copy of the gun's mesh in the actor's 3D is found by its
 	// SkylandsMuzzle node and the chain of nodes up to the actor is logged; a copy that hangs under the LEFT hand is hidden.
-	void OneGunOnly(RE::FormID a_actorId)
+	// Looks at one armed person's 3D and leaves one gun model in view (see above). Called for every armed person near the player twice a second (ScanArmed),
+	// so a person who spawns, draws or loads in with the gun in both hands is fixed within a moment, not only when they first shoot.
+	void FixModels(RE::Actor* who)
 	{
-		static std::mutex                                                   lock;
-		static std::unordered_map<RE::FormID, std::chrono::steady_clock::time_point> last;
 		{
-			const std::lock_guard guard(lock);
-			const auto            now = std::chrono::steady_clock::now();
-			auto&                 at  = last[a_actorId];
-			if (now - at < std::chrono::seconds(3)) {
-				return;
-			}
-			at = now;
-		}
-		RunOnGameThread([a_actorId]() {
-			const auto who = RE::TESForm::LookupByID<RE::Actor>(a_actorId);
 			if (!who || who->IsDead() || !who->Is3DLoaded()) {
 				return;
 			}
+			const RE::FormID a_actorId = who->GetFormID();
 			const auto root = who->Get3D(false);
 			if (!root) {
 				return;
 			}
 			std::vector<RE::NiAVObject*> muzzles;
 			CollectNamed(root, "SkylandsMuzzle"sv, muzzles);
-			static std::atomic_int told{ 0 };
-			const bool             tell = told.fetch_add(1) < 16;
+			// said the first time a person is seen with a gun, and whenever the plugin changes something
+			static std::mutex                 seenLock;
+			static std::unordered_set<RE::FormID> seen;
+			bool                              first = false;
+			{
+				const std::lock_guard guard(seenLock);
+				first = seen.size() < 40 && seen.insert(a_actorId).second;
+			}
+			const bool tell = first;
 			if (tell) {
 				const auto right = who->GetEquippedObject(false);
 				const auto left  = who->GetEquippedObject(true);
@@ -855,13 +853,50 @@ namespace
 						}
 					} else if (c.weaponRoot && !c.weaponRoot->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
 						c.weaponRoot->SetAppCulled(true);
-						if (tell) {
-							SKSE::log::info("  hid the right-hand copy ({})", c.weaponRoot->name.c_str() ? c.weaponRoot->name.c_str() : "?");
+						static std::atomic_int hid{ 0 };
+						if (tell || hid.fetch_add(1) < 12) {
+							SKSE::log::info("enemy {:08X}: hid the right-hand copy ({})", a_actorId, c.weaponRoot->name.c_str() ? c.weaponRoot->name.c_str() : "?");
 						}
 					}
 				}
 			}
-		});
+		}
+	}
+
+	void OneGunOnly(RE::FormID a_actorId)
+	{
+		RunOnGameThread([a_actorId]() { FixModels(RE::TESForm::LookupByID<RE::Actor>(a_actorId)); });
+	}
+
+	// Every armed person in the loaded cells near the player (game thread).
+	void ScanArmed()
+	{
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		const auto lists  = RE::ProcessLists::GetSingleton();
+		if (!player || !player->Is3DLoaded() || !lists) {
+			return;
+		}
+		g_stage = "armed scan";
+		const auto here = player->GetPosition();
+		int        looked = 0;
+		for (auto& handle : lists->highActorHandles) {
+			const auto ptr = handle.get();
+			const auto actor = ptr.get();
+			if (!actor || actor->IsPlayerRef() || actor->IsDead() || !actor->Is3DLoaded() || looked >= 24) {
+				continue;
+			}
+			const auto there = actor->GetPosition();
+			const float dx = there.x - here.x, dy = there.y - here.y, dz = there.z - here.z;
+			if (dx * dx + dy * dy + dz * dz > 6000.0f * 6000.0f) {
+				continue;
+			}
+			GunInfo    info{};
+			if (!HeldGun(actor, info)) {
+				continue;
+			}
+			++looked;
+			FixModels(actor);
+		}
 	}
 
 	class CastSink : public RE::BSTEventSink<RE::TESSpellCastEvent>
@@ -2249,6 +2284,19 @@ namespace
 				RunOnGameThread([]() {
 					Tick();
 					g_tickQueued = false;
+				});
+			}
+		}).detach();
+		std::thread([]() {
+			for (;;) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(400));
+				static std::atomic_bool queued{ false };
+				if (queued.exchange(true)) {
+					continue;
+				}
+				RunOnGameThread([]() {
+					ScanArmed();
+					queued = false;
 				});
 			}
 		}).detach();
