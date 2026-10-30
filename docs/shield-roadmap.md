@@ -267,3 +267,23 @@ so each 33 ms the plugin reads the damage taken so far (maximum minus current), 
 is absorbed while the shield holds, as in BL2; the gate switch gives back what the shield could not take. It does not depend on which function applies the damage. Costs: the vanilla health bar shows shield and health together until the shield HUD bar exists (stage 2); the bonus is a saved modifier, so the plugin keeps a co-save record of the bonuses
 on actors and takes them off again after a load (`g_stale`, `Strip`); `Shield=0` stops new bonuses but does not remove existing ones (a save made with a shield on is cleaned on its next load).
 The old hook remains as an observer: it counts and logs the Health changes it sees (the next log shows whether damage arrives as negative `kDamage` anywhere).
+
+## 11. Stages 2-4 in one build (0.39.0, plugin 1.18.0): the HUD, the items, who wears them
+The user (stage 1 "looks like it worked") asked for the HUD, the item variations from BL2's parts, a slot of their own, shields on the player and on enemies, and, as an extra, loot. What was built, and what it rests on:
+
+**What the deep survey said about how a BL2 shield is made** (read from `work\bl2-shield-deep-report.txt`, parsed by `tools/shield_report.py`, kept in `setup/skylands_setup/shielddata.py`):
+* five parts: body, battery, capacitor (each one of nine manufacturers), accessory (the type), material (the rarity). The grade of the capacity, recharge rate and recharge delay slots is the SUM of the grades the body, battery and capacitor give
+  (a manufacturer gives the same grades on all three; e.g. Pangolin +8 capacity, -7 rate, -8 delay; Hyperion -4, -2, +8) plus the material's (uncommon +4 capacity, rare +8, very rare +12; the types add recharge-delay or specials).
+* the stat is its base times (1 + grade x step): capacity +0.03, recharge rate +0.03, recharge delay -0.04 per grade (a higher delay grade is a shorter delay). Base delay 3.5 s and rate 0.16 x capacity per second are BL2's.
+* any body, battery and capacitor can go with any type; the capacitor list of a type decides which resistance capacitors can appear (Maliwan fire/shock/corrosive, Torgue explosive; BL2: immunity to that status effect).
+* names: a prefix for the strongest part grade in the body manufacturer's own words ("Unbroken", "Fast Acting", "Supersized" ...), or "Balanced"'s word, or a resistance word (Inflammable, Grounded, Alkaline, Blast proof), then the title (Shield, Absorb Shield, Booster Shield, Adaptive Shield, Amplify Shield, Turtle Shield, Acid/Explosive Nova Shield ...).
+* the type effects are skills on the accessory parts; their numbers were not in the dump, so they are described in the item text and NOT active yet (stage 5).
+
+**Decisions made while the user was away** (each can be changed; the first two are the ones that matter):
+1. *The extra slot.* Skyrim has 32 biped slots (30-61) and no way to add one. The installer scans the load order and takes one that nothing uses (60 first); `ShieldSlot` in the ini keeps it. The shield item has no worn model, so nothing is drawn for it.
+2. *The plugin does the equipping, not Papyrus.* Items are found by keyword when the game loads; people near the player are given one by a roll that depends only on their form id (stable across loads) and put it on with `ActorEquipManager`. No script changed, so no ghost-script risk.
+3. *Capacity base.* BL2's capacity formula does not fit Skyrim's health, so the base is `capacity_ratio` 0.35 of the wearer's max health (design), and BL2's grades scale it (a typical rare is about 0.45, a Pangolin body adds up to +24 % per part).
+4. *Enemy shield chance* 30 % of people near the player, rarity by level with the guns' weights. These are placeholders until the interview about loot.
+
+**HUD.** `shieldhud.h` covers the game's health bar with its own (upper half shield, lower half health) and does the same over the enemy bar. Because nothing about the game's bar geometry is known, it reads `getBounds` of the clips named in the HUD base clip and logs
+what it finds; the ini keys move and size it. If that fails there are two fallbacks already in: `ShieldHudMode=2` (a thin bar above the game's) and `ShieldHud=0` (the plain lines). Options not built: a number beside the bar, a bar under the crosshair, or a bar in the style of BL2 beside the health bar.
