@@ -185,7 +185,7 @@ def roll(t: Tables, S_: dict, seed: int) -> list[Build]:
                 parts = (bd[2] + bt[2] + cp[2], bd[3] + bt[3] + cp[3], bd[4] + bt[4] + cp[4])
                 grades = (parts[0] + mat[1], parts[1] + mat[2], parts[2] + mat[3])
                 b = Build(fam, level, body, battery, capacitor, grades, parts, (bt[5] + cp[5] + mat[4], bt[6] + cp[6] + mat[5]), cp[7])
-                b.ratio = base_ratio * max(0.2, 1.0 + t.steps["capacity"] * grades[0])
+                b.ratio = base_ratio * max(0.4, 1.0 + t.steps["capacity"] * grades[0])  # BL2's own lowest is 0.4 (the Tediore very rare: -20 grades)
                 b.rate = rate_base * max(0.2, 1.0 + t.steps["rate"] * grades[1])
                 b.delay = max(delay_min, delay_base * (1.0 + t.steps["delay"] * grades[2]))
                 prefix = "" if fam.unique else prefix_for(t, body, parts, b.resist)

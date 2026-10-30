@@ -28,7 +28,7 @@ def test_a_shield_is_built_from_the_grades_of_its_parts_like_borderlands_2():
         mat = D.MATERIALS[b.family.material][b.level]
         assert b.grades == (body[2] + battery[2] + cap[2] + mat[1], body[3] + battery[3] + cap[3] + mat[2], body[4] + battery[4] + cap[4] + mat[3])
         step = D.STEPS
-        assert abs(b.ratio - sheet()["capacity_ratio"] * max(0.2, 1 + step["capacity"] * b.grades[0])) < 1e-9
+        assert abs(b.ratio - sheet()["capacity_ratio"] * max(0.4, 1 + step["capacity"] * b.grades[0])) < 1e-9
         assert abs(b.rate - sheet()["rate_fraction"] * max(0.2, 1 + step["rate"] * b.grades[1])) < 1e-9
         assert b.delay >= sheet()["delay_min_s"] and abs(b.delay - max(sheet()["delay_min_s"], sheet()["delay_s"] * (1 + step["delay"] * b.grades[2]))) < 1e-9
         assert b.name and b.capacitor.split("_")[0] in D.BODIES
