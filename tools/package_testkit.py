@@ -90,6 +90,16 @@ echo.
 echo Send work\bl2-shield-report.txt back to Claude.
 pause
 """
+SHIELD_DEEP = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+echo The second shield survey: the numbers behind shield grades, types, enemy shields, the HUD (changes nothing; about 10-20 minutes) ...
+"%~dp0python\python.exe" -X utf8 -m skylands_setup bl2shields --deep --out "%~dp0work\bl2-shield-deep-report.txt" %*
+echo.
+echo Send work\bl2-shield-deep-report.txt back to Claude.
+pause
+"""
 SHOOTING_SURVEY = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -161,6 +171,11 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   Check-BL2-Shotguns.bat looks for where Borderlands 2 keeps its shotgun meshes (changes nothing) and writes work\\bl2-shotgun-report.txt.
   Check-BL2-Shields.bat looks at how Borderlands 2 builds its shields (stats, parts, loot pools, enemies, art, sound; changes nothing, 15-40 minutes) and writes
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
+  Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
+  work\\bl2-shield-deep-report.txt.
+  SHIELDS (stage 1 test): the plugin gives you a shield of 60 percent of your max health and every person near you one of 40 percent (settings TestShield / TestEnemyShields in
+  Data\\SKSE\\Plugins\\SkylandsNative.ini; 0 turns them off). Lines on the screen: "Shield 120 / 300", "SHIELD BROKEN", "Shield recharging", "Shield full", "Enemy shield down".
+  Run Check-BL2-Shields-Deep.bat as well and send both the report and Documents\\My Games\\Skyrim Special Edition\\SKSE\\SkylandsNative.log.
   Run-GunModelSurvey.bat reads Borderlands 2 and writes work\\gun-model-survey.json (what the real mesh files look like);
   send it whenever the native or UModel method builds fewer meshes than it should.
 
@@ -172,7 +187,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-128.zip"
+    out = dist / "Skylands-TestBuild-129.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -194,6 +209,7 @@ def main() -> int:
         z.writestr("Check-BL2-Gestalt.bat", GESTALT_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Shotguns.bat", SHOTGUN_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Shields.bat", SHIELD_PROBE.replace("\n", "\r\n"))
+        z.writestr("Check-BL2-Shields-Deep.bat", SHIELD_DEEP.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))
     print(f"{out.relative_to(ROOT)} {out.stat().st_size} bytes")

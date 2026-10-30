@@ -1,6 +1,6 @@
 # Shields, the Borderlands 2 way: plan (phase 1 deliverable)
 
-Status: **planning only, nothing in this document is built.** Written after reading the user's `bl2-shield-report.txt` (TestBuild-128, 13,425 lines,
+Status: **APPROVED by the user with the defaults in section 8; stage 1 is built (0.38.0).** Decisions: see section 9. Original status: planning only. Written after reading the user's `bl2-shield-report.txt` (TestBuild-128, 13,425 lines,
 all sections ran). Line numbers below (`report L2176`) are lines of that report so a claim can be checked; the report itself is on the user's PC
 (`work\bl2-shield-report.txt`). **Confirmed** = seen in the report. **Unconfirmed** = my reading or a guess, with how it will be checked.
 
@@ -248,3 +248,11 @@ The first survey answered *what exists*; these things it cut off or never reache
 12. Any damage that should skip shields (poison, fall, drowning, your own explosions)? [none in v1]
 
 Nothing will be built until you answer, or tell me to go with the defaults above.
+
+## 9. Decisions (from the user)
+* "Go with the defaults": every bracketed default in section 8 is chosen.
+* **Standing rule: when a Borderlands 2 value for a shield number is found in the game files, it replaces the static (design) value.** Implemented as `sheets/shields.json`: every number has `value` (the default),
+  `source` (`bl2` or `design`) and `bl2_object` (where the real value lives). `bl2/extract.shield_stats` reads the ones it can (today `delay_s` 3.5 and `rate_fraction` 0.16, from the objects the first survey showed);
+  the installer writes them into the plugin's settings (`skse.shield_ini`) in place of the sheet's defaults and logs `shields: read from Borderlands 2: {...}`. The deep survey (`Check-BL2-Shields-Deep.bat`) dumps every
+  `bl2_object` in full; each time its report gives a real value for a `design` row, the row becomes `bl2`, a reader is added to `shield_stats`, and a test pins it.
+* Stage 1 (0.38.0, plugin 1.16.0): the core in `native/skse/src/shield.h`, settings `Shield`, `ShieldGate`, `ShieldDelay`, `ShieldRate`, `ShieldLow`, `ShieldMessages`, `TestShield` (60), `TestEnemyShields` (40); natives `ShieldPercent`, `ShieldMax`.

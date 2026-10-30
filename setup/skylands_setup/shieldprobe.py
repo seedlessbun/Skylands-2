@@ -284,7 +284,7 @@ def census(ctx: Ctx, objs: list[Obj]) -> None:
 
 # ---- 2. definitions ------------------------------------------------------------------------------------------------------------------
 
-def follow(ctx: Ctx, seeds: list[str], depth: int, cap: int, lines_each: int, title: str) -> set[str]:
+def follow(ctx: Ctx, seeds: list[str], depth: int, cap: int, lines_each: int, title: str, fanout: int = 30) -> set[str]:
     """Breadth-first read of the objects a set of seeds refers to; numbers-bearing classes (attributes, resolvers, formulas) first."""
     ix = ctx.ix
     seen: dict[str, str] = {}
@@ -321,9 +321,9 @@ def follow(ctx: Ctx, seeds: list[str], depth: int, cap: int, lines_each: int, ti
                     queue.insert(0, (child, d + 1, path))
             urgent = bool(NUM_CLASS.search(cls))
             wanted = [r for r in dict.fromkeys(refs) if r != path and r not in seen and not r.lower().startswith(("fx_", "ake_", "common_gunmaterials"))]
-            if len(wanted) > 30:  # a part list names hundreds of parts: the first ones show what a part looks like
-                ctx.put(f"  ({len(wanted) - 30} more references not followed)")
-                wanted = [r for r in wanted if NUM_CLASS.search(r)] + [r for r in wanted if not NUM_CLASS.search(r)][:30]
+            if len(wanted) > fanout:  # a part list names hundreds of parts: the first ones show what a part looks like
+                ctx.put(f"  ({len(wanted) - fanout} more references not followed)")
+                wanted = [r for r in wanted if NUM_CLASS.search(r)] + [r for r in wanted if not NUM_CLASS.search(r)][:fanout]
             for r in wanted:
                 if urgent or NUM_CLASS.search(r):
                     queue.insert(0, (r, d + 1, path))
@@ -731,6 +731,94 @@ def sounds(ctx: Ctx, bl2: Path, scan: dict, check_banks: bool) -> None:
     ctx.save()
 
 
+# ---- the deep survey (--deep) -----------------------------------------------------------------------------------------------------------
+#
+# The first survey said what exists; this one reads what it cut off or never reached (docs/shield-roadmap.md section 7): the numbers behind the slot grades,
+# the type effects, the enemy formulas, the HUD classes' defaults and the HUD movie. Dumps are not capped. The objects named in the shields sheet
+# (sheets/shields.json, column bl2_object) come first: they are the values the installer replaces with Borderlands 2's own.
+
+FAMILY = re.compile(r"(?i)^ItemGrade_Gear_Shield_(Standard|Stock|Enemy_Standard|Nova_\w+?|Spike_\w+?|Roid|Impact|Booster|Absorption|Juggernaut|Chimera)(_03_Rare|_Standard)?$")
+DEFAULTS = ("Default__ShieldBarGFxObject", "Default__WillowShield", "Default__ShieldResourcePool", "Default__ShieldDefinition", "Default__ShieldPartDefinition",
+            "Default__Behavior_SetShieldTriggeredState", "Default__Behavior_PostProcessChain_LostShield")
+FORMULAS = ("GD_Balance_HealthAndDamage.Shields.Init_EnemyShield_CapacityMaxValue", "GD_Balance_HealthAndDamage.Shields.Init_EnemyShield_AdditionalShieldCapacityPerPlayer",
+            "GD_Balance_HealthAndDamage.Shields.Init_EnemyShieldOnIdleRegenDelay", "GD_Balance_HealthAndDamage.Shields.Init_EnemyShieldOnIdleRegenRate",
+            "GD_Balance_HealthAndDamage.AIParameters.Attribute_EnemyShieldMaxValueMultiplier", "GD_Balance_HealthAndDamage.AIParameters.Attribute_EnemyShieldOnIdleRegenDelayMultiplier",
+            "GD_Balance_HealthAndDamage.AIParameters.Attribute_EnemyShieldOnIdleRegenRateMultiplier", "GD_Balance.Weighting.Weight_0_VeryCommon", "GD_Balance.Weighting.Weight_1_Common",
+            "GD_Balance.Weighting.Weight_2_Uncommon", "GD_Balance.Weighting.Weight_3_Rare", "GD_Balance.Weighting.Weight_4_VeryRare", "GD_Balance.Weighting.Weight_5_Legendary")
+
+
+def deep_sheet(ctx: Ctx) -> None:
+    ctx.head("D1. The objects the shields sheet names (the values that replace the sheet's defaults)")
+    from . import sheet_data as S
+
+    seeds = [row.bl2_object for row in S.SHIELDS.values() if row.bl2_object not in ("-", "")]
+    seeds = list(dict.fromkeys(seeds + ["GD_Shields.A_Item.Shield_Standard", "GD_Shields.A_Item_BaseEnemy.Shield_Enemy_Standard", "GD_ItemGrades.Gear.ItemGrade_Gear_Shield_Stock"]))
+    follow(ctx, seeds, depth=3, cap=300, lines_each=100000, title="sheet objects", fanout=60)
+
+
+def deep_families(ctx: Ctx) -> None:
+    ctx.head("D2. One balance of every shield family, down to its accessory part and skill")
+    ix = ctx.ix
+    found: dict[str, str] = {}
+    for g in sorted(ix.groups):
+        if "itemgrade" not in g or ("shield" not in g and "gear" not in g):
+            continue
+        for path in children_of_group(ix, g):
+            leaf = path.rsplit(".", 1)[-1]
+            if FAMILY.match(leaf):
+                found.setdefault(leaf, path)
+    ctx.say(f"{len(found)} family balances found: {sorted(found)}")
+    follow(ctx, list(found.values()), depth=5, cap=900, lines_each=100000, title="families", fanout=60)
+
+
+def deep_formulas(ctx: Ctx) -> None:
+    ctx.head("D3. Enemy shield formulas, rarity weights, the player's health formula")
+    ix = ctx.ix
+    seeds = list(FORMULAS)
+    for g in sorted(ix.groups):
+        if g.startswith("gd_balance_healthanddamage"):
+            for path in children_of_group(ix, g):
+                if re.search(r"(?i)(player|health|shield)", path.rsplit(".", 1)[-1]) and ":" not in path:
+                    seeds.append(path)
+    follow(ctx, list(dict.fromkeys(seeds)), depth=2, cap=260, lines_each=100000, title="formulas", fanout=40)
+
+
+def deep_defaults(ctx: Ctx) -> None:
+    ctx.head("D4. Default objects of the shield classes (low-shield warning events, break behaviour, bar settings)")
+    follow(ctx, list(DEFAULTS), depth=1, cap=40, lines_each=100000, title="defaults", fanout=40)
+
+
+def deep_hud(ctx: Ctx) -> None:
+    ctx.head("D5. The HUD movie")
+    ix = ctx.ix
+    want = re.compile(r"(?i)(shield|health|meter|bar|ammo|hud)")
+    seen = 0
+    for f in ix.files:
+        if ctx.out_of_time():
+            ctx.say("(time is up in the HUD search)")
+            break
+        if f.stat().st_size > 60_000_000 or not re.search(r"(?i)(hud|ui|menu|gui|gfx|frontend|startup|willowgame)", f.stem):
+            continue
+        try:
+            pkg = ix.package(f)
+        except Exception:  # noqa: BLE001
+            continue
+        for i, e in enumerate(pkg.exports, 1):
+            cls = pkg.obj_class(i)
+            if not re.search(r"(?i)(swf|gfxmovie)", cls):
+                continue
+            path = pkg.path_of(i)
+            if not re.search(r"(?i)hud", path):
+                continue
+            seen += 1
+            got = swf_strings(pkg.export_data(i), want) if e.serial_size < 20_000_000 else None
+            ctx.put(f"  {path} [{cls}] {e.serial_size} bytes in {f.name}" + (f"; {got[0]}" if got else ""))
+            if got:
+                ctx.put("    names inside: " + " | ".join(got[1][:300]))
+    ctx.say(f"{seen} HUD-named movies")
+    ctx.save()
+
+
 # ---- main --------------------------------------------------------------------------------------------------------------------------
 
 def main(argv: list[str]) -> int:
@@ -741,6 +829,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out", default="BL2-Shield-Report.txt")
     ap.add_argument("--minutes", type=float, default=25.0, help="time allowed for reading packages (the index is extra)")
     ap.add_argument("--no-audio", action="store_true", help="do not read the sound banks")
+    ap.add_argument("--deep", action="store_true", help="the second survey: full dumps of the objects the shields sheet names, one balance per shield family, enemy formulas, the HUD classes' defaults, the HUD movie")
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out_path = Path(a.out)
@@ -792,6 +881,16 @@ def main(argv: list[str]) -> int:
     def pool() -> None:
         state["pool_info"] = pools(ctx, {o.path for o in state["info"]["primary"]})
 
+    if a.deep:
+        run("sheet objects", lambda: deep_sheet(ctx))
+        run("families", lambda: deep_families(ctx))
+        run("formulas", lambda: deep_formulas(ctx))
+        run("defaults", lambda: deep_defaults(ctx))
+        run("hud", lambda: deep_hud(ctx))
+        ctx.say("")
+        ctx.say(f"Finished{' (sections that failed: ' + ', '.join(failed) + ')' if failed else ''}. Report written to {out_path}. Send it to Claude.")
+        ctx.save()
+        return 1 if failed else 0
     run("names", names)
     run("census", lambda: census(ctx, state["objs"]))
     run("definitions", defs)

@@ -103,3 +103,13 @@ def test_flash_movie_text_is_read_out_of_an_export():
     note, hits = shieldprobe.swf_strings(b"prefix" + swf + b"tail", re.compile("shield|health", re.I))
     assert hits == ["ShieldBar_mc", "HealthBar"] and "CWS" in note
     assert shieldprobe.swf_strings(b"no movie here", re.compile("x")) is None
+
+
+def test_deep_survey_dumps_the_sheet_objects_in_full(tmp_path):
+    bl2 = tmp_path / "bl2"
+    shield_install(bl2)
+    out = tmp_path / "deep.txt"
+    assert shieldprobe.main(["--bl2", str(bl2), "--out", str(out), "--deep", "--minutes", "2"]) in (0, 1)
+    text = out.read_text(encoding="utf-8")
+    assert "D1. The objects the shields sheet names" in text and "D5. The HUD movie" in text and "Finished" in text
+    assert "SECTION" not in text  # no section crashed on a fake install that has none of the real objects
