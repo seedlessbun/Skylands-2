@@ -27,7 +27,8 @@ namespace shielditems
 
 	inline int  g_slot = 0;           // ShieldSlot: the biped slot (30-61) shield items are worn in; 0 = no shield items in this install
 	inline int   g_enemyPercent = 10;   // EnemyShieldPercent: the chance (percent) that a person of level 1 carries a shield
-	inline float g_perLevel = 2.0f;     // EnemyShieldPerLevel: this many percent more for every level above 1 (the user chose "tougher = more likely"); 95 is the most for an ordinary person
+	inline float g_perLevel = 2.0f;     // EnemyShieldPerLevel: this many percent more for every level above 1 (the user chose "tougher = more likely"); 100 is the most
+	inline float g_capScale = 1.0f;     // ShieldCapacityScale: every item's capacity is multiplied by this (for testing: 2 doubles every shield)
 	inline int   g_bossLevel = 35;      // ShieldBossLevel: a person this level or higher, or a named one (the base record is "unique"), counts as a boss: always a shield, rare or better, always left on the body
 	inline int   g_dropPercent = 25;    // ShieldDropPercent: how often a dead person's shield stays on the body (the user chose 25; bosses always leave theirs)
 	inline bool g_starter = true;     // StarterShield=0: the player is not given one
@@ -267,8 +268,8 @@ namespace shielditems
 				shield::Remove(a_actor);  // another item's shield, or a test shield: replaced
 			}
 			const Info info = InfoOf(a_worn);
-			shield::Give(a_actor, info.k / 1000.0f, a_player, info.r / 1000.0f, info.d / 10.0f, a_worn->GetFormID());
-			SKSE::log::info("shield items: {:08X}{} now has \"{}\": capacity {:.1f}% of max health, recharge {:.1f}%/s, delay {:.1f} s", id, a_player ? " (the player)" : "", a_worn->GetName(), info.k / 10.0f,
+			shield::Give(a_actor, info.k / 1000.0f * g_capScale, a_player, info.r / 1000.0f, info.d / 10.0f, a_worn->GetFormID());
+			SKSE::log::info("shield items: {:08X}{} now has \"{}\": capacity {:.1f}% of max health, recharge {:.1f}%/s, delay {:.1f} s", id, a_player ? " (the player)" : "", a_worn->GetName(), info.k / 10.0f * g_capScale,
 				info.r / 10.0f, info.d / 10.0f);
 		} else if (have) {
 			shield::Remove(a_actor);
@@ -355,7 +356,7 @@ namespace shielditems
 			// the chance grows with the level (the user's choice); a boss always has one, rare or better, whatever its level
 			const bool boss = IsBoss(actor) && actor->IsHostileToActor(a_player);
 			const int  level = actor->GetLevel();
-			const int  chance = boss ? 100 : static_cast<int>(std::clamp(g_enemyPercent + g_perLevel * (std::max)(0, level - 1), 0.0f, 95.0f));
+			const int  chance = boss ? 100 : static_cast<int>(std::clamp(g_enemyPercent + g_perLevel * (std::max)(0, level - 1), 0.0f, 100.0f));
 			if (Mix(id) % 100 >= static_cast<std::uint64_t>(chance)) {
 				continue;
 			}
@@ -438,6 +439,11 @@ namespace shielditems
 		} else if (a_key == "EnemyShieldPerLevel") {
 			try {
 				g_perLevel = std::clamp(std::stof(a_value), 0.0f, 20.0f);
+			} catch (...) {
+			}
+		} else if (a_key == "ShieldCapacityScale") {
+			try {
+				g_capScale = std::clamp(std::stof(a_value), 0.1f, 20.0f);
 			} catch (...) {
 			}
 		} else if (a_key == "ShieldBossLevel") {

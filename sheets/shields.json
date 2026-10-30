@@ -121,11 +121,11 @@
   },
   {
    "id": "enemy_percent",
-   "value": 10,
+   "value": 100,
    "unit": "percent at level 1",
    "source": "design",
    "bl2_object": "GD_ItempoolsEnemyUse.Shields.Pool_Shields_Standard_EnemyUse",
-   "note": "the chance that a person of level 1 carries a shield; the user chose \"tougher = more likely\" (enemy_percent_per_level more for every level above 1, at most 95; bosses always)",
+   "note": "FOR TESTING (0.39.2, the user asked): every person carries a shield. The odds the user chose for play (loot interview) are 10 percent at level 1 plus enemy_percent_per_level 2 a level; bosses always",
    "read_verified": "no"
   },
   {

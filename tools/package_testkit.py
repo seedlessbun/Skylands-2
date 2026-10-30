@@ -173,15 +173,14 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
-  SHIELDS (0.39.1; the loot chances below are the user\'s answers to the interview): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load). New in 0.39.0:
-    - the shield bar: over your health bar, the upper half is the shield (blue) and the lower half your real health (red); the same over the enemy's bar. The game's own bar is covered; the
-      settings ShieldHud, ShieldHudMode (2 = a thin bar above the game's bar instead), ShieldHudEnemy, ShieldHudX/Y/Width/Height (and ...Enemy...) and ShieldHudLog are in
-      Data\\SKSE\\Plugins\\SkylandsNative.ini. The log (SkylandsNative.log, lines "shield hud:") says where the game's bars were found; send it if a bar sits wrong.
-    - shield items: about 370 armor items built from Borderlands 2's parts (body, battery and capacitor of different manufacturers, the type's accessory, the rarity's material; the numbers
-      are the game's own grades), worn in a slot nothing else in your load order uses (setup log line "shields: the items are worn in slot N"; ini ShieldSlot). You are given one to start;
-      people carry one with a chance that grows with their level (EnemyShieldPercent 10 + EnemyShieldPerLevel 2 a level, at most 95), bosses (named, or level 35+) always, rare or better; a dead person's shield stays
-      on the body 25 percent of the time (ShieldDropPercent), a boss's always. Shields also turn up in boss chests (about a quarter of the ammo entries), in the stock of smiths, armorers and general stores,
-      and lying on the ground they get the rarity beam like the guns. The type effects (nova, spike, ...) are in the item text but not active yet.
+  SHIELDS (0.39.2): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load).
+    - the shield bar is now the thin one above the game's health bar (ShieldHudMode=2), as wide as the game's health bar (read from the game: the log says "shield hud: player bar: ..."); the same above an enemy's bar.
+      Note: the game's own health bar adds your health and your shield together, so it drops when the shield takes a hit. ShieldHudHealth=1 paints the inside of it with your real health alone (an experiment: tune
+      with ShieldHudInsetX/Y if it sits wrong). ShieldHudWidth / ShieldHudX / ShieldHudY / ShieldHudHeight move and size the shield bar.
+    - FOR TESTING every person you meet carries a shield (EnemyShieldPercent=100 in SkylandsNative.ini; the odds you chose for play are 10 and 2). ShieldCapacityScale=2 doubles every shield's capacity.
+    - about 370 shield items from Borderlands 2's parts, worn in a slot nothing else in your load order uses (the setup log says which); you are given a starter shield; a dead person's shield stays on the body 25 percent
+      of the time (ShieldDropPercent), a boss's always; shields also turn up in boss chests, merchants (the setup log's "shield loot:" line says which chests, or names the candidates) and wear the rarity beam on the ground.
+      The type effects (nova, spike, ...) are in the item text but not active yet.
     - the settings file has a new version: your old values are kept as SkylandsNative.ini.old.
   Run-GunModelSurvey.bat reads Borderlands 2 and writes work\\gun-model-survey.json (what the real mesh files look like);
   send it whenever the native or UModel method builds fewer meshes than it should.
@@ -194,7 +193,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-132.zip"
+    out = dist / "Skylands-TestBuild-133.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

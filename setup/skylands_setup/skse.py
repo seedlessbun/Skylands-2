@@ -23,7 +23,7 @@ ADDRESS_LIBRARY = "https://www.nexusmods.com/skyrimspecialedition/mods/32444"
 DEFAULT_INI = """; SkylandsNative settings
 [Skylands]
 ; the version of this file's defaults: an install keeps the values you changed while this number is the same, and writes the new defaults (the old file is kept as .old) when it is not
-IniVersion=4
+IniVersion=5
 ; how far ahead (game units) the bullets are aimed to cross the crosshair
 Convergence=3000
 ; a short glowing flash at the muzzle with every bullet (1 on, 0 off)
@@ -193,11 +193,14 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
         lines += [
             "; shield items: the biped slot they are worn in (30-61; the installer picks one that nothing in your load order uses; change it here if another mod wants it, and reinstall)",
             f"ShieldSlot={slot}",
-            "; who carries a shield: the chance (percent) for a person of level 1, and this much more for every level above 1 (at most 95). A boss (a named person, or ShieldBossLevel and higher) always has one, rare or better.",
+            "; who carries a shield: the chance (percent) for a person of level 1, and this much more for every level above 1 (at most 100). A boss (a named person, or ShieldBossLevel and higher) always has one, rare or better.",
+            "; FOR TESTING every person has one (100). The odds you chose for play are 10 and 2: set EnemyShieldPercent=10 again when the testing is done.",
             "; Each person is decided once by their own id, so a loaded game gives the same people shields.",
             f"EnemyShieldPercent={S.SHIELDS['enemy_percent'].value:g}",
             f"EnemyShieldPerLevel={S.SHIELDS['enemy_percent_per_level'].value:g}",
             f"ShieldBossLevel={S.SHIELDS['boss_level'].value:g}",
+            "; every shield's capacity is multiplied by this (1 = as built; 2 doubles every shield: handy for testing)",
+            "ShieldCapacityScale=1",
             "; how often a dead person's shield stays on the body to be looted (percent); a boss always leaves its shield",
             f"ShieldDropPercent={S.SHIELDS['drop_percent'].value:g}",
             "; you are given one shield to start (1) or not (0)",
@@ -209,7 +212,7 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
         "; Where the game's bars are is read from the game; if a bar sits wrong, move or size it in HUD pixels (1280 x 720): X/Y shift it, Width/Height set the size (0 = as found).",
         "; ShieldHudAlign: 0 fills from the middle (like the game's bars), 1 from the left, 2 from the right. ShieldHudLog=1 writes a line about the bars every 5 seconds.",
         "ShieldHud=1",
-        "ShieldHudMode=1",
+        "ShieldHudMode=2",
         "ShieldHudEnemy=1",
         "ShieldHudFollow=1",
         "ShieldHudAlign=0",
@@ -222,6 +225,11 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
         "ShieldHudEnemyWidth=0",
         "ShieldHudEnemyHeight=0",
         "ShieldHudLog=0",
+        "; ShieldHudHealth=1 (with mode 2): the game's own health bar shows health and shield added together, so it drops when the shield takes a hit; this paints the inside of it with your real health alone",
+        "; (ShieldHudInsetX/Y: the share of the bar's width / height that is frame and caps, left alone). Off by default: it is a guess at the bar's insides.",
+        "ShieldHudHealth=0",
+        "ShieldHudInsetX=0.09",
+        "ShieldHudInsetY=0.28",
     ]
     return "\n".join(lines) + "\n"
 

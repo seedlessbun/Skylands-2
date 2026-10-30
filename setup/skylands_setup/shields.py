@@ -448,18 +448,31 @@ def loot(view: esp.Plugin, m, ids_by_level: dict[int, list[int]], sheet: dict, b
         chest_list.set("LLCT", bytes([have + k]))
         out["chest_entries"] = k
     vendors = []
-    for rec in m.by_type.get("CONT", {}).values():
-        if len(vendors) >= VENDOR_LIMIT:
-            break
-        name = rec.edid
-        if VENDOR_CHEST.search(name) and VENDOR_KIND.search(name) and rec.all("CNTO"):
-            lst = generate.copy(rec)
-            n = struct.unpack("<I", lst.get("COCT") or struct.pack("<I", 0))[0]
-            last = max(i for i, (s, _) in enumerate(lst.subs) if s in ("COCT", "CNTO", "COED"))
-            lst.subs.insert(last + 1, ("CNTO", struct.pack("<II", stock.form_id, 1)))
+    containers = sorted(m.by_type.get("CONT", {}).values(), key=lambda r: r.edid)
+
+    def stock_into(rec) -> None:
+        lst = generate.copy(rec)
+        n = struct.unpack("<I", lst.get("COCT") or struct.pack("<I", 0))[0]
+        at = [i for i, (sig, _) in enumerate(lst.subs) if sig in ("COCT", "CNTO", "COED")]
+        if at:
+            lst.subs.insert(max(at) + 1, ("CNTO", struct.pack("<II", stock.form_id, 1)))
             lst.set("COCT", struct.pack("<I", n + 1))
-            view.override(lst)
-            vendors.append(name)
+        else:  # an empty container: the count and the entry go before its data
+            where = next((i for i, (sig, _) in enumerate(lst.subs) if sig in ("DATA", "SNAM", "QNAM")), len(lst.subs))
+            lst.subs[where:where] = [("COCT", struct.pack("<I", 1)), ("CNTO", struct.pack("<II", stock.form_id, 1))]
+        view.override(lst)
+        vendors.append(rec.edid)
+
+    for rec in containers:  # smiths, armorers and general stores first
+        if len(vendors) < VENDOR_LIMIT and VENDOR_CHEST.search(rec.edid) and VENDOR_KIND.search(rec.edid):
+            stock_into(rec)
+    if not vendors:  # none by that name: every vendor chest
+        for rec in containers:
+            if len(vendors) < VENDOR_LIMIT and VENDOR_CHEST.search(rec.edid):
+                stock_into(rec)
+    if not vendors:  # still none: the log lists what the containers are called, so the pattern can be corrected
+        near = [r.edid for r in containers if re.search(r"merchant|store|shop|trader|smith|armou?r|general|vendor", r.edid, re.I)]
+        say(f"shield loot: none of the {len(containers)} containers read from Skyrim.esm looks like a merchant's chest by name; those with a shop-like word in it: {near[:80]}")
     out["vendors"] = vendors
     if beam_list is not None:  # the quest finds loose items of the bases in this list and puts a beam of the item's rarity keyword on them
         every = esp.Rec("FLST", beam_list.form_id, list(beam_list.subs))

@@ -189,3 +189,28 @@ def test_shields_turn_up_in_boss_chests_at_merchants_and_in_the_beam_list(tmp_pa
     assert len(beam) == 1 and len(beam[0].all("LNAM")) == guns[beam[0].form_id] + rep["shields"]["items"]  # the guns' form list, the shields appended (Skylands.esp's own is untouched)
     vendor_kw = 0x6300  # the fake Skyrim.esm's VendorItemClothing: merchants buy the shields too
     assert all(vendor_kw in struct.unpack_from(f"<{len(a.first('KWDA')) // 4}I", a.first("KWDA")) for a in recs["ARMO"])
+
+
+def test_merchant_chests_are_found_by_a_looser_name_and_an_empty_one_still_takes_the_stock(tmp_path):
+    from skylands_setup.skyrim.esm import Record
+
+    def chest(fid, edid, with_items):
+        subs = [("EDID", edid.encode() + b"\0"), ("OBND", b"\0" * 12)]
+        if with_items:
+            subs += [("COCT", struct.pack("<I", 1)), ("CNTO", struct.pack("<II", 0x6000, 1))]
+        subs += [("DATA", struct.pack("<If", 0, 0.0))]
+        return Record("CONT", fid, 0, subs)
+
+    class Masters:
+        by_type = {"CONT": {1: chest(1, "RiftenVendorChestMisc", False), 2: chest(2, "BlacksmithPrivateChest", True), 3: chest(3, "SolitudeVendorBlacksmithChest", True)}}
+
+    view = esp.Plugin("V.esp", ["Skyrim.esm"])
+    lines = []
+    out = shields.loot(view, Masters, {1: [view.new_id("a")], 4: [view.new_id("b")]}, sheet(), None, None, {}, lines.append)
+    assert out["vendors"] == ["SolitudeVendorBlacksmithChest"]  # the smith's vendor chest, not the private one
+    Masters.by_type["CONT"].pop(3)
+    out = shields.loot(esp.Plugin("W.esp", ["Skyrim.esm"]), Masters, {1: [5]}, sheet(), None, None, {}, lines.append)
+    assert out["vendors"] == ["RiftenVendorChestMisc"]  # none by kind: every vendor chest; this one held nothing, so it gets its count and its entry
+    Masters.by_type["CONT"].pop(1)
+    out = shields.loot(esp.Plugin("X.esp", ["Skyrim.esm"]), Masters, {1: [5]}, sheet(), None, None, {}, lines.append)
+    assert out["vendors"] == [] and any("looks like a merchant" in line and "BlacksmithPrivateChest" in line for line in lines)  # nothing found: the log names the candidates

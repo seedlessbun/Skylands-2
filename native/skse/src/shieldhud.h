@@ -19,13 +19,15 @@ namespace shieldhud
 	using Clock = std::chrono::steady_clock;
 
 	inline bool  g_on = true;         // ShieldHud=0 turns the display off (the plain "Shield 120 / 300" lines come back)
-	inline int   g_mode = 1;          // ShieldHudMode: 1 = over the health bar, 2 = a thin bar above it
+	inline int   g_mode = 2;          // ShieldHudMode: 1 = over the health bar, 2 = a thin bar above it (the user's choice since 0.39.2)
 	inline bool  g_enemy = true;      // ShieldHudEnemy=0: no display over the enemy bar
 	inline bool  g_follow = true;     // ShieldHudFollow=0: do not follow the game's fading of its bars (always shown while a shield exists)
 	inline int   g_align = 0;         // ShieldHudAlign: 0 from the middle, 1 from the left, 2 from the right
 	inline float g_dx = 0.0f, g_dy = 0.0f, g_w = 0.0f, g_h = 0.0f;                        // the player's bar: shift and size in HUD pixels (0 = as found)
 	inline float g_edx = 0.0f, g_edy = 0.0f, g_ew = 0.0f, g_eh = 0.0f;                    // the enemy's bar
 	inline bool  g_log = false;       // ShieldHudLog=1: a line about the bars every 5 seconds
+inline bool  g_health = false;    // ShieldHudHealth=1 (mode 2): the game's health bar is painted over with a bar of the REAL health, because the game's own bar shows health and shield added together
+inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much of the game's bar (its width / height) is frame and caps, left alone when painting the real health
 
 	struct Box
 	{
@@ -118,11 +120,11 @@ namespace shieldhud
 		a_clip.Invoke("endFill");
 	}
 
-	constexpr std::uint32_t kBack = 0x0A0A0C, kHealth = 0xC8281E, kShield = 0x2EA3FF, kShieldLow = 0xFF9A1E, kShieldCharge = 0x8FDCFF, kFlash = 0xFFFFFF;
+	constexpr std::uint32_t kBack = 0x0A0A0C, kHealthBack = 0x1C0808, kHealth = 0xB82020, kShield = 0x2EA3FF, kShieldLow = 0xFF9A1E, kShieldCharge = 0x8FDCFF, kFlash = 0xFFFFFF;
 
 	// the pieces of one bar: [0] backing, [1] health, [2] shield, [3] flash when the shield breaks
-	inline const char* const kPlayer[4] = { "pl_back", "pl_hp", "pl_sh", "pl_fl" };
-	inline const char* const kEnemy[4] = { "en_back", "en_hp", "en_sh", "en_fl" };
+	inline const char* const kPlayer[5] = { "pl_back", "pl_hp", "pl_sh", "pl_fl", "pl_hb" };
+	inline const char* const kEnemy[5] = { "en_back", "en_hp", "en_sh", "en_fl", "en_hb" };
 
 	inline bool Build(RE::GFxMovieView* a_movie)
 	{
@@ -134,12 +136,12 @@ namespace shieldhud
 		if (!root.CreateEmptyMovieClip(&clip, "SkylandsShield", 9877)) {
 			return false;
 		}
-		const std::uint32_t colors[4] = { kBack, kHealth, kShield, kFlash };
-		const double        alphas[4] = { 80.0, 100.0, 100.0, 100.0 };
+		const std::uint32_t colors[5] = { kBack, kHealth, kShield, kFlash, kHealthBack };
+		const double        alphas[5] = { 80.0, 100.0, 100.0, 100.0, 100.0 };
 		for (int set = 0; set < 2; ++set) {
-			for (int i = 0; i < 4; ++i) {
+			for (int i = 0; i < 5; ++i) {
 				RE::GFxValue part;
-				if (!clip.CreateEmptyMovieClip(&part, (set ? kEnemy : kPlayer)[i], 10 + set * 4 + i)) {
+				if (!clip.CreateEmptyMovieClip(&part, (set ? kEnemy : kPlayer)[i], 10 + set * 5 + i)) {
 					return false;
 				}
 				Rect(part, colors[i], alphas[i]);
@@ -183,7 +185,8 @@ namespace shieldhud
 	struct Layout
 	{
 		double cx = 0.0, cy = 0.0, w = 0.0, h = 0.0;
-		double alpha = 1.0;  // how visible the game's own bar is
+		double alpha = 1.0;       // how visible the game's own bar is (its clip and the clips around it)
+		double meterAlpha = 1.0;  // the same for the bar's fill clip itself (the game fades that one when the health is full)
 		bool   ok = false;
 	};
 
@@ -208,7 +211,7 @@ namespace shieldhud
 			return;
 		}
 		a_bar.shown = false;
-		for (int i = 0; i < 4; ++i) {
+		for (int i = 0; i < 5; ++i) {
 			Put(a_movie, a_bar.names[i], false);
 		}
 	}
@@ -235,8 +238,20 @@ namespace shieldhud
 		if (over) {
 			const double share = std::clamp<double>(a_view.health, 0.0, 1.0);
 			Put(a_movie, a_bar.names[1], share > 0.002, x(share), top + hHalf, w * share, hHalf, alpha);
+			Put(a_movie, a_bar.names[4], false);
+		} else if (g_health) {
+			// the game's own bar shows health and shield added together, so it also drops when the shield takes a hit; this paints the inside of that bar (not its frame and caps)
+			// with the real health alone, in the same place and fading with it
+			const double ix = a_at.w * g_insetX, iy = a_at.h * g_insetY;
+			const double iw = (std::max)(4.0, a_at.w - 2.0 * ix), ih = (std::max)(2.0, a_at.h - 2.0 * iy);
+			const double share = std::clamp<double>(a_view.health, 0.0, 1.0);
+			const double fx = g_align == 1 ? left + ix : g_align == 2 ? left + ix + iw - iw * share : a_at.cx - iw * share * 0.5;
+			const double mAlpha = a_at.meterAlpha * 100.0;
+			Put(a_movie, a_bar.names[4], mAlpha > 2.0, left + ix, a_at.cy - a_at.h * 0.5 + iy, iw, ih, mAlpha);
+			Put(a_movie, a_bar.names[1], mAlpha > 2.0 && share > 0.002, fx, a_at.cy - a_at.h * 0.5 + iy, iw * share, ih, mAlpha);
 		} else {
 			Put(a_movie, a_bar.names[1], false);
+			Put(a_movie, a_bar.names[4], false);
 		}
 
 		// the shield's colour: blue, lighter while it recharges, orange and pulsing when it is low
@@ -294,12 +309,51 @@ namespace shieldhud
 		if (!haveHealth && !haveAnim) {
 			return false;
 		}
-		Box boxAnim, boxHealth;
+		Box boxAnim, boxHealth, boxMeter;
 		if (haveAnim) {
 			boxAnim = BoundsOf(anim, a_root);
 		}
 		if (haveHealth) {
 			boxHealth = BoundsOf(health, a_root);
+		}
+		// the bar itself, as the first log showed: HealthMeter_mc inside the health clip (286 wide); its parents also hold the penalty meter (737 wide, the bar's longest possible extent)
+		RE::GFxValue meter;
+		bool         haveMeter = haveAnim && anim.GetMember("HealthMeter_mc", &meter) && meter.IsDisplayObject();
+		if (!haveMeter) {
+			haveMeter = haveHealth && health.GetMember("HealthMeter_mc", &meter) && meter.IsDisplayObject();
+		}
+		if (haveMeter) {
+			boxMeter = BoundsOf(meter, a_root);
+		}
+		if (a_look) {
+			RE::GFxValue hm;
+			if (a_base.GetMember("HealthMeter", &hm) && hm.IsObject()) {
+				std::string names;
+				hm.VisitMembers([&](const char* a_name, const RE::GFxValue&) {
+					if (names.size() < 600 && a_name) {
+						names += std::string(a_name) + " ";
+					}
+				});
+				Say("player bar: the game's HealthMeter object holds [{}]", names);
+			}
+			double last = -1.0;
+			Num(a_base, "lastHealthMeterPercent", last);
+			Say("player bar: lastHealthMeterPercent {:.1f}; HealthMeter_mc {}; [{:.0f},{:.0f} - {:.0f},{:.0f}]", last, haveMeter ? "found" : "missing", boxMeter.x0, boxMeter.y0, boxMeter.x1, boxMeter.y1);
+			if (haveMeter) {
+				std::vector<std::string> inner;
+				meter.VisitMembers([&](const char* a_name, const RE::GFxValue& a_value) {
+					if (inner.size() < 20 && a_name && a_value.IsDisplayObject()) {
+						inner.push_back(a_name);
+					}
+				});
+				for (const auto& name : inner) {
+					RE::GFxValue child;
+					if (meter.GetMember(name.c_str(), &child)) {
+						const Box b = BoundsOf(child, a_root);
+						Say("player bar: HealthMeter_mc.{} [{:.0f},{:.0f} - {:.0f},{:.0f}] alpha {:.2f}", name, b.x0, b.y0, b.x1, b.y1, Shown(child));
+					}
+				}
+			}
 		}
 		if (a_look) {
 			Say("player bar: HealthMeterAnim {} [{:.0f},{:.0f} - {:.0f},{:.0f}] alpha {:.2f}; Health {} [{:.0f},{:.0f} - {:.0f},{:.0f}] alpha {:.2f}", haveAnim ? "found" : "missing", boxAnim.x0, boxAnim.y0, boxAnim.x1, boxAnim.y1,
@@ -326,7 +380,9 @@ namespace shieldhud
 		}
 		// the bar itself: the "...MeterAnim" clip when it has the shape of a bar, else the clip that holds it
 		const Box* use = nullptr;
-		if (boxAnim.ok && boxAnim.w() >= 20.0 && boxAnim.h() <= 80.0) {
+		if (boxMeter.ok && boxMeter.w() >= 20.0 && boxMeter.h() <= 80.0) {
+			use = &boxMeter;
+		} else if (boxAnim.ok && boxAnim.w() >= 20.0 && boxAnim.h() <= 80.0) {
 			use = &boxAnim;
 		} else if (boxHealth.ok && boxHealth.w() >= 20.0) {
 			use = &boxHealth;
@@ -348,6 +404,7 @@ namespace shieldhud
 			alpha = (std::min)(alpha, Shown(health));
 		}
 		a_out.alpha = g_follow ? alpha : 1.0;
+		a_out.meterAlpha = g_follow && haveMeter ? Shown(meter) : 1.0;
 		a_out.ok = true;
 		return true;
 	}
@@ -355,12 +412,20 @@ namespace shieldhud
 	inline bool EnemyLayout(RE::GFxValue& a_base, RE::GFxValue& a_root, RE::Actor* a_actor, Layout& a_out, bool a_look)
 	{
 		RE::GFxValue mc;
+		static int   failed = 0;
 		if (!a_base.GetMember("EnemyHealth_mc", &mc) || !mc.IsDisplayObject()) {
+			if (failed++ < 3) {
+				Say("enemy bar: EnemyHealth_mc is not a display object");
+			}
 			return false;
 		}
 		a_out.alpha = g_follow ? Shown(mc) : 1.0;
+		a_out.meterAlpha = a_out.alpha;
 		const Box whole = BoundsOf(mc, a_root);
 		if (!whole.ok) {
+			if (failed++ < 3) {
+				Say("enemy bar: EnemyHealth_mc has no extent yet (alpha {:.2f}); it is tried again while an enemy with a shield is in the crosshair", a_out.alpha);
+			}
 			return false;
 		}
 		struct Kid
@@ -479,7 +544,7 @@ namespace shieldhud
 		if (view.has) {
 			if (frame % 3 == 1 || !player.ok) {
 				player.ok = PlayerLayout(base, root, playerRef, player, !lookedPlayer);
-				lookedPlayer = true;  // the bar's parts are told in the log once
+				lookedPlayer = lookedPlayer || player.ok;  // the bar's parts are told in the log once it has been found
 			}
 			if (player.ok && player.alpha > 0.02) {
 				Draw(movie.get(), g_player, player, view, now);
@@ -502,7 +567,7 @@ namespace shieldhud
 				if (eview.has && (frame % 3 == 2 || !enemy.ok || g_enemyBar.actor != actor->GetFormID())) {
 					enemy.ok = EnemyLayout(base, root, actor, enemy, !lookedEnemy);
 					g_enemyBar.actor = actor->GetFormID();
-					lookedEnemy = true;
+					lookedEnemy = lookedEnemy || enemy.ok;
 				}
 			}
 		}
@@ -538,6 +603,12 @@ namespace shieldhud
 			g_follow = a_value.find('0') == std::string::npos;
 		} else if (a_key == "ShieldHudLog") {
 			g_log = a_value.find('1') != std::string::npos;
+		} else if (a_key == "ShieldHudHealth") {
+			g_health = a_value.find('1') != std::string::npos;
+		} else if (a_key == "ShieldHudInsetX") {
+			number(g_insetX, 0.0f, 0.45f);
+		} else if (a_key == "ShieldHudInsetY") {
+			number(g_insetY, 0.0f, 0.45f);
 		} else if (a_key == "ShieldHudAlign") {
 			float v = 0.0f;
 			try {
