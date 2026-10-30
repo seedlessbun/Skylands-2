@@ -184,6 +184,9 @@ def build_full(root: Path) -> Path:
     enchs = ["EnchWeaponFireDamage03", "EnchWeaponShockDamage03", "EnchWeaponAbsorbHealth02", "EnchWeaponMagickaDamage03"]
     extra.append(group("ENCH", [record("ENCH", 0x6000 + i, [sub("EDID", z(e)), sub("FULL", sid(3)), sub("ENIT", b"\0" * 36), sub("EFID", struct.pack("<I", 0x5000)),
                                                        sub("EFIT", struct.pack("<fII", 10.0, 0, 0))]) for i, e in enumerate(enchs)]))
+    armor_enchs = ["EnchArmorFortifyHealth01", "EnchArmorResistFire01", "EnchArmorResistShock01", "EnchArmorResistPoison01", "EnchArmorResistMagic01"]
+    extra.append(group("ENCH", [record("ENCH", 0x6200 + i, [sub("EDID", z(e)), sub("FULL", sid(3)), sub("ENIT", b"\0" * 36), sub("EFID", struct.pack("<I", 0x5000 + i)),
+                                                       sub("EFIT", struct.pack("<fII", 10.0, 0, 0))]) for i, e in enumerate(armor_enchs)]))
     light = struct.pack("<iI4sIffffffIf", -1, 256, bytes([255, 255, 255, 0]), 1, 1.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0)
     extra.append(group("LIGH", [record("LIGH", 0x7100, [sub("EDID", z("FXPlainLight")), sub("OBND", b"\0" * 12), sub("DATA", light),
                                                         sub("FNAM", struct.pack("<f", 1.0))]),

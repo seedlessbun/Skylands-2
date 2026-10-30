@@ -199,6 +199,7 @@ def main(argv: list[str]) -> int:
                     help="how Borderlands 2 gun parts are placed on the body (native/umodel methods)")
     ap.add_argument("--bl2-sounds", default="auto", choices=["auto", "off"],
                     help="staff guns: take each gun's shot sound from Borderlands 2's Wwise packs (decoded with vgmstream, downloaded into the work folder); off keeps Skyrim's stand-ins")
+    ap.add_argument("--shields", default="auto", choices=["auto", "off"], help="shield items (staff installs): armor with Borderlands 2's shield parts, worn in a biped slot nothing else uses")
     ap.add_argument("--stage-only", action="store_true", help="build into the work folder without installing")
     a = ap.parse_args(argv)
     done = Path(a.done)
@@ -276,7 +277,19 @@ def main(argv: list[str]) -> int:
                              if g["type"] in generate.STAFF_KINDS and g.get("manufacturer")})
             say(f"Looking for the Borderlands 2 shot sounds of {len(wanted)} gun type x manufacturer pairs ...")
             shot_sounds = audio.extract_shot_sounds(bl2, work, wanted, say)
-        report = generate.generate(data, sky, stage, formids=ids, shot_sounds=shot_sounds, gun_models=a.gun_models, model_sources=sources,
+        shield_slot = 0
+        if a.gun_shooting == "staff" and a.shields == "auto":
+            from . import shields
+
+            ini_path = sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI
+            kept = 0
+            try:
+                kept = int(skse._ini_values(ini_path.read_text(encoding="utf-8", errors="replace")).get("ShieldSlot", "0")) if ini_path.is_file() else 0
+            except (OSError, ValueError):
+                kept = 0
+            shield_slot, why = shields.choose_slot(sky / "Data", lambda msg: say(f"  {msg}"), kept)
+            say(f"shields: the items are worn in {why}")
+        report = generate.generate(data, sky, stage, formids=ids, shot_sounds=shot_sounds, gun_models=a.gun_models, model_sources=sources, shield_slot=shield_slot,
                                    model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")))
         for src in sources.values():
             say(src.summary())
@@ -295,7 +308,7 @@ def main(argv: list[str]) -> int:
         sk = skse.status(sky)
         for line in skse.describe(sk):
             say(f"  skse: {line}")
-        staged = skse.stage_plugin(stage, bin_dir, sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI, data.get("shields"))
+        staged = skse.stage_plugin(stage, bin_dir, sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI, data.get("shields"), shield_slot)
         say(f"shields: read from Borderlands 2: {data.get('shields') or 'nothing (the sheet defaults are used)'}")
         say(f"SkylandsNative plugin: {'staged for install' if staged else 'not in this build (bin/SkylandsNative.dll is missing)'}")
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values

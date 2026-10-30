@@ -86,7 +86,7 @@ def test_the_settings_file_keeps_the_players_values_while_its_version_is_the_sam
     old = skse.DEFAULT_INI.replace("AimDown=6.5", "AimDown=9").replace("ReloadKey=47", "ReloadKey=19")
     text, kept = skse.merge_ini(skse.DEFAULT_INI, old)
     assert kept and "AimDown=9" in text and "ReloadKey=19" in text and "AimForward=33" in text and "IniVersion=" in text
-    other = old.replace("IniVersion=3", "IniVersion=1")
+    other = old.replace("IniVersion=4", "IniVersion=1")
     text, kept = skse.merge_ini(skse.DEFAULT_INI, other)
     assert not kept and "AimDown=6.5" in text  # another version: the new defaults
     bin_dir, stage, game = tmp_path / "bin", tmp_path / "stage", tmp_path / "SkylandsNative.ini"
@@ -101,5 +101,5 @@ def test_the_settings_file_has_the_shield_display_keys_and_old_settings_keep_wor
     text = skse.default_ini()
     for key in ("ShieldHud=1", "ShieldHudMode=1", "ShieldHudEnemy=1", "ShieldHudFollow=1", "ShieldHudAlign=0", "ShieldHudX=0", "ShieldHudEnemyWidth=0", "ShieldHudLog=0"):
         assert key in text, key
-    merged, kept = skse.merge_ini(text, "[Skylands]\nIniVersion=3\nShieldHud=0\nShieldHudX=12\n")
+    merged, kept = skse.merge_ini(text, "[Skylands]\nIniVersion=4\nShieldHud=0\nShieldHudX=12\n")
     assert kept and "ShieldHud=0" in merged and "ShieldHudX=12" in merged and "ShieldHudMode=1" in merged

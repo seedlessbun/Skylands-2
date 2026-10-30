@@ -188,10 +188,10 @@ def stats_template(m: Masters, base_ench: Record) -> Record:
     return mg
 
 
-def stats_effect(p: esp.Plugin, edid: str, text: str, template: Record) -> int:
-    """A new magic effect that does nothing but show the gun's stats on its enchantment."""
+def stats_effect(p: esp.Plugin, edid: str, text: str, template: Record, title: str = "Gun stats") -> int:
+    """A new magic effect that does nothing but show the gun's (or the shield's) stats on its enchantment."""
     r = esp.Rec("MGEF", p.new_id(f"MGEF:Skylands_Stats_{edid}"), [])
-    r.add("EDID", esp.zstr(f"Skylands_Stats_{edid}")).add("FULL", esp.zstr("Gun stats")).add("DNAM", esp.zstr(text))
+    r.add("EDID", esp.zstr(f"Skylands_Stats_{edid}")).add("FULL", esp.zstr(title)).add("DNAM", esp.zstr(text))
     data = bytearray(template.first("DATA") or b"\0" * 152)
     if len(data) >= MGEF_AV_AT + 4:
         struct.pack_into("<i", data, MGEF_AV_AT, AV_VARIABLE10)
@@ -1125,7 +1125,7 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
              gun_models: str = "off", model_sources: dict | None = None, model_spin: float = 0.0, model_pitch: float = 0.0, model_calibrate: bool = False,
              model_scale: float = 1.0, shooting: str = "off",
-             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), shot_sounds: dict | None = None) -> dict:
+             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), shot_sounds: dict | None = None, shield_slot: int = 0) -> dict:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
@@ -1419,6 +1419,23 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                 o.subs[anchor:anchor] = [("SPCT", esp.u32(len(spells)))] + [("SPLO", d) for d in spells]
             p.override(o)
             report["renamed_enemies"] += 1
+
+    # ---- shields (staff installs): armor items with Borderlands 2's parts, worn in a biped slot nothing else uses -----------------------------------------
+    if shield_slot and armory is not None and armory.ok and armory.count:
+        try:
+            from . import shields
+
+            sheet = {row.id: row.value for row in S.SHIELDS.values()}
+            sheet.update(bl2.get("shields") or {})
+            palette = {mfr: pair[0] for mfr, pair in models_mod.PALETTE.items()}
+            palette.setdefault("Anshin", (84, 168, 150))
+            palette.setdefault("Pangolin", (112, 92, 64))
+            shields.build(view, m, out_data, rarity_keywords, (model_sources or {}).get("native"), report, report.setdefault("model_log", []).append, shields_sheet=sheet,
+                          bl2_parts=bl2.get("shield_parts"), slot=shield_slot, stats_effect=stats_effect, tints=palette,
+                          rarity_colors={row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()}, seed=seed)
+        except Exception as e:  # noqa: BLE001 - the shields must never stop the install
+            report["shields_error"] = f"{type(e).__name__}: {e}"
+            report.setdefault("model_log", []).append(f"shields: not built ({type(e).__name__}: {e})")
 
     # ---- files ------------------------------------------------------------------------------------
     (out_data / PLUGIN).write_bytes(p.encode())

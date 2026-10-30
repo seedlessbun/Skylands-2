@@ -23,7 +23,7 @@ ADDRESS_LIBRARY = "https://www.nexusmods.com/skyrimspecialedition/mods/32444"
 DEFAULT_INI = """; SkylandsNative settings
 [Skylands]
 ; the version of this file's defaults: an install keeps the values you changed while this number is the same, and writes the new defaults (the old file is kept as .old) when it is not
-IniVersion=3
+IniVersion=4
 ; how far ahead (game units) the bullets are aimed to cross the crosshair
 Convergence=3000
 ; a short glowing flash at the muzzle with every bullet (1 on, 0 off)
@@ -175,7 +175,7 @@ SHIELD_KEYS = {"delay_s": "ShieldDelay", "rate_fraction": "ShieldRate", "gate": 
                "test_shield_percent": "TestShield", "test_enemy_percent": "TestEnemyShields"}
 
 
-def shield_ini(bl2_values: dict | None = None) -> str:
+def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
     """The shield part of the settings file. bl2_values: {sheet row id: number read from Borderlands 2}."""
     from . import sheet_data as S
 
@@ -186,7 +186,20 @@ def shield_ini(bl2_values: dict | None = None) -> str:
     for row_id, key in SHIELD_KEYS.items():
         row = S.SHIELDS[row_id]
         value = bl2_values.get(row_id, row.value)
+        if slot and row_id in ("test_shield_percent", "test_enemy_percent"):
+            value = 0  # with shield items the test shields are off (they would sit under the items' shields)
         lines.append(f"{key}={value:g}")
+    if slot:
+        lines += [
+            "; shield items: the biped slot they are worn in (30-61; the installer picks one that nothing in your load order uses; change it here if another mod wants it, and reinstall)",
+            f"ShieldSlot={slot}",
+            "; the share of the people near you (percent) who get a shield item of their own when you come near; people you have not met are decided once by their id, so a loaded game gives the same ones",
+            f"EnemyShieldPercent={S.SHIELDS['enemy_percent'].value:g}",
+            "; the share of a dead person's shield that stays on the body to be looted (percent). The loot chances are still to be agreed; 100 = every shield worn is lootable",
+            "ShieldDropPercent=100",
+            "; you are given one shield to start (1) or not (0)",
+            "StarterShield=1",
+        ]
     lines += [
         "; the shield display over your health bar and the enemy's (upper half shield, lower half health). ShieldHud=0 turns it off (the plain lines come back).",
         "; ShieldHudMode=2 leaves the game's bars alone and puts a thin shield bar above them. ShieldHudEnemy=0 turns off the enemy's. ShieldHudFollow=0 ignores the game's fading of its bars.",
@@ -210,11 +223,11 @@ def shield_ini(bl2_values: dict | None = None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def default_ini(bl2_values: dict | None = None) -> str:
-    return DEFAULT_INI.rstrip("\n") + "\n" + shield_ini(bl2_values)
+def default_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
+    return DEFAULT_INI.rstrip("\n") + "\n" + shield_ini(bl2_values, slot)
 
 
-def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, bl2_shields: dict | None = None) -> str | None:
+def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, bl2_shields: dict | None = None, shield_slot: int = 0) -> str | None:
     """Put the Skylands plugin (if the build has it) and its settings in the stage folder, so they install and uninstall with the rest. The player's values in an
     installed settings file of the same IniVersion are kept; a file of another version is kept next to the new one as .old."""
     dll = Path(bin_dir) / PLUGIN_DLL
@@ -229,7 +242,7 @@ def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, b
             old = Path(existing_ini).read_text(encoding="utf-8", errors="replace")
         except OSError:
             old = None
-    text, kept = merge_ini(default_ini(bl2_shields), old)
+    text, kept = merge_ini(default_ini(bl2_shields, shield_slot), old)
     (dest / PLUGIN_INI).write_text(text, encoding="utf-8")
     if old and not kept:
         (dest / (PLUGIN_INI + ".old")).write_text(old, encoding="utf-8")

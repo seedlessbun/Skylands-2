@@ -403,6 +403,68 @@ def shield_stats(ix: Index, errors: list[str]) -> dict:
     return out
 
 
+def _list(value) -> list:
+    if isinstance(value, dict):
+        value = value.get("items", [])
+    return value if isinstance(value, list) else []
+
+
+def shield_parts(ix: Index, errors: list[str]) -> dict:
+    """The grades of the shield parts (shielddata.py holds the values of the survey), read from the player's own files: what shields.Tables lays over the survey's numbers.
+    Returns {"bodies": {manufacturer: (capacity, rate, delay)}, "batteries": {key: (cap, rate, delay, special 1, special 2)}, "capacitors": ..., "materials": {group: {level: ...}},
+    "steps": {"capacity": .., "rate": .., "delay": ..}, "read": parts read, "wanted": parts asked for}."""
+    from .. import shielddata as D
+
+    def grades(path: str) -> dict[str, int] | None:
+        props = ix.props(path)
+        if not isinstance(props, dict):
+            return None
+        out: dict[str, int] = {}
+        for u in _list(props.get("AttributeSlotUpgrades")):
+            if isinstance(u, dict) and "SlotName" in u:
+                try:
+                    out[str(u["SlotName"])] = int(u["GradeIncrease"])
+                except (KeyError, TypeError, ValueError):
+                    pass
+        return out
+
+    def five(g: dict[str, int]) -> tuple[int, int, int, int, int]:
+        return (g.get("Capacity", 0), g.get("RechargeRate", 0), g.get("RechargeDelay", 0), g.get("Special01", 0), g.get("Special02", 0))
+
+    out: dict = {"bodies": {}, "batteries": {}, "capacitors": {}, "materials": {}, "steps": {}, "read": 0, "wanted": 0}
+    for key, row in D.BODIES.items():
+        out["wanted"] += 1
+        g = grades(row[0])
+        if g is not None:
+            out["read"] += 1
+            out["bodies"][key] = five(g)[:3]
+    for table, name in ((D.BATTERIES, "batteries"), (D.CAPACITORS, "capacitors")):
+        for key, row in table.items():
+            out["wanted"] += 1
+            g = grades(row[0])
+            if g is not None:
+                out["read"] += 1
+                out[name][key] = five(g)
+    for group, levels in D.MATERIALS.items():
+        for level, row in levels.items():
+            out["wanted"] += 1
+            g = grades(row[0])
+            if g is not None:
+                out["read"] += 1
+                out["materials"].setdefault(group, {})[level] = five(g)
+    standard = ix.props("GD_Shields.A_Item.Shield_Standard") or {}
+    for e in _list(standard.get("AttributeSlotEffects")):
+        if not isinstance(e, dict):
+            continue
+        step = (e.get("PerGradeUpgrade") or {}).get("BaseValueConstant") if isinstance(e.get("PerGradeUpgrade"), dict) else None
+        key = {"Capacity": "capacity", "RechargeRate": "rate", "RechargeDelay": "delay"}.get(str(e.get("SlotName")))
+        if key and isinstance(step, (int, float)):
+            out["steps"][key] = round(float(step), 4)
+    if out["read"] < out["wanted"]:
+        errors.append(f"shield parts: {out['read']} of {out['wanted']} read from your files; the survey's numbers stand in for the rest")
+    return out
+
+
 def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget_minutes: float | None = None) -> dict:
     log: list[str] = []
 
@@ -417,7 +479,7 @@ def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget
     if budget_minutes:
         ix.deadline = time.process_time() + budget_minutes * 60
     data: dict = {"packages": len(ix.files), "index_errors": len(ix.errors)}
-    for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies), ("type_base", type_base), ("shields", shield_stats)):
+    for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies), ("type_base", type_base), ("shields", shield_stats), ("shield_parts", shield_parts)):
         t = time.time()
         say(f"Reading {key} ...")
         try:
