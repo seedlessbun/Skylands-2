@@ -135,3 +135,31 @@ def test_the_models_plugin_with_shields_is_accepted_by_esplugin(tmp_path):
     generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff", shield_slot=60)
     r = subprocess.run([exe, str(tmp_path / "out" / "Data" / "SkylandsGunModels.esp")], capture_output=True, text=True)
     assert r.returncode == 0 and "parsed OK" in r.stdout, r.stdout + r.stderr
+
+
+def test_shield_models_are_cut_from_the_combined_mesh_when_the_fragments_exist(tmp_path):
+    from skylands_setup import meshes as M
+
+    class FakeSource:
+        def __init__(self):
+            self.gestalt_table = {f.lower(): ("k", 0, 12) for f in {v[1] for v in list(D.BODIES.values()) + list(D.BATTERIES.values())} | {v[1] for v in D.ACCESSORIES.values()}
+                                  | {v[1] for v in D.CAPACITORS.values() if v[1]}}
+            self.textures = {}
+
+        def _read_gestalt_part(self, part, name):
+            i = abs(hash(name)) % 7
+            return {"mesh": M.box(i, 0, 0, 3.0, 4.0, 5.0), "sockets": {}, "path": "gestalt:" + name, "texture": None, "mats": [], "placed": True}
+
+        def _texture(self, path):
+            return None  # the atlas cannot be read: a plain colour stands in
+
+    models = shields.Models(tmp_path, FakeSource(), lambda m: None, {"Tediore": (196, 188, 168)})
+    builds = [b for b in shields.roll(shields.Tables(), sheet(), 4) if b.family.id == "absorb"][:3]
+    paths = [models.mesh_for(b, (200, 200, 200)) for b in builds]
+    assert models.stats["real"] >= 1 and models.stats["proxy"] == 0
+    assert all((tmp_path / "Meshes" / Path(*p.split("\\"))).is_file() for p in paths)
+    assert models.flush_textures() >= 1 and (tmp_path / "Textures" / "Skylands" / "Shields" / "flat_n.dds").is_file()
+    # nothing to cut from: the stylised orb
+    plain = shields.Models(tmp_path / "p", None, lambda m: None, {})
+    path = plain.mesh_for(builds[0], (200, 200, 200))
+    assert plain.stats["proxy"] == 1 and (tmp_path / "p" / "Meshes" / Path(*path.split("\\"))).is_file()

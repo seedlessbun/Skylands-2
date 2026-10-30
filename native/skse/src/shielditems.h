@@ -202,12 +202,28 @@ namespace shielditems
 	constexpr int kLevelFor[7] = { 0, 1, 3, 8, 15, 30, 40 };
 	constexpr int kWeight[7] = { 0, 122, 50, 20, 6, 1, 1 };
 
-	inline RE::TESObjectARMO* PickFor(std::uint64_t a_seed, int a_level)
+	// An item for a person of this level: a rarity by the weights above, then one of that rarity's items by the seed. a_type >= 0 keeps to one type (the starter is a plain shield).
+	inline RE::TESObjectARMO* PickFor(std::uint64_t a_seed, int a_level, int a_type = -1)
 	{
+		const auto pool = [&](int a_rarity) {
+			std::vector<RE::FormID> out;
+			for (const auto id : g_catalog[a_rarity]) {
+				if (a_type < 0) {
+					out.push_back(id);
+				} else if (const auto armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(id); armor && InfoOf(armor).type == a_type) {
+					out.push_back(id);
+				}
+			}
+			return out;
+		};
 		int total = 0;
+		std::vector<RE::FormID> lists[7];
 		for (int r = 1; r <= 6; ++r) {
-			if (a_level >= kLevelFor[r] && !g_catalog[r].empty()) {
-				total += kWeight[r];
+			if (a_level >= kLevelFor[r]) {
+				lists[r] = pool(r);
+				if (!lists[r].empty()) {
+					total += kWeight[r];
+				}
 			}
 		}
 		if (total <= 0) {
@@ -215,12 +231,11 @@ namespace shielditems
 		}
 		int roll = static_cast<int>(Mix(a_seed ^ 0x1234) % static_cast<std::uint64_t>(total));
 		for (int r = 1; r <= 6; ++r) {
-			if (a_level < kLevelFor[r] || g_catalog[r].empty()) {
+			if (lists[r].empty()) {
 				continue;
 			}
 			if (roll < kWeight[r]) {
-				const auto& list = g_catalog[r];
-				return RE::TESForm::LookupByID<RE::TESObjectARMO>(list[Mix(a_seed ^ 0x5678) % list.size()]);
+				return RE::TESForm::LookupByID<RE::TESObjectARMO>(lists[r][Mix(a_seed ^ 0x5678) % lists[r].size()]);
 			}
 			roll -= kWeight[r];
 		}
@@ -281,7 +296,7 @@ namespace shielditems
 		Follow(a_player, Worn(a_player), true);
 		if (g_starter && !shield::g_starterGiven && a_player->Is3DLoaded()) {
 			shield::g_starterGiven = true;
-			const auto armor = PickFor(Mix(a_player->GetFormID() + 7), 1);
+			const auto armor = PickFor(Mix(a_player->GetFormID() + 7), 1, 0);
 			if (armor) {
 				PutOn(a_player, armor);
 				SKSE::log::info("shield items: the player is given a starter shield, \"{}\"", armor->GetName());
