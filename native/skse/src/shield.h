@@ -84,6 +84,7 @@ namespace shield
 	// called every 400 ms on the game thread in place of the test shields when shield items are in use (shielditems.h): it gives and takes away shields by what is worn
 	inline bool (*g_itemPump)(RE::PlayerCharacter*, RE::ProcessLists*) = nullptr;
 	inline bool g_starterGiven = false;  // the player has been handed a starter shield in this game (the co-save keeps it)
+	inline Clock::time_point g_gameNow{};  // steady time minus the time the game was paused (a menu open): the delay before a recharge counts this clock, not the wall clock
 	inline std::atomic_int g_combatNear{ 0 };  // living actors within reach that have the player as their combat target (shielditems.h counts them; the display's fade reads it)
 
 	inline std::mutex                                                g_lock;
@@ -240,7 +241,7 @@ namespace shield
 		s.baseMax = before;
 		s.lastMax = after;
 		s.prevDamage = DamageTaken(a_actor);
-		s.lastHit = Clock::now() - std::chrono::seconds(60);
+		s.lastHit = g_gameNow - std::chrono::seconds(60);
 		SKSE::log::info("shield: {:08X}{} has a shield of {:.0f}: maximum health {:.0f} -> {:.0f}, current {:.0f} -> {:.0f}", a_actor->GetFormID(), s.player ? " (the player)" : "", capacity, before, after, hpBefore, hpAfter);
 	}
 
@@ -527,7 +528,15 @@ namespace shield
 				Acquire(player, lists);
 			}
 		}
-		const float dt = (std::min)(0.25f, std::chrono::duration<float>(now - last).count());
+		// the game's clock stands still while it is paused (a menu is open): neither the delay nor the recharge runs then
+		static Clock::duration pausedTotal{};
+		const auto             ui = RE::UI::GetSingleton();
+		const bool             paused = ui && ui->GameIsPaused();
+		if (paused) {
+			pausedTotal += now - last;
+		}
+		g_gameNow = now - pausedTotal;
+		const float dt = paused ? 0.0f : (std::min)(0.25f, std::chrono::duration<float>(now - last).count());
 		last = now;
 
 		g_stage = "shield update";
@@ -566,7 +575,7 @@ namespace shield
 					continue;
 				}
 				g_stage = "shield step";
-				say = Step(actor, s, now, dt);
+				say = Step(actor, s, g_gameNow, dt);
 			}
 			if (!say.empty()) {
 				Tell(say);

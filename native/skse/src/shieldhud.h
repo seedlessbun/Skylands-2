@@ -302,6 +302,8 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 		}
 	}
 
+	constexpr double kPlayerNarrow = 13.0;  // HUD units (1280 wide) taken off the player's bar, 6.5 a side: about 20 px at 1920 (10 a side), as the user asked (0.39.5)
+
 	inline bool PlayerLayout(RE::GFxValue& a_base, RE::GFxValue& a_root, RE::PlayerCharacter* a_player, Layout& a_out, bool a_look)
 	{
 		RE::GFxValue health, anim;
@@ -395,7 +397,7 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 		const Box& ref = g_player.full.ok ? g_player.full : *use;
 		a_out.cx = ref.cx() + g_dx;
 		a_out.cy = ref.cy() + g_dy;
-		a_out.w = g_w > 0.0f ? g_w : ref.w();
+		a_out.w = g_w > 0.0f ? g_w : (std::max)(20.0, ref.w() - kPlayerNarrow);
 		a_out.h = g_h > 0.0f ? g_h : std::clamp(ref.h(), 8.0, 20.0);
 		double alpha = 1.0;
 		if (haveAnim) {

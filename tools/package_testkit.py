@@ -173,6 +173,8 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
+  SHIELDS (0.39.5): creature shields are gone (people only). The shield's recharge delay and recharge now stand still while the game is paused (a menu is open). Your shield bar is 20 px narrower.
+    A person who loses their shield item is rolled again; the pump looks at 40 actors and gives 4 shields per pass (was 24 and 2).
   SHIELDS (0.39.4): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off).
     - FIXED: the game does not keep that bonus across a load, and the old clean-up took it off anyway, so your own health shrank by the shield's size at every load. The clean-up now takes a bonus off
       only if the game still shows it; if the game ever loses the bonus while you play, the plugin puts it back (SkylandsNative.log: "lost its shield bonus ... put back"). The log line "the player's health now
@@ -200,7 +202,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-135.zip"
+    out = dist / "Skylands-TestBuild-136.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

@@ -205,9 +205,6 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
             f"ShieldDropPercent={S.SHIELDS['drop_percent'].value:g}",
             "; you are given one shield to start (1) or not (0)",
             "StarterShield=1",
-            "; enemy creatures, animals, the undead and dragons wear no items, so each has a shield of its own: that share of its max health (EnemyShieldCreatures=0: none)",
-            "EnemyShieldCreatures=1",
-            "EnemyShieldCreatureRatio=0.35",
         ]
     lines += [
         "; the shield display over your health bar and the enemy's (upper half shield, lower half health). ShieldHud=0 turns it off (the plain lines come back).",
