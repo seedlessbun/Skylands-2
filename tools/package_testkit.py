@@ -173,7 +173,14 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
-  SHIELDS (0.39.3; the enemy\'s shield bar sits a little lower, clear of the enemy\'s own health bar; ShieldHudEnemyY moves it, positive = down): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load).
+  SHIELDS (0.39.4): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off).
+    - FIXED: the game does not keep that bonus across a load, and the old clean-up took it off anyway, so your own health shrank by the shield's size at every load. The clean-up now takes a bonus off
+      only if the game still shows it; if the game ever loses the bonus while you play, the plugin puts it back (SkylandsNative.log: "lost its shield bonus ... put back"). The log line "the player's health now
+      X of Y (without the shield A + shield bonus B)" shows the pool every 20 seconds: Y should be A + B. After a load the shield starts full.
+    - enemies: creatures, animals, the undead and dragons that are your enemies now have a shield of their own (35 percent of their health; EnemyShieldCreatures=0 turns it off, EnemyShieldCreatureRatio sets the share).
+      A person keeps the shield for as long as the item is in their pack. The log line "shield items: N living actors within reach ..." says how many near you have a shield and why others do not.
+    - your shield bar is up in combat, while the shield is not full, and for ShieldHudHideAfter seconds (3) after the shield or your health last changed, then it fades out (0 = always shown). The enemy's bar follows the game's.
+    - the enemy\'s shield bar sits a little lower, clear of the enemy\'s own health bar; ShieldHudEnemyY moves it, positive = down.
     - the shield bar is now the thin one above the game's health bar (ShieldHudMode=2), as wide as the game's health bar (read from the game: the log says "shield hud: player bar: ..."); the same above an enemy's bar.
       Note: the game's own health bar adds your health and your shield together, so it drops when the shield takes a hit. ShieldHudHealth=1 paints the inside of it with your real health alone (an experiment: tune
       with ShieldHudInsetX/Y if it sits wrong). ShieldHudWidth / ShieldHudX / ShieldHudY / ShieldHudHeight move and size the shield bar.
@@ -193,7 +200,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-134.zip"
+    out = dist / "Skylands-TestBuild-135.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

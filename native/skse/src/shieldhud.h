@@ -26,6 +26,7 @@ namespace shieldhud
 	inline float g_dx = 0.0f, g_dy = 0.0f, g_w = 0.0f, g_h = 0.0f;                        // the player's bar: shift and size in HUD pixels (0 = as found)
 	inline float g_edx = 0.0f, g_edy = 0.0f, g_ew = 0.0f, g_eh = 0.0f;                    // the enemy's bar
 	inline bool  g_log = false;       // ShieldHudLog=1: a line about the bars every 5 seconds
+inline float g_hideAfter = 3.0f;  // ShieldHudHideAfter: seconds the player's bar stays up once nothing is happening (0 = never hide it)
 inline bool  g_health = false;    // ShieldHudHealth=1 (mode 2): the game's health bar is painted over with a bar of the REAL health, because the game's own bar shows health and shield added together
 inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much of the game's bar (its width / height) is frame and caps, left alone when painting the real health
 
@@ -482,6 +483,35 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 		return true;
 	}
 
+	// The player's bar is up while the player is in combat, while the shield is not full (hit or recharging), and for ShieldHudHideAfter seconds after the shield or the
+	// health last changed; then it fades out, the way the game's own health bar goes away. It fades in and out over a fraction of a second instead of popping.
+	struct Fade
+	{
+		double            level = 0.0;  // 0..1, multiplied into the bar's alpha
+		float             lastShield = -1.0f, lastHealth = -1.0f;
+		Clock::time_point changed{}, last{};
+		bool              wanted = false;
+	};
+
+	inline double FadeLevel(Fade& a_fade, RE::PlayerCharacter* a_player, const shield::View& a_view, Clock::time_point a_now)
+	{
+		if (std::abs(a_view.shield - a_fade.lastShield) > 0.002f || std::abs(a_view.health - a_fade.lastHealth) > 0.002f) {
+			a_fade.changed = a_now;
+			a_fade.lastShield = a_view.shield;
+			a_fade.lastHealth = a_view.health;
+		}
+		const bool combat = shield::g_combatNear.load() > 0;  // not Actor::IsInCombat (a virtual whose slot may differ on this runtime): shielditems.h counts those fighting the player
+		const bool quiet = std::chrono::duration<float>(a_now - a_fade.changed).count() >= g_hideAfter;
+		a_fade.wanted = g_hideAfter <= 0.0f || combat || a_view.shield < 0.999f || !quiet;
+		const double dt = a_fade.last.time_since_epoch().count() == 0 ? 0.0 : std::clamp(std::chrono::duration<double>(a_now - a_fade.last).count(), 0.0, 0.25);
+		a_fade.last = a_now;
+		a_fade.level = a_fade.wanted ? (std::min)(1.0, a_fade.level + dt / 0.15) : (std::max)(0.0, a_fade.level - dt / 0.6);
+		if (a_fade.wanted && a_fade.level <= 0.0) {
+			a_fade.level = 0.05;  // the first frame after a change shows at once
+		}
+		return a_fade.level;
+	}
+
 	// the person the game's enemy bar is about: the one in the crosshair, kept while the crosshair is on nobody (the game keeps its bar up a moment)
 	inline RE::FormID g_enemyId = 0;
 
@@ -505,6 +535,7 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 		static bool              broken = false, lookedPlayer = false, lookedEnemy = false, waited = false;
 		static int               frame = 0;
 		static Layout            player, enemy;
+		static Fade              fade;
 		static Clock::time_point lastLog{};
 		if (!g_on || broken) {
 			return;
@@ -548,8 +579,10 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 				player.ok = PlayerLayout(base, root, playerRef, player, !lookedPlayer);
 				lookedPlayer = lookedPlayer || player.ok;  // the bar's parts are told in the log once it has been found
 			}
-			if (player.ok && player.alpha > 0.02) {
-				Draw(movie.get(), g_player, player, view, now);
+			Layout drawn = player;
+			drawn.alpha *= FadeLevel(fade, playerRef, view, now);
+			if (player.ok && drawn.alpha > 0.02) {
+				Draw(movie.get(), g_player, drawn, view, now);
 				shield::g_displayLive = true;
 			} else {
 				Hide(movie.get(), g_player);
@@ -605,6 +638,8 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 			g_follow = a_value.find('0') == std::string::npos;
 		} else if (a_key == "ShieldHudLog") {
 			g_log = a_value.find('1') != std::string::npos;
+		} else if (a_key == "ShieldHudHideAfter") {
+			number(g_hideAfter, 0.0f, 120.0f);
 		} else if (a_key == "ShieldHudHealth") {
 			g_health = a_value.find('1') != std::string::npos;
 		} else if (a_key == "ShieldHudInsetX") {

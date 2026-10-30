@@ -296,3 +296,14 @@ what it finds; the ini keys move and size it. If that fails there are two fallba
 | where else | chests and containers, merchants, rarity beam on dropped shields | boss chests (the ammo list they already hold gets shield entries), merchants' vendor chests, the beam form list |
 | rarity by level | the level gates, and better loot from bosses | gates 1/3/8/15/30 with weights 122:50:20:6:1; a boss (named or level 35+) always has a rare or better shield and always leaves it |
 Everything is a number in the settings file or the shields sheet (`sheets/shields.json`), so the odds can be changed without a new build.
+
+## 13. 0.39.4: the health pool, creatures, and the bar that goes away
+
+What the 0.39.2 logs showed: the game does not keep a temporary Health bonus across a load. The plugin's clean-up took off a bonus that was no longer there at every load
+("its shield bonus of 25 was taken off", then "maximum health 85 -> 110" while the player's base is 110), so the shield was carved out of the player's own pool.
+
+- A shield listed in the co-save is now looked at first: its bonus comes off only when the actor's maximum still shows it. The co-save notes the maximum without the bonus (record version 2).
+- If the maximum ever falls by exactly the bonus while playing, the bonus is put back and the log says so. A line every 20 seconds gives the player's pool: maximum = without the shield + shield bonus.
+- Creatures, animals, the undead and dragons that are enemies carry a shield of their own (35 percent of their health, `EnemyShieldCreatureRatio`); people keep the shield for as long as the item is in their pack.
+- The player's bar is shown in combat, while the shield is not full, and for `ShieldHudHideAfter` seconds (3) after the shield or health last changed; then it fades out.
+- After a load the shield starts full: the split of saved damage between shield and health is not kept across a load.

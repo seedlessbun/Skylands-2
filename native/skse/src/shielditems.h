@@ -32,6 +32,8 @@ namespace shielditems
 	inline int   g_bossLevel = 35;      // ShieldBossLevel: a person this level or higher, or a named one (the base record is "unique"), counts as a boss: always a shield, rare or better, always left on the body
 	inline int   g_dropPercent = 25;    // ShieldDropPercent: how often a dead person's shield stays on the body (the user chose 25; bosses always leave theirs)
 	inline bool g_starter = true;     // StarterShield=0: the player is not given one
+	inline bool  g_creatures = true;      // EnemyShieldCreatures=0: creatures, animals, the undead and dragons that are enemies get no shield of their own (a creature wears no item)
+	inline float g_creatureRatio = 0.35f; // EnemyShieldCreatureRatio: that shield as a share of the creature's max health (0.35 = the design capacity of the player's shields)
 
 	struct Info
 	{
@@ -317,11 +319,15 @@ namespace shielditems
 			return true;
 		}
 		const auto here = a_player->GetPosition();
-		int        gave = 0, looked = 0;
+		int        fighting = 0, gave = 0, looked = 0, inReach = 0, people = 0, creatures = 0, shielded = 0, friendly = 0, unseen = 0, pending = 0;
 		for (auto& handle : a_lists->highActorHandles) {
 			const auto ptr = handle.get();
 			const auto actor = ptr.get();
-			if (!actor || actor->IsPlayerRef() || actor->IsDead() || !actor->Is3DLoaded() || looked >= 24) {
+			if (!actor || actor->IsPlayerRef() || actor->IsDead()) {
+				continue;
+			}
+			if (!actor->Is3DLoaded()) {
+				++unseen;
 				continue;
 			}
 			const auto  there = actor->GetPosition();
@@ -329,7 +335,10 @@ namespace shielditems
 			if (dx * dx + dy * dy + dz * dz > 6000.0f * 6000.0f) {
 				continue;
 			}
-			++looked;
+			++inReach;
+			if (const auto target = actor->GetActorRuntimeData().currentCombatTarget.get(); target && target.get() == static_cast<RE::Actor*>(a_player)) {
+				++fighting;  // in combat with the player (the shield display shows while any are)
+			}
 			const RE::FormID id = actor->GetFormID();
 			{
 				const std::lock_guard guard(shield::g_lock);
@@ -337,14 +346,47 @@ namespace shielditems
 					continue;
 				}
 			}
-			if (const auto worn = Worn(actor)) {
-				Follow(actor, worn, false);
+			if (shield::Has(id)) {
+				// A person keeps the shield for as long as the item is in the pack: the body's slot data and the equip events can both miss it for a moment (the 3D
+				// reloads, the game re-dresses a person) and the roll below is made only once, so a shield taken away then would never come back.
+				if (const RE::FormID have = shield::ItemOf(id)) {
+					const auto armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(have);
+					if (!armor || !InPack(actor, armor)) {
+						Follow(actor, nullptr, false);
+						continue;
+					}
+				}
+				++shielded;
 				continue;
 			}
-			if (shield::Has(id)) {
-				Follow(actor, nullptr, false);
+			if (const auto worn = Worn(actor)) {
+				Follow(actor, worn, false);
+				++shielded;
+				continue;
 			}
-			if (gave >= 2 || !IsPerson(actor)) {
+			if (looked >= 24) {
+				++pending;
+				continue;
+			}
+			++looked;
+			if (!IsPerson(actor)) {
+				// a creature, an animal, the undead, a dragon: no item to wear, so a shield of its own, if it is an enemy (the settings file's EnemyShieldCreatures)
+				++creatures;
+				if (!g_creatures || !actor->IsHostileToActor(a_player)) {
+					++friendly;
+					continue;
+				}
+				shield::Give(actor, g_creatureRatio, false);
+				static std::atomic_int told{ 0 };
+				if (told.fetch_add(1) < 25) {
+					const auto base = actor->GetActorBase();
+					SKSE::log::info("shield items: {:08X} (a creature \"{}\", level {}) has a shield of its own: {:.0f} percent of its max health", id, base ? base->GetName() : "?", actor->GetLevel(), g_creatureRatio * 100.0f);
+				}
+				continue;
+			}
+			++people;
+			if (gave >= 2) {
+				++pending;
 				continue;
 			}
 			{
@@ -362,11 +404,27 @@ namespace shielditems
 			}
 			if (const auto armor = boss ? PickFor(Mix(id), (std::max)(level, 15), -1, 3) : PickFor(Mix(id), level)) {
 				PutOn(actor, armor);
+				Follow(actor, armor, false);  // at once: the item is in the pack, which is all a person's shield asks for (no waiting for the slot data or the equip event)
 				++gave;
 				static std::atomic_int told{ 0 };
 				if (told.fetch_add(1) < 25) {
 					SKSE::log::info("shield items: {:08X} (level {}{}) is given \"{}\" (chance {} percent)", id, level, boss ? ", a boss" : "", armor->GetName(), chance);
 				}
+			}
+		}
+		shield::g_combatNear = fighting;
+		// what the pump saw, now and then (to tell why a person or creature has no shield)
+		{
+			static Clock::time_point lastLine{};
+			static int               lines = 0, lastReach = -1, lastShielded = -1;
+			const auto               now = Clock::now();
+			if (now - lastLine > std::chrono::seconds(15) && (inReach != lastReach || shielded != lastShielded) && lines < 60) {
+				lastLine = now;
+				lastReach = inReach;
+				lastShielded = shielded;
+				++lines;
+				SKSE::log::info("shield items: {} living actors within reach (and {} whose 3D is not loaded): {} with a shield, {} new people looked at, {} creatures looked at ({} not enemies or off), {} waiting for their turn, {} fighting the player", inReach, unseen, shielded, people,
+					creatures, friendly, pending, fighting);
 			}
 		}
 		return true;
@@ -452,6 +510,13 @@ namespace shielditems
 			number(0, 100, g_dropPercent);
 		} else if (a_key == "StarterShield") {
 			g_starter = a_value.find('0') == std::string::npos;
+		} else if (a_key == "EnemyShieldCreatures") {
+			g_creatures = a_value.find('0') == std::string::npos;
+		} else if (a_key == "EnemyShieldCreatureRatio") {
+			try {
+				g_creatureRatio = std::clamp(std::stof(a_value), 0.05f, 3.0f);
+			} catch (...) {
+			}
 		} else {
 			return false;
 		}

@@ -205,6 +205,9 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
             f"ShieldDropPercent={S.SHIELDS['drop_percent'].value:g}",
             "; you are given one shield to start (1) or not (0)",
             "StarterShield=1",
+            "; enemy creatures, animals, the undead and dragons wear no items, so each has a shield of its own: that share of its max health (EnemyShieldCreatures=0: none)",
+            "EnemyShieldCreatures=1",
+            "EnemyShieldCreatureRatio=0.35",
         ]
     lines += [
         "; the shield display over your health bar and the enemy's (upper half shield, lower half health). ShieldHud=0 turns it off (the plain lines come back).",
@@ -225,6 +228,8 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
         "ShieldHudEnemyWidth=0",
         "ShieldHudEnemyHeight=0",
         "ShieldHudLog=0",
+        "; your shield bar is shown while you are in combat, while the shield is not full, and for this many seconds after the shield or your health last changed, then it fades out (0 = always shown)",
+        "ShieldHudHideAfter=3",
         "; ShieldHudHealth=1 (with mode 2): the game's own health bar shows health and shield added together, so it drops when the shield takes a hit; this paints the inside of it with your real health alone",
         "; (ShieldHudInsetX/Y: the share of the bar's width / height that is frame and caps, left alone). Off by default: it is a guess at the bar's insides.",
         "ShieldHudHealth=0",

@@ -297,6 +297,18 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
                  "GetFormArray<RE::TESObjectARMO>", "shield::Give(", "shield::Remove("):
         assert text in items_h, text  # the plugin finds the shield items by their keywords and follows what is worn in the slot
     assert "shield::g_itemPump = &shielditems::Pump" in main and "shielditems::Config(" in main and "shielditems::EquipSink::Get()" in main
+    # 0.39.4: the game drops a temporary Health bonus across a load, so the clean-up looks before it takes one off, the co-save notes the maximum, and a bonus that vanishes is put back
+    for text in ("baseMax", "hasBase", "OpenRecord(kRecord, 2)", "version != 1 && version != 2", "lost its shield bonus", "g_nReapplied", "nothing to take off", "g_combatNear"):
+        assert text in shield_h, text
+    assert "Strip(actor, held.first" not in shield_h and "std::pair<float, float>> g_stale" not in shield_h  # the old unconditional strip is gone
+    # enemies: creatures get a shield of their own, a person keeps the item's shield while it is in the pack, the pump says what it saw
+    for text in ("EnemyShieldCreatures", "EnemyShieldCreatureRatio", "IsHostileToActor(a_player)", "currentCombatTarget", "g_combatNear = fighting", "InPack(actor, armor)", "living actors within reach", "Follow(actor, armor, false);  // at once"):
+        assert text in items_h, text
+    # the player's bar fades out when nothing is going on; the combat flag is not the virtual Actor::IsInCombat
+    for text in ("ShieldHudHideAfter", "FadeLevel", "shield::g_combatNear.load()", "drawn.alpha *="):
+        assert text in hud_h, text
+    assert "a_player->IsInCombat()" not in hud_h
+    assert "kVersion = 374" in main and "{ 1, 18, 4, 0 }" in main
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")

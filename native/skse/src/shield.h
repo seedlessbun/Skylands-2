@@ -52,7 +52,19 @@ namespace shield
 		float             hpFrac = 1.0f;     // the real health left, 0..1 of the maximum without the shield (the display's lower half)
 		float             rate = 0.0f;       // recharge per second as a share of the capacity (0: the settings file's)
 		float             delay = 0.0f;      // seconds without a hit before the recharge (0: the settings file's)
-		RE::FormID        item = 0;          // the shield item this comes from (0: a test shield from the settings file)
+		RE::FormID        item = 0;          // the shield item this comes from (0: an innate shield of a creature, or a test shield from the settings file)
+		float             lastMax = 0.0f;    // the actor's maximum Health at the last look (with the bonus); a drop of exactly the capacity means the game lost the bonus
+		float             baseMax = 0.0f;    // the maximum without the bonus (lastMax - capacity), kept in the co-save to tell a bonus the game kept from one it dropped
+		int               reapplied = 0;     // times the bonus had to be put back after the game lost it
+	};
+
+	// a shield the co-save lists for an actor: the bonus may or may not still be on it (the game does not keep temporary Health bonuses across a load)
+	struct Stale
+	{
+		float capacity = 0.0f;
+		float shield = 0.0f;
+		float baseMax = 0.0f;
+		bool  hasBase = false;  // false: a record from plugin 1.16/1.17 that did not note the maximum
 	};
 
 	// what the display needs of one actor, copied under the lock
@@ -72,10 +84,11 @@ namespace shield
 	// called every 400 ms on the game thread in place of the test shields when shield items are in use (shielditems.h): it gives and takes away shields by what is worn
 	inline bool (*g_itemPump)(RE::PlayerCharacter*, RE::ProcessLists*) = nullptr;
 	inline bool g_starterGiven = false;  // the player has been handed a starter shield in this game (the co-save keeps it)
+	inline std::atomic_int g_combatNear{ 0 };  // living actors within reach that have the player as their combat target (shielditems.h counts them; the display's fade reads it)
 
 	inline std::mutex                                                g_lock;
 	inline std::unordered_map<RE::FormID, State>                    g_states;
-	inline std::unordered_map<RE::FormID, std::pair<float, float>> g_stale;  // bonuses a loaded save still holds: id -> (capacity, shield); taken off when the actor is next seen
+	inline std::unordered_map<RE::FormID, Stale>                    g_stale;  // shields the co-save lists: looked at when the actor is next seen; the bonus comes off only if the game kept it
 	inline thread_local bool                                         g_self = false;  // the plugin's own change of Health (the observer does not count it)
 
 	// the observer hook (ActorValueOwner slot 6): what the game sends through it, for the log only
@@ -87,7 +100,7 @@ namespace shield
 	inline std::uintptr_t   g_origPlayer = 0, g_origNpc = 0, g_playerTable = 0;
 	inline bool             g_hookedPlayer = false, g_hookedNpc = false;
 	inline std::atomic_int  g_nNeg{ 0 }, g_nPos{ 0 }, g_nTemp{ 0 }, g_nOther{ 0 }, g_nSelf{ 0 };
-	inline std::atomic_int  g_nAbsorbed{ 0 }, g_nBreaks{ 0 }, g_nHeals{ 0 };
+	inline std::atomic_int  g_nAbsorbed{ 0 }, g_nBreaks{ 0 }, g_nHeals{ 0 }, g_nReapplied{ 0 };
 	inline std::atomic<std::uint64_t> g_absorbedTimes100{ 0 };
 
 	using ModFn = void (*)(RE::ActorValueOwner*, RE::ACTOR_VALUE_MODIFIER, RE::ActorValue, float);
@@ -224,6 +237,8 @@ namespace shield
 		s.capacity = capacity;
 		s.shield = capacity;
 		s.applied = true;
+		s.baseMax = before;
+		s.lastMax = after;
 		s.prevDamage = DamageTaken(a_actor);
 		s.lastHit = Clock::now() - std::chrono::seconds(60);
 		SKSE::log::info("shield: {:08X}{} has a shield of {:.0f}: maximum health {:.0f} -> {:.0f}, current {:.0f} -> {:.0f}", a_actor->GetFormID(), s.player ? " (the player)" : "", capacity, before, after, hpBefore, hpAfter);
@@ -246,6 +261,20 @@ namespace shield
 	inline std::string Step(RE::Actor* a_actor, State& s, Clock::time_point a_now, float a_dt)
 	{
 		std::string say;
+		// The game does not always keep a temporary Health bonus (it drops it on a load, perhaps on other occasions): a maximum that falls by exactly the capacity is the bonus
+		// gone, and it is put back (the current Health fell with it, so the damage taken is unchanged). Any other change of the maximum (level, potions) is left alone.
+		{
+			const float maxNow = a_actor->GetActorValueMax(RE::ActorValue::kHealth);
+			if (s.lastMax > 0.0f && s.capacity > 0.0f && s.reapplied < 20 && std::abs((s.lastMax - maxNow) - s.capacity) < 0.05f + 0.002f * s.capacity) {
+				Write(a_actor, RE::ACTOR_VALUE_MODIFIER::kTemporary, s.capacity);
+				++s.reapplied;
+				++g_nReapplied;
+				SKSE::log::warn("shield: {:08X}{} lost its shield bonus (maximum health {:.0f} -> {:.0f}); put back, maximum now {:.0f} (time {})", a_actor->GetFormID(), s.player ? " (the player)" : "", s.lastMax, maxNow,
+					a_actor->GetActorValueMax(RE::ActorValue::kHealth), s.reapplied);
+			}
+			s.lastMax = a_actor->GetActorValueMax(RE::ActorValue::kHealth);
+			s.baseMax = s.lastMax - s.capacity;
+		}
 		float       damage = DamageTaken(a_actor);
 		const float delta = damage - s.prevDamage;
 		if (delta > 0.05f) {  // new damage since the last look
@@ -465,7 +494,7 @@ namespace shield
 		TryInstall(player, lists);
 
 		// bonuses a loaded save still holds come off before anything new is given
-		std::vector<std::pair<RE::FormID, std::pair<float, float>>> stale;
+		std::vector<std::pair<RE::FormID, Stale>> stale;
 		{
 			const std::lock_guard guard(g_lock);
 			for (const auto& e : g_stale) {
@@ -478,7 +507,16 @@ namespace shield
 				continue;
 			}
 			g_stage = "shield strip";
-			Strip(actor, held.first, held.second);
+			// The game does not keep a temporary Health bonus across a load (seen on 1.7.104: the maximum after a load was the base value again). Taking off a bonus that is
+			// not there cut the wearer's own health by the capacity, so a bonus comes off only when the maximum shows it is still on.
+			const float maxNow = actor->GetActorValueMax(RE::ActorValue::kHealth);
+			const bool  still = held.hasBase && maxNow >= held.baseMax + 0.5f * held.capacity - 0.5f;
+			if (still) {
+				Strip(actor, held.capacity, held.shield);
+			} else {
+				SKSE::log::info("shield: {:08X}{} - the loaded game no longer has the shield bonus of {:.0f} on it (maximum health {:.0f}{}); nothing to take off", id, actor->IsPlayerRef() ? " (the player)" : "", held.capacity, maxNow,
+					held.hasBase ? fmt::format(", without the shield it was {:.0f}", held.baseMax) : std::string(", the record is from an older plugin"));
+			}
 			const std::lock_guard guard(g_lock);
 			g_stale.erase(id);
 		}
@@ -536,6 +574,26 @@ namespace shield
 		}
 		if (now - lastSummary > std::chrono::seconds(20)) {
 			lastSummary = now;
+			{
+				// the player's pool, to see the bonus is really there: maximum = base + the shield's bonus
+				static int playerLines = 0;
+				float      capacity = 0.0f, shield = 0.0f, baseMax = 0.0f;
+				bool       has = false;
+				{
+					const std::lock_guard guard(g_lock);
+					if (const auto it = g_states.find(player->GetFormID()); it != g_states.end() && it->second.applied) {
+						has = true;
+						capacity = it->second.capacity;
+						shield = it->second.shield;
+						baseMax = it->second.baseMax;
+					}
+				}
+				if (has && playerLines++ < 40) {
+					const auto ao = player->AsActorValueOwner();
+					SKSE::log::info("shield: the player's health now {:.0f} of {:.0f} (without the shield {:.0f} + shield bonus {:.0f}), the shield {:.1f}; bonus put back {} times",
+						ao ? ao->GetActorValue(RE::ActorValue::kHealth) : 0.0f, player->GetActorValueMax(RE::ActorValue::kHealth), baseMax, capacity, shield, g_nReapplied.load());
+				}
+			}
 			static int lastTotal = -1;
 			const int  total = g_nNeg + g_nPos + g_nTemp + g_nOther + g_nAbsorbed + g_nHeals;
 			if (total != lastTotal) {
@@ -592,26 +650,30 @@ namespace shield
 			std::uint32_t id;
 			float         capacity;
 			float         shield;
+			float         baseMax;
 		};
 		std::vector<Entry> entries;
 		{
 			const std::lock_guard guard(g_lock);
 			for (const auto& [id, s] : g_states) {
 				if (s.applied) {
-					entries.push_back({ id, s.capacity, s.shield });
+					entries.push_back({ id, s.capacity, s.shield, s.baseMax });
 				}
 			}
-			for (const auto& [id, held] : g_stale) {  // not yet taken off: still on the actor
-				entries.push_back({ id, held.first, held.second });
+			for (const auto& [id, held] : g_stale) {  // not yet looked at: listed again
+				if (held.hasBase) {
+					entries.push_back({ id, held.capacity, held.shield, held.baseMax });
+				}
 			}
 		}
-		if (a_intfc->OpenRecord(kRecord, 1)) {
+		if (a_intfc->OpenRecord(kRecord, 2)) {
 			const std::uint32_t n = static_cast<std::uint32_t>(entries.size());
 			a_intfc->WriteRecordData(n);
 			for (const auto& e : entries) {
 				a_intfc->WriteRecordData(e.id);
 				a_intfc->WriteRecordData(e.capacity);
 				a_intfc->WriteRecordData(e.shield);
+				a_intfc->WriteRecordData(e.baseMax);
 			}
 		}
 		if (g_starterGiven && a_intfc->OpenRecord(kStarter, 1)) {
@@ -639,7 +701,7 @@ namespace shield
 				g_starterGiven = flag != 0;
 				continue;
 			}
-			if (type != kRecord || version != 1) {
+			if (type != kRecord || (version != 1 && version != 2)) {
 				continue;
 			}
 			std::uint32_t n = 0;
@@ -647,15 +709,18 @@ namespace shield
 			const std::lock_guard guard(g_lock);
 			for (std::uint32_t i = 0; i < n && i < 1000; ++i) {
 				std::uint32_t id = 0, newId = 0;
-				float         capacity = 0.0f, shield = 0.0f;
+				float         capacity = 0.0f, shield = 0.0f, baseMax = 0.0f;
 				a_intfc->ReadRecordData(id);
 				a_intfc->ReadRecordData(capacity);
 				a_intfc->ReadRecordData(shield);
+				if (version >= 2) {
+					a_intfc->ReadRecordData(baseMax);
+				}
 				if (a_intfc->ResolveFormID(id, newId)) {
-					g_stale[newId] = { capacity, shield };
+					g_stale[newId] = { capacity, shield, baseMax, version >= 2 };
 				}
 			}
-			SKSE::log::info("shield: load - {} shield bonuses in the save will be taken off as their actors are met", g_stale.size());
+			SKSE::log::info("shield: load - {} shields listed in the save; each is looked at when its actor is met (a bonus the game dropped is not taken off)", g_stale.size());
 		}
 	}
 
