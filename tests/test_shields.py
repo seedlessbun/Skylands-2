@@ -163,3 +163,29 @@ def test_shield_models_are_cut_from_the_combined_mesh_when_the_fragments_exist(t
     plain = shields.Models(tmp_path / "p", None, lambda m: None, {})
     path = plain.mesh_for(builds[0], (200, 200, 200))
     assert plain.stats["proxy"] == 1 and (tmp_path / "p" / "Meshes" / Path(*path.split("\\"))).is_file()
+
+
+def test_shields_turn_up_in_boss_chests_at_merchants_and_in_the_beam_list(tmp_path):
+    bl2 = test_generate.staff_bl2(tmp_path)
+    rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff", shield_slot=60)
+    loot = rep["shield_loot"]
+    assert loot["chest_entries"] >= 1 and loot["beams"] == rep["shields"]["items"]
+    assert sorted(loot["vendors"]) == ["RiverwoodGeneralStoreVendorChest", "WhiterunBlacksmithVendorChest"]  # smiths, armorers and general stores; not the alchemist, not a private chest
+    _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"LVLI", "FLST", "CONT", "ARMO", "KYWD"})
+    lists = {r.edid: r for r in recs["LVLI"]}
+    assert {"SkylandsShieldsAny", "SkylandsShieldsGood", "SkylandsShieldStock", "SkylandsShieldTier_1", "SkylandsShieldTier_4"} <= set(lists)
+    gates = [struct.unpack_from("<H", d)[0] for d in lists["SkylandsShieldsAny"].all("LVLO")]
+    assert len(gates) == 122 + 50 + 20 + 6 + 1 and min(gates) == 1 and max(gates) == 30  # the guns' weights, gated by the player's level (1, 3, 8, 15, 30)
+    assert all(struct.unpack_from("<H", d)[0] >= 8 for d in lists["SkylandsShieldsGood"].all("LVLO"))  # the chests offer rare or better
+    assert lists["SkylandsShieldStock"].first("LVLD")[0] == 50  # a merchant's stock holds a shield half the time
+    ammo = [r for r in recs["LVLI"] if r.edid == "SkylandsAmmoDrop"][0]
+    assert len(ammo.all("LVLO")) == 6 + loot["chest_entries"] and ammo.first("LLCT")[0] == len(ammo.all("LVLO"))
+    chests = {r.edid: r for r in recs["CONT"]}
+    for name in loot["vendors"]:
+        assert len(chests[name].all("CNTO")) == 2 and struct.unpack("<I", chests[name].first("COCT"))[0] == 2
+    plain = read_plugin(tmp_path / "out" / "Data" / "Skylands.esp", {"FLST"})[1]["FLST"]
+    guns = {r.form_id: len(r.all("LNAM")) for r in plain if r.edid == "SkylandsGunList"}
+    beam = [r for r in recs["FLST"] if r.form_id in guns]
+    assert len(beam) == 1 and len(beam[0].all("LNAM")) == guns[beam[0].form_id] + rep["shields"]["items"]  # the guns' form list, the shields appended (Skylands.esp's own is untouched)
+    vendor_kw = 0x6300  # the fake Skyrim.esm's VendorItemClothing: merchants buy the shields too
+    assert all(vendor_kw in struct.unpack_from(f"<{len(a.first('KWDA')) // 4}I", a.first("KWDA")) for a in recs["ARMO"])

@@ -121,11 +121,11 @@
   },
   {
    "id": "enemy_percent",
-   "value": 30,
-   "unit": "percent",
+   "value": 10,
+   "unit": "percent at level 1",
    "source": "design",
    "bl2_object": "GD_ItempoolsEnemyUse.Shields.Pool_Shields_Standard_EnemyUse",
-   "note": "share of ordinary humans that spawn with a shield (BL2 per-pawn probabilities are 0.7 / 1.0; the user chose 30 to start)",
+   "note": "the chance that a person of level 1 carries a shield; the user chose \"tougher = more likely\" (enemy_percent_per_level more for every level above 1, at most 95; bosses always)",
    "read_verified": "no"
   },
   {
@@ -134,7 +134,7 @@
    "unit": "percent",
    "source": "design",
    "bl2_object": "-",
-   "note": "share of named and boss enemies that spawn with a shield",
+   "note": "bosses (named people, or level boss_level and higher) always carry a shield, rare or better",
    "read_verified": "no"
   },
   {
@@ -216,6 +216,51 @@
    "source": "design",
    "bl2_object": "none (a Skylands choice)",
    "note": "how many differently built shields (body, battery and capacitor of different manufacturers) the installer makes for each type and rarity",
+   "read_verified": "no"
+  },
+  {
+   "id": "enemy_percent_per_level",
+   "value": 2,
+   "unit": "percent per level",
+   "source": "design",
+   "bl2_object": "none (a Skylands choice)",
+   "note": "each level above 1 adds this much to the chance that a person carries a shield",
+   "read_verified": "no"
+  },
+  {
+   "id": "boss_level",
+   "value": 35,
+   "unit": "level",
+   "source": "design",
+   "bl2_object": "none (a Skylands choice)",
+   "note": "a person of this level or higher, or a named one, counts as a boss",
+   "read_verified": "no"
+  },
+  {
+   "id": "drop_percent",
+   "value": 25,
+   "unit": "percent",
+   "source": "design",
+   "bl2_object": "GD_ItempoolsEnemyUse.Shields.Pool_Shields_Standard_EnemyUse",
+   "note": "how often a dead person's shield stays on the body (the user chose rarely: 25); a boss always leaves its shield. BL2: enemy shields drop at 20 percent",
+   "read_verified": "no"
+  },
+  {
+   "id": "chest_chance",
+   "value": 25,
+   "unit": "percent",
+   "source": "design",
+   "bl2_object": "none (a Skylands choice)",
+   "note": "the share of the boss-chest ammo entries that is a shield instead (rare or better, by the player's level)",
+   "read_verified": "no"
+  },
+  {
+   "id": "vendor_chance",
+   "value": 50,
+   "unit": "percent",
+   "source": "design",
+   "bl2_object": "none (a Skylands choice)",
+   "note": "the chance that a merchant's stock holds a shield when it restocks",
    "read_verified": "no"
   }
  ]

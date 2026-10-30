@@ -184,6 +184,10 @@ def build_full(root: Path) -> Path:
     enchs = ["EnchWeaponFireDamage03", "EnchWeaponShockDamage03", "EnchWeaponAbsorbHealth02", "EnchWeaponMagickaDamage03"]
     extra.append(group("ENCH", [record("ENCH", 0x6000 + i, [sub("EDID", z(e)), sub("FULL", sid(3)), sub("ENIT", b"\0" * 36), sub("EFID", struct.pack("<I", 0x5000)),
                                                        sub("EFIT", struct.pack("<fII", 10.0, 0, 0))]) for i, e in enumerate(enchs)]))
+    extra.append(group("KYWD", [record("KYWD", 0x6300, [sub("EDID", z("VendorItemClothing"))])]))
+    cnto = lambda item: sub("CNTO", struct.pack("<II", item, 1))  # noqa: E731
+    extra.append(group("CONT", [record("CONT", 0x6400 + i, [sub("EDID", z(e)), sub("OBND", b"\0" * 12), sub("COCT", struct.pack("<I", 1)), cnto(0x6000)])
+                                for i, e in enumerate(["WhiterunBlacksmithVendorChest", "RiverwoodGeneralStoreVendorChest", "WhiterunAlchemistVendorChest", "BlacksmithPrivateChest"])]))
     armor_enchs = ["EnchArmorFortifyHealth01", "EnchArmorResistFire01", "EnchArmorResistShock01", "EnchArmorResistPoison01", "EnchArmorResistMagic01"]
     extra.append(group("ENCH", [record("ENCH", 0x6200 + i, [sub("EDID", z(e)), sub("FULL", sid(3)), sub("ENIT", b"\0" * 36), sub("EFID", struct.pack("<I", 0x5000 + i)),
                                                        sub("EFIT", struct.pack("<fII", 10.0, 0, 0))]) for i, e in enumerate(armor_enchs)]))

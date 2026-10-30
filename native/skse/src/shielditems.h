@@ -26,8 +26,10 @@ namespace shielditems
 	using Clock = std::chrono::steady_clock;
 
 	inline int  g_slot = 0;           // ShieldSlot: the biped slot (30-61) shield items are worn in; 0 = no shield items in this install
-	inline int  g_enemyPercent = 30;  // EnemyShieldPercent: the share of people near the player who get a shield
-	inline int  g_dropPercent = 100;  // ShieldDropPercent: how often a dead person's shield stays on the body
+	inline int   g_enemyPercent = 10;   // EnemyShieldPercent: the chance (percent) that a person of level 1 carries a shield
+	inline float g_perLevel = 2.0f;     // EnemyShieldPerLevel: this many percent more for every level above 1 (the user chose "tougher = more likely"); 95 is the most for an ordinary person
+	inline int   g_bossLevel = 35;      // ShieldBossLevel: a person this level or higher, or a named one (the base record is "unique"), counts as a boss: always a shield, rare or better, always left on the body
+	inline int   g_dropPercent = 25;    // ShieldDropPercent: how often a dead person's shield stays on the body (the user chose 25; bosses always leave theirs)
 	inline bool g_starter = true;     // StarterShield=0: the player is not given one
 
 	struct Info
@@ -120,8 +122,8 @@ namespace shielditems
 			}
 		}
 		g_ready = n > 0;
-		SKSE::log::info("shield items: {} found (rarity 1-6: {} {} {} {} {} {}), worn in biped slot {}, {} percent of the people near you get one, {} percent of a dead person's stay on the body", n, g_catalog[1].size(),
-			g_catalog[2].size(), g_catalog[3].size(), g_catalog[4].size(), g_catalog[5].size(), g_catalog[6].size(), g_slot, g_enemyPercent, g_dropPercent);
+		SKSE::log::info("shield items: {} found (rarity 1-6: {} {} {} {} {} {}), worn in biped slot {}, a person carries one with {} percent + {} percent a level (bosses from level {} or named: always), {} percent of a dead person's stay on the body (a boss's always)", n,
+			g_catalog[1].size(), g_catalog[2].size(), g_catalog[3].size(), g_catalog[4].size(), g_catalog[5].size(), g_catalog[6].size(), g_slot, g_enemyPercent, g_perLevel, g_bossLevel, g_dropPercent);
 	}
 
 	inline RE::BGSBipedObjectForm::BipedObjectSlot Mask()
@@ -203,7 +205,7 @@ namespace shielditems
 	constexpr int kWeight[7] = { 0, 122, 50, 20, 6, 1, 1 };
 
 	// An item for a person of this level: a rarity by the weights above, then one of that rarity's items by the seed. a_type >= 0 keeps to one type (the starter is a plain shield).
-	inline RE::TESObjectARMO* PickFor(std::uint64_t a_seed, int a_level, int a_type = -1)
+	inline RE::TESObjectARMO* PickFor(std::uint64_t a_seed, int a_level, int a_type = -1, int a_minRarity = 1)
 	{
 		const auto pool = [&](int a_rarity) {
 			std::vector<RE::FormID> out;
@@ -219,7 +221,7 @@ namespace shielditems
 		int total = 0;
 		std::vector<RE::FormID> lists[7];
 		for (int r = 1; r <= 6; ++r) {
-			if (a_level >= kLevelFor[r]) {
+			if (r >= a_minRarity && a_level >= kLevelFor[r]) {
 				lists[r] = pool(r);
 				if (!lists[r].empty()) {
 					total += kWeight[r];
@@ -272,6 +274,13 @@ namespace shielditems
 			shield::Remove(a_actor);
 			SKSE::log::info("shield items: {:08X}{} took its shield off", id, a_player ? " (the player)" : "");
 		}
+	}
+
+	// a boss: a named person (the base record is flagged unique) or one of a high level
+	inline bool IsBoss(RE::Actor* a_actor)
+	{
+		const auto base = a_actor->GetActorBase();
+		return (base && base->IsUnique()) || a_actor->GetLevel() >= g_bossLevel;
 	}
 
 	inline bool IsPerson(RE::Actor* a_actor)
@@ -343,15 +352,19 @@ namespace shielditems
 					continue;
 				}
 			}
-			if (Mix(id) % 100 >= static_cast<std::uint64_t>(g_enemyPercent)) {
+			// the chance grows with the level (the user's choice); a boss always has one, rare or better, whatever its level
+			const bool boss = IsBoss(actor) && actor->IsHostileToActor(a_player);
+			const int  level = actor->GetLevel();
+			const int  chance = boss ? 100 : static_cast<int>(std::clamp(g_enemyPercent + g_perLevel * (std::max)(0, level - 1), 0.0f, 95.0f));
+			if (Mix(id) % 100 >= static_cast<std::uint64_t>(chance)) {
 				continue;
 			}
-			if (const auto armor = PickFor(Mix(id), actor->GetLevel())) {
+			if (const auto armor = boss ? PickFor(Mix(id), (std::max)(level, 15), -1, 3) : PickFor(Mix(id), level)) {
 				PutOn(actor, armor);
 				++gave;
 				static std::atomic_int told{ 0 };
 				if (told.fetch_add(1) < 25) {
-					SKSE::log::info("shield items: {:08X} (level {}) is given \"{}\"", id, actor->GetLevel(), armor->GetName());
+					SKSE::log::info("shield items: {:08X} (level {}{}) is given \"{}\" (chance {} percent)", id, level, boss ? ", a boss" : "", armor->GetName(), chance);
 				}
 			}
 		}
@@ -371,7 +384,7 @@ namespace shielditems
 
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override
 		{
-			if (!g_ready || g_dropPercent >= 100 || !a_event || !a_event->actorDying || !a_event->dead) {
+			if (!g_ready || !a_event || !a_event->actorDying || !a_event->dead) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const auto dying = a_event->actorDying->As<RE::Actor>();
@@ -379,7 +392,7 @@ namespace shielditems
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			static thread_local std::mt19937 rng{ std::random_device{}() };
-			if (static_cast<int>(rng() % 100) < g_dropPercent) {
+			if (IsBoss(dying) || static_cast<int>(rng() % 100) < g_dropPercent) {  // a boss always leaves its shield; the others by the settings file's chance
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const RE::FormID body = dying->GetFormID();
@@ -422,6 +435,13 @@ namespace shielditems
 			number(0, 61, g_slot);
 		} else if (a_key == "EnemyShieldPercent") {
 			number(0, 100, g_enemyPercent);
+		} else if (a_key == "EnemyShieldPerLevel") {
+			try {
+				g_perLevel = std::clamp(std::stof(a_value), 0.0f, 20.0f);
+			} catch (...) {
+			}
+		} else if (a_key == "ShieldBossLevel") {
+			number(1, 1000, g_bossLevel);
 		} else if (a_key == "ShieldDropPercent") {
 			number(0, 100, g_dropPercent);
 		} else if (a_key == "StarterShield") {

@@ -173,13 +173,15 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
-  SHIELDS (0.39.0): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load). New in 0.39.0:
+  SHIELDS (0.39.1; the loot chances below are the user\'s answers to the interview): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load). New in 0.39.0:
     - the shield bar: over your health bar, the upper half is the shield (blue) and the lower half your real health (red); the same over the enemy's bar. The game's own bar is covered; the
       settings ShieldHud, ShieldHudMode (2 = a thin bar above the game's bar instead), ShieldHudEnemy, ShieldHudX/Y/Width/Height (and ...Enemy...) and ShieldHudLog are in
       Data\\SKSE\\Plugins\\SkylandsNative.ini. The log (SkylandsNative.log, lines "shield hud:") says where the game's bars were found; send it if a bar sits wrong.
     - shield items: about 370 armor items built from Borderlands 2's parts (body, battery and capacitor of different manufacturers, the type's accessory, the rarity's material; the numbers
       are the game's own grades), worn in a slot nothing else in your load order uses (setup log line "shields: the items are worn in slot N"; ini ShieldSlot). You are given one to start;
-      some of the people you meet carry one (EnemyShieldPercent) and it is on their body when they die (ShieldDropPercent). The type effects (nova, spike, ...) are in the item text but not active yet.
+      people carry one with a chance that grows with their level (EnemyShieldPercent 10 + EnemyShieldPerLevel 2 a level, at most 95), bosses (named, or level 35+) always, rare or better; a dead person's shield stays
+      on the body 25 percent of the time (ShieldDropPercent), a boss's always. Shields also turn up in boss chests (about a quarter of the ammo entries), in the stock of smiths, armorers and general stores,
+      and lying on the ground they get the rarity beam like the guns. The type effects (nova, spike, ...) are in the item text but not active yet.
     - the settings file has a new version: your old values are kept as SkylandsNative.ini.old.
   Run-GunModelSurvey.bat reads Borderlands 2 and writes work\\gun-model-survey.json (what the real mesh files look like);
   send it whenever the native or UModel method builds fewer meshes than it should.
@@ -192,7 +194,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-131.zip"
+    out = dist / "Skylands-TestBuild-132.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

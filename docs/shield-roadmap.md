@@ -283,7 +283,16 @@ The user (stage 1 "looks like it worked") asked for the HUD, the item variations
 1. *The extra slot.* Skyrim has 32 biped slots (30-61) and no way to add one. The installer scans the load order and takes one that nothing uses (60 first); `ShieldSlot` in the ini keeps it. The shield item has no worn model, so nothing is drawn for it.
 2. *The plugin does the equipping, not Papyrus.* Items are found by keyword when the game loads; people near the player are given one by a roll that depends only on their form id (stable across loads) and put it on with `ActorEquipManager`. No script changed, so no ghost-script risk.
 3. *Capacity base.* BL2's capacity formula does not fit Skyrim's health, so the base is `capacity_ratio` 0.35 of the wearer's max health (design), and BL2's grades scale it (a typical rare is about 0.45, a Pangolin body adds up to +24 % per part).
-4. *Enemy shield chance* 30 % of people near the player, rarity by level with the guns' weights. These are placeholders until the interview about loot.
+4. *Enemy shield chance* was a placeholder until the loot interview (section 12).
 
 **HUD.** `shieldhud.h` covers the game's health bar with its own (upper half shield, lower half health) and does the same over the enemy bar. Because nothing about the game's bar geometry is known, it reads `getBounds` of the clips named in the HUD base clip and logs
 what it finds; the ini keys move and size it. If that fails there are two fallbacks already in: `ShieldHudMode=2` (a thin bar above the game's) and `ShieldHud=0` (the plain lines). Options not built: a number beside the bar, a bar under the crosshair, or a bar in the style of BL2 beside the health bar.
+
+## 12. The loot interview (answered by the user after 0.39.0) and what 0.39.1 does with it
+| question | answer | in the build |
+|---|---|---|
+| how often does a worn shield stay on the body | rarely (25 %) | `ShieldDropPercent` 25; the plugin removes the shield from the body 0.9 s after death otherwise (not inside the death event) |
+| who carries a shield | tougher = more likely | 10 % at level 1 + 2 % per level, at most 95 % (`EnemyShieldPercent`, `EnemyShieldPerLevel`) |
+| where else | chests and containers, merchants, rarity beam on dropped shields | boss chests (the ammo list they already hold gets shield entries), merchants' vendor chests, the beam form list |
+| rarity by level | the level gates, and better loot from bosses | gates 1/3/8/15/30 with weights 122:50:20:6:1; a boss (named or level 35+) always has a rare or better shield and always leaves it |
+Everything is a number in the settings file or the shields sheet (`sheets/shields.json`), so the odds can be changed without a new build.

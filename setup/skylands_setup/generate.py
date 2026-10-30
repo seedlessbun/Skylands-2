@@ -610,7 +610,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.39.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.39.1"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -1129,7 +1129,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
-    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE", "PROJ", "EXPL", "SNDR"})
+    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE", "PROJ", "EXPL", "SNDR", "KYWD", "CONT"})
     for key in [k for k in (formids or {}) if k.startswith("STAT:SkylandsGunView_")]:
         del formids[key]  # left by builds that kept these in Skylands.esp, which made it too big to stay light
     p = esp.Plugin(PLUGIN, MASTERS, ids=formids)
@@ -1431,7 +1431,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
             palette.setdefault("Anshin", (84, 168, 150))
             palette.setdefault("Pangolin", (112, 92, 64))
             shields.build(view, m, out_data, rarity_keywords, (model_sources or {}).get("native"), report, report.setdefault("model_log", []).append, shields_sheet=sheet,
-                          bl2_parts=bl2.get("shield_parts"), slot=shield_slot, stats_effect=stats_effect, tints=palette,
+                          bl2_parts=bl2.get("shield_parts"), slot=shield_slot, stats_effect=stats_effect, tints=palette, beam_list=gun_list,
+                          chest_list=next((r for r in view.records if r.type == "LVLI" and r.form_id == ammo_drop.form_id), None),
                           rarity_colors={row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()}, seed=seed)
         except Exception as e:  # noqa: BLE001 - the shields must never stop the install
             report["shields_error"] = f"{type(e).__name__}: {e}"

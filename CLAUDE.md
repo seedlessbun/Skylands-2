@@ -512,7 +512,7 @@ Other commands:
   If the player's max health looks wrong after tests: console `player.modav health -<bonus>` (the bonus is in the log).
 - 0.38.1 in game (user): "Shields look like they worked." (logs not re-read here; the deep report and setup log were). The user then asked, while away, for (1) a shield HUD over the player's and the enemies' health bars (shield = upper half
   blue, health = lower half red), (2) shield variations from BL2's parts and manufacturers with the real stats, (3) a new item slot for them, enemies and player equipping randomised shields, (4) as an extra, shields in loot tables, with
-  an INTERVIEW about the chances BEFORE any numbers go in (not done yet: ask with AskUserQuestion; `ShieldDropPercent` 100 and `EnemyShieldPercent` 30 are placeholders).
+  an INTERVIEW about the chances BEFORE any numbers go in (DONE after 0.39.0 was sent; the answers are in 0.39.1 below).
 - 0.39.0 (TestBuild-131, plugin 1.18.0 = "SkylandsNative 370"): (a) HUD `native/skse/src/shieldhud.h` (called at the end of `shield::Update`, 33 ms): finds the game's bars in the HUD movie (`_root.HUDMovieBaseInstance.HealthMeterAnim`/`Health` for
   the player, `EnemyHealth_mc` and its parts for the enemy in the crosshair, via `getBounds(_root)`), covers them with its own clip `_root.SkylandsShield` (backing, red lower half = real health, blue upper half = shield, orange when low,
   lighter when recharging, white flash when it breaks), fades with the game's bar (`_alpha`/`_visible` of the clip and its parents), remembers the bar's full width (when the game shows it full). `State.hpFrac` and `shield::ViewOf` feed it.
@@ -531,6 +531,14 @@ Other commands:
   settings file is kept as .ini.old and the test shields (TestShield/TestEnemyShields) are 0 with items. UNCONFIRMED in game: everything (that the slot is free, that the ARMO with an empty ARMA equips and shows in the slot data, NPC equip via `EquipObject`, the mesh
   cut/scale/texture, the stats card text on an armor enchantment, the resist enchantment donors `^EnchArmor.*Resist(Fire|Shock|Poison|Magic)` being found, the HUD). The type effects (nova, spike, amp, roid, absorb, booster, turtle, adaptive) are NOT active; the item text says so.
   Read first in the next logs: setup log "shields:" lines (slot, items, meshes, part tables), SkylandsNative.log "shield items:" and "shield hud:" lines.
+- 0.39.1 (TestBuild-132, plugin 1.18.1 = "SkylandsNative 371"): the loot interview, answered by the user: (1) a worn shield stays on a dead body 25 percent of the time (`ShieldDropPercent` 25); (2) "tougher = more likely": the chance a person carries
+  one is `EnemyShieldPercent` 10 + `EnemyShieldPerLevel` 2 per level above 1, at most 95 (`shielditems.h` Pump); (3) also chests and containers, merchants, and the rarity beam on loose shields; (4) "level gates and better loot from bosses": rarity by level
+  gates (common 1, uncommon 3, rare 8, epic 15, legendary 30; weights 122:50:20:6:1) and a BOSS (named: the base record is flagged unique; or level >= `ShieldBossLevel` 35; and hostile to the player when it is given) always carries one of rare or better
+  and always leaves it on the body (my reading of "better loot from bosses"; say so if the user meant something else). Implementation, all in the models plugin (`shields.loot`): per-rarity leveled lists `SkylandsShieldTier_<n>`, `SkylandsShieldsAny`/`Good` (gated entries,
+  the guns' weights), chests: the overridden `SkylandsAmmoDrop` (boss chests already hold it) gets shield entries from the Good list (about `chest_chance` 25 percent of its entries), merchants: every vendor chest (CONT) of Skyrim.esm with "vendor" and
+  blacksmith/smith/armor/general in its editor id (max 40, logged: "shield loot: ... merchant chests stock them") is overridden with one `SkylandsShieldStock` entry (chance none 50 percent), beams: the `SkylandsGunList` FLST (Skylands.esp's, untouched) is
+  overridden in the second plugin with every shield appended, so the quest's existing 4 s scan (`FindRandomReferenceOfAnyTypeInList` -> `Consider` by the base's `SkylandsRarity_` keyword) puts the beam on a loose shield: NO Papyrus changed. Shields also carry the vanilla
+  `VendorItemClothing` keyword so merchants buy them. UNCONFIRMED in game: all of it (that the vendor chest names match real merchants, that vendor chests restock a leveled list entry, that ARMO bases work in `FindRandomReferenceOfAnyTypeInList`, the boss test).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

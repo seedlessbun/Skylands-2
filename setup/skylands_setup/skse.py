@@ -193,10 +193,13 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
         lines += [
             "; shield items: the biped slot they are worn in (30-61; the installer picks one that nothing in your load order uses; change it here if another mod wants it, and reinstall)",
             f"ShieldSlot={slot}",
-            "; the share of the people near you (percent) who get a shield item of their own when you come near; people you have not met are decided once by their id, so a loaded game gives the same ones",
+            "; who carries a shield: the chance (percent) for a person of level 1, and this much more for every level above 1 (at most 95). A boss (a named person, or ShieldBossLevel and higher) always has one, rare or better.",
+            "; Each person is decided once by their own id, so a loaded game gives the same people shields.",
             f"EnemyShieldPercent={S.SHIELDS['enemy_percent'].value:g}",
-            "; the share of a dead person's shield that stays on the body to be looted (percent). The loot chances are still to be agreed; 100 = every shield worn is lootable",
-            "ShieldDropPercent=100",
+            f"EnemyShieldPerLevel={S.SHIELDS['enemy_percent_per_level'].value:g}",
+            f"ShieldBossLevel={S.SHIELDS['boss_level'].value:g}",
+            "; how often a dead person's shield stays on the body to be looted (percent); a boss always leaves its shield",
+            f"ShieldDropPercent={S.SHIELDS['drop_percent'].value:g}",
             "; you are given one shield to start (1) or not (0)",
             "StarterShield=1",
         ]

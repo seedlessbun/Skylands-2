@@ -406,8 +406,76 @@ def find_effects(m, pattern: str):
     return None
 
 
+# rarity level -> the player level from which loot lists offer it (the plugin's carriers use the same gates, shielditems.h kLevelFor)
+LEVEL_GATE = {1: 1, 2: 3, 3: 8, 4: 15, 5: 30}
+VENDOR_CHEST = re.compile(r"vendor", re.I)
+VENDOR_KIND = re.compile(r"blacksmith|smith|armou?r|general", re.I)
+VENDOR_LIMIT = 40
+
+
+def gated_list(view: esp.Plugin, edid: str, entries: list[tuple[int, int, int]], chance_none: int = 0) -> esp.Rec:
+    """A leveled list whose entries (form id, count, the lowest player level that is offered it) are chosen among by the player's level."""
+    from . import generate
+
+    if len(entries) > generate.LIST_LIMIT:
+        raise ValueError(f"{edid}: {len(entries)} entries")
+    r = view.new("LVLI", edid)
+    r.add("OBND", b"\0" * 12).add("LVLD", bytes([chance_none])).add("LVLF", bytes([0x3])).add("LLCT", bytes([len(entries)]))
+    for fid, count, level in entries:
+        r.add("LVLO", generate.lvlo(fid, count, level))
+    return r
+
+
+def loot(view: esp.Plugin, m, ids_by_level: dict[int, list[int]], sheet: dict, beam_list, chest_list, report: dict, say) -> dict:
+    """Where shields turn up besides the people who wear them (the user's choices): boss chests (a share of the chest ammo list), merchants' stock (the vendor chests of smiths,
+    armorers and general stores), and the rarity beams (the shields join the form list the quest scans for guns lying loose; Skylands.esp is not touched, these are overrides)."""
+    from . import generate
+
+    tiers = {level: generate.leveled_list(view, f"SkylandsShieldTier_{level}", [(fid, 1) for fid in ids]).form_id for level, ids in sorted(ids_by_level.items())}
+    copies = {level: S.RARITIES[RARITY_OF_LEVEL[level]].loot_copies for level in tiers}  # the guns' weights: 122 : 50 : 20 : 6 : 1
+    anyone = [(tiers[lv], 1, LEVEL_GATE[lv]) for lv in sorted(tiers) for _ in range(copies[lv])]
+    good = [(tiers[lv], 1, LEVEL_GATE[lv]) for lv in sorted(tiers) if lv >= 3 for _ in range(copies[lv])]
+    drop_any = gated_list(view, "SkylandsShieldsAny", anyone)
+    drop_good = gated_list(view, "SkylandsShieldsGood", good)
+    stock = gated_list(view, "SkylandsShieldStock", anyone, chance_none=max(0, min(100, 100 - int(sheet["vendor_chance"]))))
+    out = {"tiers": len(tiers), "chest_entries": 0, "vendors": []}
+    if chest_list is not None:  # the boss chests already hold this list (for the ammo): some of its entries become shields
+        share = max(0.0, min(0.9, float(sheet["chest_chance"]) / 100.0))
+        have = len(chest_list.all("LVLO")) if hasattr(chest_list, "all") else sum(1 for s, _ in chest_list.subs if s == "LVLO")
+        k = max(1, round(have * share / (1.0 - share))) if share > 0 else 0
+        for _ in range(k):
+            chest_list.add("LVLO", generate.lvlo(drop_good.form_id, 1))
+        chest_list.set("LLCT", bytes([have + k]))
+        out["chest_entries"] = k
+    vendors = []
+    for rec in m.by_type.get("CONT", {}).values():
+        if len(vendors) >= VENDOR_LIMIT:
+            break
+        name = rec.edid
+        if VENDOR_CHEST.search(name) and VENDOR_KIND.search(name) and rec.all("CNTO"):
+            lst = generate.copy(rec)
+            n = struct.unpack("<I", lst.get("COCT") or struct.pack("<I", 0))[0]
+            last = max(i for i, (s, _) in enumerate(lst.subs) if s in ("COCT", "CNTO", "COED"))
+            lst.subs.insert(last + 1, ("CNTO", struct.pack("<II", stock.form_id, 1)))
+            lst.set("COCT", struct.pack("<I", n + 1))
+            view.override(lst)
+            vendors.append(name)
+    out["vendors"] = vendors
+    if beam_list is not None:  # the quest finds loose items of the bases in this list and puts a beam of the item's rarity keyword on them
+        every = esp.Rec("FLST", beam_list.form_id, list(beam_list.subs))
+        for ids in ids_by_level.values():
+            for fid in ids:
+                every.add("LNAM", esp.u32(fid))
+        view.override(every)
+        out["beams"] = sum(len(v) for v in ids_by_level.values())
+    report["shield_loot"] = out
+    say(f"shield loot: {len(tiers)} rarity lists; boss chests get {out['chest_entries']} shield entries among their ammo ones; {len(vendors)} merchant chests stock them ({', '.join(vendors[:6])}{' ...' if len(vendors) > 6 else ''}); "
+        f"{out.get('beams', 0)} shields join the beam form list")
+    return out
+
+
 def build(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], source, report: dict, say, *, shields_sheet: dict, bl2_parts: dict | None, slot: int,
-          stats_effect, tints: dict[str, tuple[int, int, int]], rarity_colors: dict[int, tuple[int, int, int]], seed: int = 4) -> dict:
+          stats_effect, tints: dict[str, tuple[int, int, int]], rarity_colors: dict[int, tuple[int, int, int]], seed: int = 4, beam_list=None, chest_list=None) -> dict:
     """Write the shield records into the models plugin `view` and the meshes and textures under out_data. Returns a summary for the report."""
     t = Tables(bl2_parts)
     builds = roll(t, shields_sheet, seed)
@@ -427,6 +495,8 @@ def build(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], 
         say(f"shields: no vanilla resistance enchantment for {missing}; those capacitors give no resistance")
     made = {"items": 0, "with_resist": 0}
     by_family: dict[str, int] = {}
+    ids_by_level: dict[int, list[int]] = {}
+    vendor_kw = m.find("KYWD", "VendorItemClothing")  # merchants buy items with a vendor keyword: the player can sell the shields too
     for b in builds:
         rarity = S.RARITIES[RARITY_OF_LEVEL[b.level]]
         text = stats_text(b, rarity.word, resist_pct)
@@ -459,14 +529,16 @@ def build(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], 
         if ench_id:
             a.add("EITM", esp.u32(ench_id))
         a.add("MOD2", esp.zstr(mesh)).add("BOD2", struct.pack("<II", 1 << (slot - 30), 2)).add("RNAM", esp.u32(DEFAULT_RACE))
-        kws = [marker, numbers[kw_name], rarity_keywords[b.level]]
+        kws = [marker, numbers[kw_name], rarity_keywords[b.level]] + ([vendor_kw.form_id] if vendor_kw is not None else [])
         a.add("KSIZ", esp.u32(len(kws))).add("KWDA", b"".join(esp.u32(k) for k in kws))
         a.add("DESC", esp.zstr(text)).add("MODL", esp.u32(arma.form_id))
         value = max(10, int(60 * rarity.value_mult * (1.0 + 2.0 * b.ratio)))
         a.add("DATA", struct.pack("<If", value, 1.0)).add("DNAM", struct.pack("<i", 0))
         made["items"] += 1
+        ids_by_level.setdefault(b.level, []).append(a.form_id)
         by_family[b.family.id] = by_family.get(b.family.id, 0) + 1
     models.flush_textures()
+    loot(view, m, ids_by_level, shields_sheet, beam_list, chest_list, report, say)
     summary = {"items": made["items"], "with_resist": made["with_resist"], "slot": slot, "families": by_family, "meshes": dict(models.stats), "textures": len(models.textures),
                "tables_replaced": t.replaced, "tables_read": t.read, "tables_wanted": t.wanted, "keywords": len(numbers)}
     report["shields"] = summary
