@@ -173,6 +173,8 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
+  SHIELDS (0.39.6): more humanoids count as people (draugr, falmer, vampires, forsworn ... by race name), the log names every actor that gets no shield, and it says whether a dead person's shield is still in their pack 1.5 s and 5 s after the death
+    (no shield has dropped yet even with ShieldDropPercent=100: send SkylandsNative.log after killing a few).
   SHIELDS (0.39.5): creature shields are gone (people only). The shield's recharge delay and recharge now stand still while the game is paused (a menu is open). Your shield bar is 20 px narrower.
     A person who loses their shield item is rolled again; the pump looks at 40 actors and gives 4 shields per pass (was 24 and 2).
   SHIELDS (0.39.4): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off).
@@ -202,7 +204,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-136.zip"
+    out = dist / "Skylands-TestBuild-137.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

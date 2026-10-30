@@ -573,6 +573,10 @@ Other commands:
   so neither the delay nor the recharge runs in a menu. (3) player bar `kPlayerNarrow` 13 HUD units (about 20 px at 1920), `ShieldHudWidth` still overrides. (4) possible cause of people with no shield: a person whose item is not found in the pack (`InPack`) lost the shield and, rolled once (`g_decided`), never got another;
   now `g_decided.erase(id)` re-rolls them; the pump looks at 40 actors (was 24) and gives 4 per pass (was 2). The pump's line says how many actors in reach have a shield. UNCONFIRMED in game: all of it. If many humanoids still have none read "shield items:" lines (is given / now has / living actors within reach)
   and check whether those races lack the `ActorTypeNPC` keyword (`IsPerson`; draugr, falmer, ... are probably creatures to it - the guns use the NPC keyword on the ACTOR, not the race, so the two tests may differ).
+- 0.39.5 in game (log ba8403cb, plugin 375, `ShieldDropPercent=100`): EVERY gun-armed enemy (FF000F00/19/27/48/4B) had a shield; the pump line said "8 living actors, 6 with a shield, 2 actors that are not people, 4 fighting the player" - the unshielded ones are what `IsPerson` rejects
+  (names not logged then). No shield dropped although DeathSink removes nothing at 100 percent (the shield should stay in the dead person's pack; cause unknown). 0.39.6 (TestBuild-137, plugin 1.18.6 = "SkylandsNative 376"): `IsPerson` also accepts races whose editor id
+  contains Draugr/Falmer/Vampire/Forsworn/Hagraven/Orc/Nord/Breton/... (UNCONFIRMED that race editor ids exist at run time); the first 30 rejected actors are logged with name and race ("is not a person: no shield"); every death of a shield wearer logs
+  "died wearing X: 1500 ms / 5000 ms later it is IN/NOT in its pack" - READ THAT to see why nothing drops (item removed by the game/outfit, or present but unlootable).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

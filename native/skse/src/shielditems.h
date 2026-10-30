@@ -287,7 +287,20 @@ namespace shielditems
 	inline bool IsPerson(RE::Actor* a_actor)
 	{
 		const auto race = a_actor->GetRace();
-		return race && race->HasKeywordString("ActorTypeNPC") && !a_actor->IsChild();
+		if (!race || a_actor->IsChild()) {
+			return false;
+		}
+		if (race->HasKeywordString("ActorTypeNPC")) {
+			return true;
+		}
+		// humanoids whose race does not carry the NPC keyword (the 0.39.5 log had enemies without a shield that were "not people")
+		const std::string_view edid = race->formEditorID.c_str() ? race->formEditorID.c_str() : "";
+		for (const std::string_view word : { "Draugr", "Falmer", "Vampire", "Forsworn", "Hagraven", "Orc", "Nord", "Breton", "Imperial", "Redguard", "Khajiit", "Argonian", "Elf", "Dwarven" }) {
+			if (edid.find(word) != std::string_view::npos) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// Game thread, every 400 ms (shield.h calls it in place of the test shields). Returns false when there are no shield items in this install.
@@ -372,7 +385,13 @@ namespace shielditems
 			}
 			++looked;
 			if (!IsPerson(actor)) {
-				++friendly;  // creatures, animals, the undead: no shield (the user wants people only, for now)
+				++friendly;  // creatures, animals: no shield (the user wants people only, for now)
+				static std::atomic_int named{ 0 };
+				if (named.fetch_add(1) < 30) {
+					const auto race = actor->GetRace();
+					const auto base = actor->GetActorBase();
+					SKSE::log::info("shield items: {:08X} \"{}\" (race {}) is not a person: no shield", id, base ? base->GetName() : "?", race && race->formEditorID.c_str() ? race->formEditorID.c_str() : "?");
+				}
 				continue;
 			}
 			++people;
@@ -440,6 +459,25 @@ namespace shielditems
 			const auto dying = a_event->actorDying->As<RE::Actor>();
 			if (!dying || dying->IsPlayerRef()) {
 				return RE::BSEventNotifyControl::kContinue;
+			}
+			{
+				// whether the shield is still in the body's pack a moment after the death and a few seconds later (nothing has dropped in the user's tests)
+				const RE::FormID bodyId = dying->GetFormID();
+				const RE::FormID item = shield::ItemOf(bodyId);
+				if (item) {
+					std::thread([bodyId, item]() {
+						for (const int ms : { 1500, 5000 }) {
+							std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+							shield::Queue([bodyId, item, ms]() {
+								const auto actor = RE::TESForm::LookupByID<RE::Actor>(bodyId);
+								const auto armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(item);
+								if (actor && armor) {
+									SKSE::log::info("shield items: {:08X} died wearing \"{}\": {} ms later it is {} its pack", bodyId, armor->GetName(), ms, InPack(actor, armor) ? "IN" : "NOT in");
+								}
+							});
+						}
+					}).detach();
+				}
 			}
 			static thread_local std::mt19937 rng{ std::random_device{}() };
 			if (IsBoss(dying) || static_cast<int>(rng() % 100) < g_dropPercent) {  // a boss always leaves its shield; the others by the settings file's chance

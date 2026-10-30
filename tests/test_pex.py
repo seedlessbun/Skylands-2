@@ -308,7 +308,7 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     for text in ("ShieldHudHideAfter", "FadeLevel", "shield::g_combatNear.load()", "drawn.alpha *="):
         assert text in hud_h, text
     assert "a_player->IsInCombat()" not in hud_h
-    assert "kVersion = 375" in main and "{ 1, 18, 5, 0 }" in main
+    assert "kVersion = 376" in main and "{ 1, 18, 6, 0 }" in main
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
