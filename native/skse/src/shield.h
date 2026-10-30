@@ -50,6 +50,9 @@ namespace shield
 		float             lastTold = -1.0f;
 		Clock::time_point toldAt{};
 		float             hpFrac = 1.0f;     // the real health left, 0..1 of the maximum without the shield (the display's lower half)
+		float             rate = 0.0f;       // recharge per second as a share of the capacity (0: the settings file's)
+		float             delay = 0.0f;      // seconds without a hit before the recharge (0: the settings file's)
+		RE::FormID        item = 0;          // the shield item this comes from (0: a test shield from the settings file)
 	};
 
 	// what the display needs of one actor, copied under the lock
@@ -66,6 +69,9 @@ namespace shield
 
 	// called at the end of every update on the game thread (the display hangs on it: shieldhud.h)
 	inline void (*g_afterUpdate)() = nullptr;
+	// called every 400 ms on the game thread in place of the test shields when shield items are in use (shielditems.h): it gives and takes away shields by what is worn
+	inline bool (*g_itemPump)(RE::PlayerCharacter*, RE::ProcessLists*) = nullptr;
+	inline bool g_starterGiven = false;  // the player has been handed a starter shield in this game (the co-save keeps it)
 
 	inline std::mutex                                                g_lock;
 	inline std::unordered_map<RE::FormID, State>                    g_states;
@@ -279,14 +285,15 @@ namespace shield
 				damage += excess;
 			}
 		}
-		if (s.shield < s.capacity && a_now - s.lastHit >= std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(g_delay))) {
+		const float delaySeconds = s.delay > 0.0f ? s.delay : g_delay, rateShare = s.rate > 0.0f ? s.rate : g_rate;
+		if (s.shield < s.capacity && a_now - s.lastHit >= std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(delaySeconds))) {
 			if (!s.recharging) {
 				s.recharging = true;
 				if (s.player) {
 					say = "Shield recharging";
 				}
 			}
-			const float x = (std::min)(s.capacity - s.shield, g_rate * s.capacity * a_dt);
+			const float x = (std::min)(s.capacity - s.shield, rateShare * s.capacity * a_dt);
 			if (x > 0.0f) {
 				Write(a_actor, RE::ACTOR_VALUE_MODIFIER::kDamage, x);
 				damage = (std::max)(0.0f, damage - x);
@@ -351,13 +358,48 @@ namespace shield
 		}
 	}
 
-	inline void Give(RE::Actor* a_actor, float a_frac, bool a_player)
+	inline void Give(RE::Actor* a_actor, float a_frac, bool a_player, float a_rate = 0.0f, float a_delay = 0.0f, RE::FormID a_item = 0)
 	{
 		State s;
 		s.frac = a_frac;
 		s.player = a_player;
+		s.rate = a_rate;
+		s.delay = a_delay;
+		s.item = a_item;
 		const std::lock_guard guard(g_lock);
 		g_states[a_actor->GetFormID()] = s;
+	}
+
+	// a shield goes away: its bonus comes off Health (the damage that belonged to the shield is given back first, so the real health stays what it was)
+	inline void Remove(RE::Actor* a_actor)
+	{
+		float capacity = 0.0f, shield = 0.0f;
+		{
+			const std::lock_guard guard(g_lock);
+			const auto            it = g_states.find(a_actor->GetFormID());
+			if (it == g_states.end()) {
+				return;
+			}
+			if (it->second.applied) {
+				capacity = it->second.capacity;
+				shield = it->second.shield;
+			}
+			g_states.erase(it);
+		}
+		Strip(a_actor, capacity, shield);
+	}
+
+	inline RE::FormID ItemOf(RE::FormID a_actor)
+	{
+		const std::lock_guard guard(g_lock);
+		const auto            it = g_states.find(a_actor);
+		return it == g_states.end() ? 0 : it->second.item;
+	}
+
+	inline bool Has(RE::FormID a_actor)
+	{
+		const std::lock_guard guard(g_lock);
+		return g_states.contains(a_actor) || g_stale.contains(a_actor);
 	}
 
 	inline void Acquire(RE::PlayerCharacter* a_player, RE::ProcessLists* a_lists)
@@ -443,7 +485,9 @@ namespace shield
 
 		if (now - lastAcquire > std::chrono::milliseconds(400)) {
 			lastAcquire = now;
-			Acquire(player, lists);
+			if (!g_itemPump || !g_itemPump(player, lists)) {  // no shield items in this game: the settings file's test shields
+				Acquire(player, lists);
+			}
 		}
 		const float dt = (std::min)(0.25f, std::chrono::duration<float>(now - last).count());
 		last = now;
@@ -539,6 +583,7 @@ namespace shield
 
 	constexpr std::uint32_t kUniqueId = 0x48534B53;  // 'SKSH'
 	constexpr std::uint32_t kRecord = 0x444C4853;    // 'SHLD'
+	constexpr std::uint32_t kStarter = 0x54525453;   // 'STRT': the player has been given a starter shield
 
 	inline void OnSave(SKSE::SerializationInterface* a_intfc)
 	{
@@ -569,7 +614,10 @@ namespace shield
 				a_intfc->WriteRecordData(e.shield);
 			}
 		}
-		SKSE::log::info("shield: save - {} shield bonuses recorded in the co-save", entries.size());
+		if (g_starterGiven && a_intfc->OpenRecord(kStarter, 1)) {
+			a_intfc->WriteRecordData(std::uint8_t{ 1 });
+		}
+		SKSE::log::info("shield: save - {} shield bonuses recorded in the co-save{}", entries.size(), g_starterGiven ? ", the starter shield is marked as given" : "");
 	}
 
 	inline void OnRevert(SKSE::SerializationInterface*)
@@ -578,12 +626,19 @@ namespace shield
 		const std::lock_guard guard(g_lock);
 		g_states.clear();
 		g_stale.clear();
+		g_starterGiven = false;
 	}
 
 	inline void OnLoad(SKSE::SerializationInterface* a_intfc)
 	{
 		std::uint32_t type = 0, version = 0, length = 0;
 		while (a_intfc->GetNextRecordInfo(type, version, length)) {
+			if (type == kStarter && version == 1) {
+				std::uint8_t flag = 0;
+				a_intfc->ReadRecordData(flag);
+				g_starterGiven = flag != 0;
+				continue;
+			}
 			if (type != kRecord || version != 1) {
 				continue;
 			}

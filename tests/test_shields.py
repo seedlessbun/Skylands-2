@@ -119,3 +119,19 @@ def test_the_install_writes_shield_items_into_the_models_plugin_only(tmp_path):
         assert mesh.is_file(), mesh
     assert resist == rep["shields"]["with_resist"] > 0
     assert any("shields:" in line for line in rep["model_log"])
+
+
+def test_the_models_plugin_with_shields_is_accepted_by_esplugin(tmp_path):
+    """Set ESPCHECK to tools/espcheck's binary: an independent parser must accept the plugin with the shield records."""
+    import os
+    import subprocess
+
+    import pytest
+
+    exe = os.environ.get("ESPCHECK")
+    if not exe:
+        pytest.skip("set ESPCHECK to the esplugin checker")
+    bl2 = test_generate.staff_bl2(tmp_path)
+    generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff", shield_slot=60)
+    r = subprocess.run([exe, str(tmp_path / "out" / "Data" / "SkylandsGunModels.esp")], capture_output=True, text=True)
+    assert r.returncode == 0 and "parsed OK" in r.stdout, r.stdout + r.stderr

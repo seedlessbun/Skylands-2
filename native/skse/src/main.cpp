@@ -11,10 +11,11 @@
 #include "PCH.h"
 #include "shield.h"
 #include "shieldhud.h"
+#include "shielditems.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 360;  // 1.17.0
+	constexpr std::int32_t kVersion = 370;  // 1.18.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -136,7 +137,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -2530,12 +2531,21 @@ namespace
 			ReadyHook::Install();
 			StartPump();
 			shield::g_afterUpdate = &shieldhud::Frame;
+			shielditems::Catalog();
+			if (shielditems::g_ready) {
+				shield::g_itemPump = &shielditems::Pump;
+			}
 			shield::StartPump();
 			if (const auto holder = RE::ScriptEventSourceHolder::GetSingleton()) {
 				holder->AddEventSink(CastSink::Get());
 				SKSE::log::info("enemy cast listener registered");
 				holder->AddEventSink(DeathSink::Get());
 				SKSE::log::info("ammo drop listener registered");
+				if (shielditems::g_ready) {
+					holder->AddEventSink(shielditems::EquipSink::Get());
+					holder->AddEventSink(shielditems::DeathSink::Get());
+					SKSE::log::info("shield item listeners registered");
+				}
 			}
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
@@ -2586,7 +2596,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 17, 0, 0 },
+	.Version = { 1, 18, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

@@ -292,6 +292,11 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     for text in ("getBounds", "SkylandsShield", "HUDMovieBaseInstance", "EnemyHealth_mc", "HealthMeterAnim", "GetActiveTarget", "shield::ViewOf", "ShieldHudMode", "ShieldHudEnemy", "ShieldHudX"):
         assert text in hud_h, text  # the shield display reads the game's bars and draws over them
     assert "shield::g_afterUpdate = &shieldhud::Frame" in main and "shieldhud::Config(" in main
+    items_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shielditems.h").read_text(encoding="utf-8")
+    for text in ("SkylandsShield_", "GetWornArmor", "EquipObject", "AddObjectToContainer", "TESEquipEvent", "TESDeathEvent", "ShieldSlot", "EnemyShieldPercent", "ShieldDropPercent", "StarterShield", "formEditorID",
+                 "GetFormArray<RE::TESObjectARMO>", "shield::Give(", "shield::Remove("):
+        assert text in items_h, text  # the plugin finds the shield items by their keywords and follows what is worn in the slot
+    assert "shield::g_itemPump = &shielditems::Pump" in main and "shielditems::Config(" in main and "shielditems::EquipSink::Get()" in main
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
