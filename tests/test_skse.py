@@ -95,3 +95,11 @@ def test_the_settings_file_keeps_the_players_values_while_its_version_is_the_sam
     game.write_text(other, encoding="utf-8")
     skse.stage_plugin(stage, bin_dir, game)
     assert (stage / "Data" / "SKSE" / "Plugins" / "SkylandsNative.ini.old").read_text() == other  # the old file is kept next to the new one
+
+
+def test_the_settings_file_has_the_shield_display_keys_and_old_settings_keep_working():
+    text = skse.default_ini()
+    for key in ("ShieldHud=1", "ShieldHudMode=1", "ShieldHudEnemy=1", "ShieldHudFollow=1", "ShieldHudAlign=0", "ShieldHudX=0", "ShieldHudEnemyWidth=0", "ShieldHudLog=0"):
+        assert key in text, key
+    merged, kept = skse.merge_ini(text, "[Skylands]\nIniVersion=3\nShieldHud=0\nShieldHudX=12\n")
+    assert kept and "ShieldHud=0" in merged and "ShieldHudX=12" in merged and "ShieldHudMode=1" in merged

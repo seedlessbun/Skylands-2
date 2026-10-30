@@ -29,7 +29,8 @@ namespace shield
 	inline float g_low = 0.25f;         // ShieldLow: below this share the shield is "low"
 	inline float g_testPlayer = 0.0f;   // TestShield: the player's shield as a share of max health (given in percent in the file)
 	inline float g_testEnemy = 0.0f;    // TestEnemyShields: the same for every other person near the player
-	inline bool  g_messages = true;     // ShieldMessages=0 silences the on-screen lines (there is no bar yet)
+	inline bool  g_messages = true;     // ShieldMessages=0 silences the on-screen lines (they stay quiet anyway while the display is up)
+	inline std::atomic_bool g_displayLive{ false };  // the shield display has been drawn: the plain lines are not needed
 
 	inline std::atomic<const char*> g_stage{ "start" };
 
@@ -48,7 +49,23 @@ namespace shield
 		bool              player = false;
 		float             lastTold = -1.0f;
 		Clock::time_point toldAt{};
+		float             hpFrac = 1.0f;     // the real health left, 0..1 of the maximum without the shield (the display's lower half)
 	};
+
+	// what the display needs of one actor, copied under the lock
+	struct View
+	{
+		bool  has = false;
+		float shield = 0.0f;    // 0..1 of the capacity
+		float health = 1.0f;    // 0..1 of the real health
+		float capacity = 0.0f;  // points
+		bool  recharging = false;
+		bool  broken = false;
+		bool  low = false;
+	};
+
+	// called at the end of every update on the game thread (the display hangs on it: shieldhud.h)
+	inline void (*g_afterUpdate)() = nullptr;
 
 	inline std::mutex                                                g_lock;
 	inline std::unordered_map<RE::FormID, State>                    g_states;
@@ -285,6 +302,11 @@ namespace shield
 			}
 		}
 		s.prevDamage = damage;
+		{
+			const float real = a_actor->GetActorValueMax(RE::ActorValue::kHealth) - s.capacity;
+			const float realDamage = (std::max)(0.0f, damage - (s.capacity - s.shield));
+			s.hpFrac = real > 1.0f ? std::clamp(1.0f - realDamage / real, 0.0f, 1.0f) : 1.0f;
+		}
 		if (s.pendingBreak) {
 			s.pendingBreak = false;
 			say = s.player ? "SHIELD BROKEN" : "Enemy shield down";
@@ -303,9 +325,28 @@ namespace shield
 		return say;
 	}
 
+	inline View ViewOf(RE::FormID a_id)
+	{
+		View                  v;
+		const std::lock_guard guard(g_lock);
+		const auto            it = g_states.find(a_id);
+		if (it == g_states.end() || !it->second.applied || it->second.capacity <= 0.0f) {
+			return v;
+		}
+		const State& s = it->second;
+		v.has = true;
+		v.capacity = s.capacity;
+		v.shield = std::clamp(s.shield / s.capacity, 0.0f, 1.0f);
+		v.health = s.hpFrac;
+		v.recharging = s.recharging;
+		v.broken = s.shield <= 0.001f;
+		v.low = v.shield > 0.0f && v.shield <= g_low;
+		return v;
+	}
+
 	inline void Tell(const std::string& a_text)
 	{
-		if (g_messages) {
+		if (g_messages && !g_displayLive.load()) {
 			RE::SendHUDMessage::ShowHUDMessage(a_text.c_str(), nullptr, true);
 		}
 	}
@@ -458,6 +499,10 @@ namespace shield
 				SKSE::log::info("shield stats: shield absorbed damage {} times ({:.0f} points), {} breaks, {} heals seen; observer hook saw Health changes: damage {}, restore/positive {}, temporary {}, other {}, our own {}; {} shields now",
 					g_nAbsorbed.load(), g_absorbedTimes100.load() / 100.0, g_nBreaks.load(), g_nHeals.load(), g_nNeg.load(), g_nPos.load(), g_nTemp.load(), g_nOther.load(), g_nSelf.load(), ids.size());
 			}
+		}
+		if (g_afterUpdate) {
+			g_stage = "shield display";
+			g_afterUpdate();
 		}
 	}
 

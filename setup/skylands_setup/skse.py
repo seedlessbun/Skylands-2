@@ -187,6 +187,26 @@ def shield_ini(bl2_values: dict | None = None) -> str:
         row = S.SHIELDS[row_id]
         value = bl2_values.get(row_id, row.value)
         lines.append(f"{key}={value:g}")
+    lines += [
+        "; the shield display over your health bar and the enemy's (upper half shield, lower half health). ShieldHud=0 turns it off (the plain lines come back).",
+        "; ShieldHudMode=2 leaves the game's bars alone and puts a thin shield bar above them. ShieldHudEnemy=0 turns off the enemy's. ShieldHudFollow=0 ignores the game's fading of its bars.",
+        "; Where the game's bars are is read from the game; if a bar sits wrong, move or size it in HUD pixels (1280 x 720): X/Y shift it, Width/Height set the size (0 = as found).",
+        "; ShieldHudAlign: 0 fills from the middle (like the game's bars), 1 from the left, 2 from the right. ShieldHudLog=1 writes a line about the bars every 5 seconds.",
+        "ShieldHud=1",
+        "ShieldHudMode=1",
+        "ShieldHudEnemy=1",
+        "ShieldHudFollow=1",
+        "ShieldHudAlign=0",
+        "ShieldHudX=0",
+        "ShieldHudY=0",
+        "ShieldHudWidth=0",
+        "ShieldHudHeight=0",
+        "ShieldHudEnemyX=0",
+        "ShieldHudEnemyY=0",
+        "ShieldHudEnemyWidth=0",
+        "ShieldHudEnemyHeight=0",
+        "ShieldHudLog=0",
+    ]
     return "\n".join(lines) + "\n"
 
 

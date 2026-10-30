@@ -288,6 +288,10 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     shield_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shield.h").read_text(encoding="utf-8")
     for text in ('"ShieldPercent"sv', '"ShieldMax"sv', "ModActorValue", "table[6]", "RE::ActorValue::kHealth", "ACTOR_VALUE_MODIFIER::kDamage", "ACTOR_VALUE_MODIFIER::kTemporary", "AsActorValueOwner", "SetSaveCallback", "SetRevertCallback", "SetLoadCallback", "GetActorValueMax"):
         assert text in shield_h, text  # the stub's two shield functions are registered, and the hook is on slot 6 of the ActorValueOwner table
+    hud_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shieldhud.h").read_text(encoding="utf-8")
+    for text in ("getBounds", "SkylandsShield", "HUDMovieBaseInstance", "EnemyHealth_mc", "HealthMeterAnim", "GetActiveTarget", "shield::ViewOf", "ShieldHudMode", "ShieldHudEnemy", "ShieldHudX"):
+        assert text in hud_h, text  # the shield display reads the game's bars and draws over them
+    assert "shield::g_afterUpdate = &shieldhud::Frame" in main and "shieldhud::Config(" in main
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
