@@ -295,7 +295,8 @@ def main(argv: list[str]) -> int:
         sk = skse.status(sky)
         for line in skse.describe(sk):
             say(f"  skse: {line}")
-        staged = skse.stage_plugin(stage, bin_dir, sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI)
+        staged = skse.stage_plugin(stage, bin_dir, sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI, data.get("shields"))
+        say(f"shields: read from Borderlands 2: {data.get('shields') or 'nothing (the sheet defaults are used)'}")
         say(f"SkylandsNative plugin: {'staged for install' if staged else 'not in this build (bin/SkylandsNative.dll is missing)'}")
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values
             (sky / "Data" / "Scripts" / old).unlink(missing_ok=True)

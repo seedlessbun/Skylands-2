@@ -108,3 +108,29 @@ def test_budget_runs_out_midway_keeps_partial_guns(tmp_path, monkeypatch):
     d = extract.extract(tmp_path / "bl2", None)
     assert any("weapons stopped early" in e for e in d["errors"])
     assert "guns" in d["weapons"]
+
+
+def test_shield_numbers_are_read_from_the_install_and_replace_the_sheet_defaults(tmp_path):
+    import struct
+
+    from fake_bl2 import ObjBuilder
+    from skylands_setup import skse
+
+    root = tmp_path / "bl2"
+    fake_bl2.pandora_install(root)
+    b = ObjBuilder()
+    delay = "GD_Shields.Misc.Att_UniversalShieldBaseDelayConstant"
+    b.obj(delay, "AttributeDefinition", b"")
+    b.obj(delay + ":ConstantAttributeValueResolver_0", "ConstantAttributeValueResolver", b.f("ConstantValue", 3.5))
+    b.exports[b.paths[delay] - 1]["body"] = struct.pack("<i", -1) + b.arr_objs("ValueResolverChain", [delay + ":ConstantAttributeValueResolver_0"]) + b.none()
+    part = lambda v: b.f("BaseValueConstant", v)  # noqa: E731
+    b.obj("GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_BaseRegenRatePercentage", "AttributeInitializationDefinition",
+          b.st("ValueFormula", "AttributeInitializationFormula", b.b("bEnabled", True) + b.st("Multiplier", "AttributeInitializationData", part(1.0)) +
+               b.st("Level", "AttributeInitializationData", part(0.16)) + b.st("Power", "AttributeInitializationData", part(1.0))))
+    (root / "WillowGame" / "CookedPCConsole" / "GD_Shields_Fake.upk").write_bytes(b.build())
+    data = extract.extract(root)
+    assert data["shields"] == {"delay_s": 3.5, "rate_fraction": 0.16}, data["errors"]
+    text = skse.shield_ini({"delay_s": 4.25})  # a value read from the files wins over the sheet's default
+    assert "ShieldDelay=4.25" in text and "ShieldRate=0.16" in text and "Shield=1" in text and "TestShield=60" in text
+    assert "ShieldDelay=3.5" in skse.shield_ini()  # nothing read: the sheet's default
+    assert text in skse.default_ini({"delay_s": 4.25})

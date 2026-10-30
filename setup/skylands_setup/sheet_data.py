@@ -251,6 +251,37 @@ RARITIES: dict[str, RaritiesRow] = {
 }
 
 @dataclass(frozen=True)
+class ShieldsRow:
+    """Every number of the shield feature. source 'bl2' = this value is (or will be) read from the player's Borderlands 2 files at install time and replaces the default here; 'design' = a Skylands choice with no Borderlands source yet. Rule from the user: when a Borderlands value for a design row is found, the row becomes 'bl2' and the file value replaces it. See docs/shield-roadmap.md."""
+
+    id: str
+    value: float
+    unit: str
+    source: str
+    bl2_object: str
+    note: str
+
+
+SHIELDS: dict[str, ShieldsRow] = {
+    'delay_s': ShieldsRow(id='delay_s', value=3.5, unit='seconds', source='bl2', bl2_object='GD_Shields.Misc.Att_UniversalShieldBaseDelayConstant', note='seconds without being hit before the shield starts to recharge'),
+    'rate_fraction': ShieldsRow(id='rate_fraction', value=0.16, unit='capacity per second', source='bl2', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_BaseRegenRatePercentage', note='recharge speed as a share of the capacity, per second (BL2: ValueFormula Level 0.16, Power 1.0, multiplier = capacity)'),
+    'gate': ShieldsRow(id='gate', value=0.0, unit='0 or 1', source='design', bl2_object='-', note='1 = a hit that empties the shield loses the rest of its damage (BL2 carries it into health)'),
+    'low_fraction': ShieldsRow(id='low_fraction', value=0.25, unit='share of capacity', source='design', bl2_object='Default__ShieldBarGFxObject', note='below this the low-shield warning shows'),
+    'ratio_common': ShieldsRow(id='ratio_common', value=0.3, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_CapacityMaxValue', note='shield capacity of a common shield (stage 3 items)'),
+    'ratio_uncommon': ShieldsRow(id='ratio_uncommon', value=0.4, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_CapacityMaxValue', note='uncommon'),
+    'ratio_rare': ShieldsRow(id='ratio_rare', value=0.55, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_CapacityMaxValue', note='rare'),
+    'ratio_very_rare': ShieldsRow(id='ratio_very_rare', value=0.75, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_CapacityMaxValue', note='very rare'),
+    'ratio_legendary': ShieldsRow(id='ratio_legendary', value=1.0, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_CapacityMaxValue', note='legendary'),
+    'ratio_etech': ShieldsRow(id='ratio_etech', value=1.2, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_ShieldItem_CapacityMaxValue', note='e-tech'),
+    'enemy_ratio': ShieldsRow(id='enemy_ratio', value=0.5, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_EnemyShield_CapacityMaxValue', note="capacity of an ordinary enemy's shield (stage 4)"),
+    'enemy_ratio_badass': ShieldsRow(id='enemy_ratio_badass', value=1.0, unit='share of max health', source='design', bl2_object='GD_Balance_HealthAndDamage.Shields.Init_EnemyShield_CapacityMaxValue', note="capacity of a named or boss enemy's shield (stage 4)"),
+    'enemy_percent': ShieldsRow(id='enemy_percent', value=30.0, unit='percent', source='design', bl2_object='GD_ItempoolsEnemyUse.Shields.Pool_Shields_Standard_EnemyUse', note='share of ordinary humans that spawn with a shield (BL2 per-pawn probabilities are 0.7 / 1.0; the user chose 30 to start)'),
+    'enemy_percent_named': ShieldsRow(id='enemy_percent_named', value=100.0, unit='percent', source='design', bl2_object='-', note='share of named and boss enemies that spawn with a shield'),
+    'test_shield_percent': ShieldsRow(id='test_shield_percent', value=60.0, unit='percent of max health', source='design', bl2_object='-', note='stage 1 only: the player gets a shield of this size with no item (0 = off)'),
+    'test_enemy_percent': ShieldsRow(id='test_enemy_percent', value=40.0, unit='percent of max health', source='design', bl2_object='-', note='stage 1 only: every other person near the player gets a shield of this size (0 = off)'),
+}
+
+@dataclass(frozen=True)
 class ShootingRow:
     """How Borderlands 2 guns shoot, read from the game by Run-ShootingSurvey.bat (GD_Weap_*.A_Weapons weapon types, FiringModes). Speeds are Borderlands units per second; the generator converts them. Per-manufacturer values differ (clip size 5-48, spread 1.0-8.0); these are the common defaults."""
 

@@ -359,6 +359,50 @@ def enemies(ix: Index, errors: list[str]) -> dict:
     return out
 
 
+def _constant_of(ix: Index, attr_path: str) -> float | None:
+    """The number an attribute holds when its first value resolver is a constant."""
+    props = ix.props(attr_path) or {}
+    resolver = _first(props.get("ValueResolverChain"))
+    rp = ix.props(resolver) if isinstance(resolver, str) else None
+    value = (rp or {}).get("ConstantValue")
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _formula_level(ix: Index, init_path: str) -> float | None:
+    """Level ** Power of a plain ValueFormula (a constant base and a constant power, no attribute in either); None when it is anything else."""
+    f = (ix.props(init_path) or {}).get("ValueFormula")
+    if not isinstance(f, dict):
+        return None
+    level, power = f.get("Level"), f.get("Power")
+    for part in (level, power):
+        if not isinstance(part, dict) or part.get("BaseValueAttribute") not in (None, "None") or part.get("InitializationDefinition") not in (None, "None"):
+            return None
+    try:
+        base = float(level.get("BaseValueConstant", 0.0)) * float(level.get("BaseValueScaleConstant", 1.0))
+        exponent = float(power.get("BaseValueConstant", 1.0)) * float(power.get("BaseValueScaleConstant", 1.0))
+        return base ** exponent
+    except (TypeError, ValueError):
+        return None
+
+
+def shield_stats(ix: Index, errors: list[str]) -> dict:
+    """The shield numbers that can be read straight from the player's files, keyed by row id of the shields sheet (sheets/shields.json). The installer writes
+    them into the plugin's settings in place of the sheet's defaults; a value that cannot be read is left out and the sheet's default stays."""
+    out: dict[str, float] = {}
+    rows = S.SHIELDS
+    value = _constant_of(ix, rows["delay_s"].bl2_object)
+    if value is not None and 0.1 <= value <= 30.0:
+        out["delay_s"] = round(value, 3)
+    else:
+        errors.append(f"shield recharge delay not read from {rows['delay_s'].bl2_object}")
+    value = _formula_level(ix, rows["rate_fraction"].bl2_object)
+    if value is not None and 0.01 <= value <= 2.0:
+        out["rate_fraction"] = round(value, 4)
+    else:
+        errors.append(f"shield recharge rate not read from {rows['rate_fraction'].bl2_object}")
+    return out
+
+
 def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget_minutes: float | None = None) -> dict:
     log: list[str] = []
 
@@ -373,7 +417,7 @@ def extract(bl2_root: Path, cache_dir: Path | None = None, progress=None, budget
     if budget_minutes:
         ix.deadline = time.process_time() + budget_minutes * 60
     data: dict = {"packages": len(ix.files), "index_errors": len(ix.errors)}
-    for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies), ("type_base", type_base)):
+    for key, fn in (("rarities", rarities), ("classes", classes), ("weapons", guns), ("enemies", enemies), ("type_base", type_base), ("shields", shield_stats)):
         t = time.time()
         say(f"Reading {key} ...")
         try:

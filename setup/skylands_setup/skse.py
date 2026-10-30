@@ -170,7 +170,31 @@ def merge_ini(default: str, old: str | None) -> tuple[str, bool]:
     return "\n".join(lines) + "\n", True
 
 
-def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None) -> str | None:
+# shield settings come from the shields sheet; a value read from the player's Borderlands 2 files (extract.shield_stats) replaces the sheet's default
+SHIELD_KEYS = {"delay_s": "ShieldDelay", "rate_fraction": "ShieldRate", "gate": "ShieldGate", "low_fraction": "ShieldLow",
+               "test_shield_percent": "TestShield", "test_enemy_percent": "TestEnemyShields"}
+
+
+def shield_ini(bl2_values: dict | None = None) -> str:
+    """The shield part of the settings file. bl2_values: {sheet row id: number read from Borderlands 2}."""
+    from . import sheet_data as S
+
+    bl2_values = bl2_values or {}
+    lines = ["; shields (docs/shield-roadmap.md). Numbers come from the shields sheet, replaced by the values read from your Borderlands 2 files where they exist.",
+             "; Shield=0 turns the feature off. TestShield / TestEnemyShields (stage 1 only): a shield of that percent of max health for you / for every other person nearby (0 = none)",
+             "Shield=1"]
+    for row_id, key in SHIELD_KEYS.items():
+        row = S.SHIELDS[row_id]
+        value = bl2_values.get(row_id, row.value)
+        lines.append(f"{key}={value:g}")
+    return "\n".join(lines) + "\n"
+
+
+def default_ini(bl2_values: dict | None = None) -> str:
+    return DEFAULT_INI.rstrip("\n") + "\n" + shield_ini(bl2_values)
+
+
+def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, bl2_shields: dict | None = None) -> str | None:
     """Put the Skylands plugin (if the build has it) and its settings in the stage folder, so they install and uninstall with the rest. The player's values in an
     installed settings file of the same IniVersion are kept; a file of another version is kept next to the new one as .old."""
     dll = Path(bin_dir) / PLUGIN_DLL
@@ -185,7 +209,7 @@ def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None) -
             old = Path(existing_ini).read_text(encoding="utf-8", errors="replace")
         except OSError:
             old = None
-    text, kept = merge_ini(DEFAULT_INI, old)
+    text, kept = merge_ini(default_ini(bl2_shields), old)
     (dest / PLUGIN_INI).write_text(text, encoding="utf-8")
     if old and not kept:
         (dest / (PLUGIN_INI + ".old")).write_text(old, encoding="utf-8")

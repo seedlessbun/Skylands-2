@@ -275,15 +275,19 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
                  "Int Function MeasuredTenths() Global Native", "Int Function ReloadMsNow() Global Native", "Int Function SpreadNowTenths() Global Native",
                  "Bool Function SetShotSound(Form akSound) Global Native", "Bool Function TriggerHeld() Global Native",
                  "Bool Function SetGunMode(Bool abOn) Global Native", "Bool Function TriggerPressed() Global Native", "Int Function Version() Global Native",
-                 "Bool Function TrackBeam(ObjectReference akGun, ObjectReference akBeam, ObjectReference akLight) Global Native", "Bool Function UntrackBeam(ObjectReference akGun) Global Native"):
+                 "Bool Function TrackBeam(ObjectReference akGun, ObjectReference akBeam, ObjectReference akLight) Global Native", "Bool Function UntrackBeam(ObjectReference akGun) Global Native",
+                 "Int Function ShieldPercent(Actor akActor) Global Native", "Int Function ShieldMax(Actor akActor) Global Native"):
         assert text in psc, text
     assert "String" not in psc and "afSpreadMult" in psc  # no native takes a string: 0.15.1's GunStat(Weapon, String) always read 0 in the game's script
     main = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
     for text in ('"FireGun"sv', '"GunClip"sv', '"GunIntervalMs"sv', '"GunReloadMs"sv', '"GunSpreadTenths"sv', '"Magazine"sv', '"ShotsFired"sv', '"Reloading"sv', '"RateTenths"sv', '"MeasuredTenths"sv', '"ReloadMsNow"sv', '"SpreadNowTenths"sv', '"SetShotSound"sv', "BSTempEffectParticle::Spawn", "Variable06", '"SetGunMode"sv', "bool a_on", '"TriggerHeld"sv', '"TriggerPressed"sv',
                  '"Version"sv', "RE::Actor* a_shooter, float a_right, float a_up, float a_forward, float a_spreadMult", "RE::StaticFunctionTag*, RE::TESObjectWEAP* a_weapon)",
-                 "TESSpellCastEvent", '"TrackBeam"sv', '"UntrackBeam"sv', "SkylandsGun_", "holder->AddEventSink(CastSink::Get())", "RE::ActorValue::kVariable06", "RE::ActorValue::kVariable07", "RE::ActorValue::kVariable08", "StartPump();"):
+                 "TESSpellCastEvent", '"TrackBeam"sv', '"UntrackBeam"sv', "SkylandsGun_", "holder->AddEventSink(CastSink::Get())", "RE::ActorValue::kVariable06", "RE::ActorValue::kVariable07", "RE::ActorValue::kVariable08", "StartPump();", "shield::Register(a_vm)", "shield::StartPump()", "shield::Config("):
         assert text in main, text  # the stub and the plugin's registrations say the same thing
     assert "GunStat" not in main
+    shield_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shield.h").read_text(encoding="utf-8")
+    for text in ('"ShieldPercent"sv', '"ShieldMax"sv', "ModActorValue", "table[6]", "RE::ActorValue::kHealth", "ACTOR_VALUE_MODIFIER::kDamage", "AsActorValueOwner"):
+        assert text in shield_h, text  # the stub's two shield functions are registered, and the hook is on slot 6 of the ActorValueOwner table
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")

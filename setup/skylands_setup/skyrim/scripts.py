@@ -2793,6 +2793,8 @@ def native_stub() -> Script:
             Function("SpreadNowTenths", return_type="Int", flags=both),
             Function("SetShotSound", return_type="Bool", flags=both, params=[("akSound", "Form")]),
             Function("SetReloadSounds", return_type="Bool", flags=both, params=[("akOut", "Form"), ("akIn", "Form"), ("akEnd", "Form")]),
+            Function("ShieldPercent", return_type="Int", flags=both, params=[("akActor", "Actor")]),
+            Function("ShieldMax", return_type="Int", flags=both, params=[("akActor", "Actor")]),
             Function("FireGun", return_type="Bool", flags=both,
                      params=[("akShooter", "Actor"), ("afRight", "Float"), ("afUp", "Float"), ("afForward", "Float"), ("afSpreadMult", "Float")]),
         ],

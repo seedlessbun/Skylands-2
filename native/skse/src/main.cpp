@@ -9,10 +9,11 @@
 // Built with CommonLibSSE-NG and Address Library, so it works on every runtime that Address Library supports.
 
 #include "PCH.h"
+#include "shield.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 330;  // 1.15.3
+	constexpr std::int32_t kVersion = 340;  // 1.16.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -134,6 +135,8 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
+			} else if (shield::Config(key, line.substr(eq + 1))) {
+				// a shield setting (shield.h)
 			} else if (key == "Convergence") {
 				try {
 					g_convergence = (std::max)(200.0f, std::stof(line.substr(eq + 1)));
@@ -2515,6 +2518,7 @@ namespace
 		a_vm->RegisterFunction("SpreadNowTenths"sv, "SkylandsNative"sv, SpreadNowTenths);
 		a_vm->RegisterFunction("SetShotSound"sv, "SkylandsNative"sv, SetShotSound);
 		a_vm->RegisterFunction("SetReloadSounds"sv, "SkylandsNative"sv, SetReloadSounds);
+		shield::Register(a_vm);
 		return true;
 	}
 
@@ -2524,6 +2528,7 @@ namespace
 			AttackHook::Install();
 			ReadyHook::Install();
 			StartPump();
+			shield::StartPump();
 			if (const auto holder = RE::ScriptEventSourceHolder::GetSingleton()) {
 				holder->AddEventSink(CastSink::Get());
 				SKSE::log::info("enemy cast listener registered");
@@ -2555,7 +2560,7 @@ namespace
 				GetModuleFileNameA(module, name, MAX_PATH);
 			}
 			const auto offset = reinterpret_cast<std::uintptr_t>(at) - reinterpret_cast<std::uintptr_t>(module);
-			SKSE::log::critical("CRASH: exception {:08X} at {} in {} (+{:X}); the plugin's last stage: {}", static_cast<unsigned>(code), at, name[0] ? name : "unknown module", offset, g_stage.load());
+			SKSE::log::critical("CRASH: exception {:08X} at {} in {} (+{:X}); the plugin's last stage: {} (shields: {})", static_cast<unsigned>(code), at, name[0] ? name : "unknown module", offset, g_stage.load(), shield::g_stage.load());
 			if (const auto logger = spdlog::default_logger()) {
 				logger->flush();
 			}
@@ -2579,7 +2584,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 14, 0, 0 },
+	.Version = { 1, 16, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
