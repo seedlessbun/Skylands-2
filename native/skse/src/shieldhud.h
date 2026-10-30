@@ -409,6 +409,8 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 		return true;
 	}
 
+	constexpr double kEnemyDrop = 6.0;  // HUD units (1280 x 720) the enemy's shield bar sits lower than the place found; ShieldHudEnemyY moves it further (positive = down)
+
 	inline bool EnemyLayout(RE::GFxValue& a_base, RE::GFxValue& a_root, RE::Actor* a_actor, Layout& a_out, bool a_look)
 	{
 		RE::GFxValue mc;
@@ -473,7 +475,7 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 		Remember(g_enemyBar, bar, VanillaFraction(a_actor));
 		const Box& ref = g_enemyBar.full.ok ? g_enemyBar.full : bar;
 		a_out.cx = ref.cx() + g_edx;
-		a_out.cy = ref.cy() + g_edy;
+		a_out.cy = ref.cy() + kEnemyDrop + g_edy;  // 0.39.3: lowered so that the thin shield bar no longer covers the enemy's own health bar (a screenshot of 0.39.2 showed it on top of it)
 		a_out.w = g_ew > 0.0f ? g_ew : ref.w();
 		a_out.h = g_eh > 0.0f ? g_eh : std::clamp(ref.h(), 8.0, 20.0);
 		a_out.ok = true;

@@ -173,7 +173,7 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
-  SHIELDS (0.39.2): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load).
+  SHIELDS (0.39.3; the enemy\'s shield bar sits a little lower, clear of the enemy\'s own health bar; ShieldHudEnemyY moves it, positive = down): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load).
     - the shield bar is now the thin one above the game's health bar (ShieldHudMode=2), as wide as the game's health bar (read from the game: the log says "shield hud: player bar: ..."); the same above an enemy's bar.
       Note: the game's own health bar adds your health and your shield together, so it drops when the shield takes a hit. ShieldHudHealth=1 paints the inside of it with your real health alone (an experiment: tune
       with ShieldHudInsetX/Y if it sits wrong). ShieldHudWidth / ShieldHudX / ShieldHudY / ShieldHudHeight move and size the shield bar.
@@ -193,7 +193,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-133.zip"
+    out = dist / "Skylands-TestBuild-134.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
