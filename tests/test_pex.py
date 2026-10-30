@@ -286,7 +286,7 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
         assert text in main, text  # the stub and the plugin's registrations say the same thing
     assert "GunStat" not in main
     shield_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shield.h").read_text(encoding="utf-8")
-    for text in ('"ShieldPercent"sv', '"ShieldMax"sv', "ModActorValue", "table[6]", "RE::ActorValue::kHealth", "ACTOR_VALUE_MODIFIER::kDamage", "AsActorValueOwner"):
+    for text in ('"ShieldPercent"sv', '"ShieldMax"sv', "ModActorValue", "table[6]", "RE::ActorValue::kHealth", "ACTOR_VALUE_MODIFIER::kDamage", "ACTOR_VALUE_MODIFIER::kTemporary", "AsActorValueOwner", "SetSaveCallback", "SetRevertCallback", "SetLoadCallback", "GetActorValueMax"):
         assert text in shield_h, text  # the stub's two shield functions are registered, and the hook is on slot 6 of the ActorValueOwner table
 
 

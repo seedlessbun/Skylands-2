@@ -173,7 +173,7 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
-  SHIELDS (stage 1 test): the plugin gives you a shield of 60 percent of your max health and every person near you one of 40 percent (settings TestShield / TestEnemyShields in
+  SHIELDS (stage 1 test, 0.38.1): the shield is extra health on top of your health (a temporary bonus the plugin adds and takes off; a save made while it is on is cleaned up on load). The plugin gives you a shield of 60 percent of your max health and every person near you one of 40 percent (settings TestShield / TestEnemyShields in
   Data\\SKSE\\Plugins\\SkylandsNative.ini; 0 turns them off). Lines on the screen: "Shield 120 / 300", "SHIELD BROKEN", "Shield recharging", "Shield full", "Enemy shield down".
   Run Check-BL2-Shields-Deep.bat as well and send both the report and Documents\\My Games\\Skyrim Special Edition\\SKSE\\SkylandsNative.log.
   Run-GunModelSurvey.bat reads Borderlands 2 and writes work\\gun-model-survey.json (what the real mesh files look like);
@@ -187,7 +187,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-129.zip"
+    out = dist / "Skylands-TestBuild-130.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
