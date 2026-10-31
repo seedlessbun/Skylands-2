@@ -308,7 +308,9 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     for text in ("ShieldHudHideAfter", "FadeLevel", "shield::g_combatNear.load()", "drawn.alpha *="):
         assert text in hud_h, text
     assert "a_player->IsInCombat()" not in hud_h
-    assert "kVersion = 377" in main and "{ 1, 18, 7, 0 }" and "shieldaura::Frame();" in main and "shieldaura::Config(" in main and "RecentlyHit" in hud_h and "kDropping" in items_h and "Fx_ShieldBurst" in open(Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shieldaura.h", encoding="utf-8").read() in main
+    aura_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shieldaura.h").read_text(encoding="utf-8")
+    assert "kVersion = 377" in main and "{ 1, 18, 7, 0 }" in main
+    assert "shieldaura::Frame();" in main and "shieldaura::Config(" in main and "RecentlyHit" in hud_h and "kDropping" in items_h and "Fx_ShieldBurst" in aura_h
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")
