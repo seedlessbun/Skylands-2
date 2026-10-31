@@ -10,12 +10,13 @@
 
 #include "PCH.h"
 #include "shield.h"
+#include "shieldaura.h"
 #include "shieldhud.h"
 #include "shielditems.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 376;  // 1.18.6
+	constexpr std::int32_t kVersion = 377;  // 1.18.7
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -137,7 +138,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -2530,7 +2531,10 @@ namespace
 			AttackHook::Install();
 			ReadyHook::Install();
 			StartPump();
-			shield::g_afterUpdate = &shieldhud::Frame;
+			shield::g_afterUpdate = []() {
+				shieldhud::Frame();
+				shieldaura::Frame();
+			};
 			shielditems::Catalog();
 			if (shielditems::g_ready) {
 				shield::g_itemPump = &shielditems::Pump;
@@ -2596,7 +2600,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 18, 6, 0 },
+	.Version = { 1, 18, 7, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

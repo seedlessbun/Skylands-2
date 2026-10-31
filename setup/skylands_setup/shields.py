@@ -551,6 +551,13 @@ def build(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], 
         ids_by_level.setdefault(b.level, []).append(a.form_id)
         by_family[b.family.id] = by_family.get(b.family.id, 0) + 1
     models.flush_textures()
+    # the glow around an enemy with a shield (plugin: shieldaura.h): three strengths of a soft blue haze, and the burst when the shield breaks
+    fx_dir = Path(out_data) / "Meshes" / "Skylands"
+    fx_dir.mkdir(parents=True, exist_ok=True)
+    beam_tex = "textures\\skylands\\beam.dds"
+    for name, rgb, bright in (("Fx_ShieldAura_0", (70, 150, 255), 2.2), ("Fx_ShieldAura_1", (70, 150, 255), 1.4), ("Fx_ShieldAura_2", (110, 170, 255), 0.8), ("Fx_ShieldBurst", (210, 235, 255), 3.2)):
+        length, width = (90.0, 70.0) if name == "Fx_ShieldBurst" else (72.0, 38.0)
+        (fx_dir / f"{name}.nif").write_bytes(nif.glow([(rgb, length, width, True, bright), (rgb, length, width, False, bright)], beam_tex, "SkylandsShieldGlow"))
     loot(view, m, ids_by_level, shields_sheet, beam_list, chest_list, report, say)
     summary = {"items": made["items"], "with_resist": made["with_resist"], "slot": slot, "families": by_family, "meshes": dict(models.stats), "textures": len(models.textures),
                "tables_replaced": t.replaced, "tables_read": t.read, "tables_wanted": t.wanted, "keywords": len(numbers)}

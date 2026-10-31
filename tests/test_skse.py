@@ -99,7 +99,7 @@ def test_the_settings_file_keeps_the_players_values_while_its_version_is_the_sam
 
 def test_the_settings_file_has_the_shield_display_keys_and_old_settings_keep_working():
     text = skse.default_ini()
-    for key in ("ShieldHud=1", "ShieldHudMode=2", "ShieldHudHealth=0", "ShieldHudEnemy=1", "ShieldHudFollow=1", "ShieldHudAlign=0", "ShieldHudX=0", "ShieldHudEnemyWidth=0", "ShieldHudLog=0", "ShieldHudHideAfter=3"):
+    for key in ("ShieldHud=1", "ShieldHudMode=2", "ShieldHudHealth=0", "ShieldHudEnemy=1", "ShieldHudFollow=1", "ShieldHudAlign=0", "ShieldHudX=0", "ShieldHudEnemyWidth=0", "ShieldHudLog=0", "ShieldHudHideAfter=3", "ShieldAura=1"):
         assert key in text, key
     items = skse.default_ini(slot=59)
     for key in ("ShieldSlot=59", "EnemyShieldPercent=100", "EnemyShieldPerLevel=2", "ShieldBossLevel=35", "ShieldDropPercent=25", "ShieldCapacityScale=1", "StarterShield=1", "TestShield=0"):

@@ -173,6 +173,9 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
+  SHIELDS (0.40.0): (1) an enemy with a shield is wrapped in a soft blue glow (dimmer as the shield is used up) that bursts when the shield breaks (ShieldAura=0 turns it off).
+    (2) the enemy's shield bar now follows the enemy whose shield was hit last when the crosshair is not on a shielded enemy (before, it showed for the crosshair target only).
+    (3) a dead person's shield is DROPPED on the ground (ShieldDropPercent says how often, 25 by default, a boss's always; your file says 100 for testing), not left in the body's pack.
   SHIELDS (0.39.6): more humanoids count as people (draugr, falmer, vampires, forsworn ... by race name), the log names every actor that gets no shield, and it says whether a dead person's shield is still in their pack 1.5 s and 5 s after the death
     (no shield has dropped yet even with ShieldDropPercent=100: send SkylandsNative.log after killing a few).
   SHIELDS (0.39.5): creature shields are gone (people only). The shield's recharge delay and recharge now stand still while the game is paused (a menu is open). Your shield bar is 20 px narrower.
@@ -204,7 +207,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-137.zip"
+    out = dist / "Skylands-TestBuild-138.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

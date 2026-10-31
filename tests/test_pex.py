@@ -291,7 +291,7 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     hud_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shieldhud.h").read_text(encoding="utf-8")
     for text in ("getBounds", "SkylandsShield", "HUDMovieBaseInstance", "EnemyHealth_mc", "HealthMeterAnim", "GetActiveTarget", "shield::ViewOf", "ShieldHudMode", "ShieldHudEnemy", "ShieldHudX"):
         assert text in hud_h, text  # the shield display reads the game's bars and draws over them
-    assert "shield::g_afterUpdate = &shieldhud::Frame" in main and "shieldhud::Config(" in main
+    assert "shieldhud::Frame();" in main and "shield::g_afterUpdate = []()" in main and "shieldhud::Config(" in main
     items_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shielditems.h").read_text(encoding="utf-8")
     for text in ("SkylandsShield_", "GetWornArmor", "EquipObject", "AddObjectToContainer", "TESEquipEvent", "TESDeathEvent", "ShieldSlot", "EnemyShieldPercent", "ShieldDropPercent", "StarterShield", "formEditorID",
                  "GetFormArray<RE::TESObjectARMO>", "shield::Give(", "shield::Remove("):
@@ -308,7 +308,7 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
     for text in ("ShieldHudHideAfter", "FadeLevel", "shield::g_combatNear.load()", "drawn.alpha *="):
         assert text in hud_h, text
     assert "a_player->IsInCombat()" not in hud_h
-    assert "kVersion = 376" in main and "{ 1, 18, 6, 0 }" in main
+    assert "kVersion = 377" in main and "{ 1, 18, 7, 0 }" and "shieldaura::Frame();" in main and "shieldaura::Config(" in main and "RecentlyHit" in hud_h and "kDropping" in items_h and "Fx_ShieldBurst" in open(Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shieldaura.h", encoding="utf-8").read() in main
 
 
 @pytest.mark.skipif(not CHAMPOLLION, reason="set CHAMPOLLION to the Champollion decompiler")

@@ -56,6 +56,7 @@ namespace shield
 		float             lastMax = 0.0f;    // the actor's maximum Health at the last look (with the bonus); a drop of exactly the capacity means the game lost the bonus
 		float             baseMax = 0.0f;    // the maximum without the bonus (lastMax - capacity), kept in the co-save to tell a bonus the game kept from one it dropped
 		int               reapplied = 0;     // times the bonus had to be put back after the game lost it
+		Clock::time_point brokeAt{};         // game clock: when the shield last broke (the burst effect)
 	};
 
 	// a shield the co-save lists for an actor: the bonus may or may not still be on it (the game does not keep temporary Health bonuses across a load)
@@ -77,6 +78,8 @@ namespace shield
 		bool  recharging = false;
 		bool  broken = false;
 		bool  low = false;
+		float sinceBreak = 99.0f;  // game seconds since the shield broke
+		float hitAge = 99.0f;      // game seconds since the last hit
 	};
 
 	// called at the end of every update on the game thread (the display hangs on it: shieldhud.h)
@@ -293,6 +296,7 @@ namespace shield
 			if (broke) {
 				s.shield = 0.0f;
 				s.pendingBreak = true;
+				s.brokeAt = a_now;
 				++g_nBreaks;
 				if (g_gate && rest > 0.0f) {  // the gate: what the shield could not take is lost
 					Write(a_actor, RE::ACTOR_VALUE_MODIFIER::kDamage, rest);
@@ -378,7 +382,47 @@ namespace shield
 		v.recharging = s.recharging;
 		v.broken = s.shield <= 0.001f;
 		v.low = v.shield > 0.0f && v.shield <= g_low;
+		v.sinceBreak = s.brokeAt.time_since_epoch().count() == 0 ? 99.0f : (std::max)(0.0f, std::chrono::duration<float>(g_gameNow - s.brokeAt).count());
+		v.hitAge = (std::max)(0.0f, std::chrono::duration<float>(g_gameNow - s.lastHit).count());
 		return v;
+	}
+
+	// every other actor's shield, for the effects
+	inline std::vector<std::pair<RE::FormID, View>> Views()
+	{
+		std::vector<RE::FormID> ids;
+		{
+			const std::lock_guard guard(g_lock);
+			for (const auto& [id, s] : g_states) {
+				if (s.applied && !s.player) {
+					ids.push_back(id);
+				}
+			}
+		}
+		std::vector<std::pair<RE::FormID, View>> out;
+		for (const auto id : ids) {
+			out.emplace_back(id, ViewOf(id));
+		}
+		return out;
+	}
+
+	// the other actor whose shield was hit last, within a_seconds (0 for none): the enemy the game's own bar is most likely about
+	inline RE::FormID RecentlyHit(float a_seconds)
+	{
+		RE::FormID            best = 0;
+		float                 bestAge = a_seconds;
+		const std::lock_guard guard(g_lock);
+		for (const auto& [id, s] : g_states) {
+			if (!s.applied || s.player || s.lastHit.time_since_epoch().count() == 0) {
+				continue;
+			}
+			const float age = std::chrono::duration<float>(g_gameNow - s.lastHit).count();
+			if (age >= 0.0f && age < bestAge) {
+				bestAge = age;
+				best = id;
+			}
+		}
+		return best;
 	}
 
 	inline void Tell(const std::string& a_text)

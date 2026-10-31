@@ -519,14 +519,22 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 
 	inline RE::Actor* EnemyActor(RE::PlayerCharacter* a_player)
 	{
+		// the game's enemy bar is about the crosshair's target, or else the enemy last hit: the crosshair counts when its actor has a shield, else the enemy whose shield was hit last
+		// (0.40.0: the crosshair alone missed every enemy the bullets hit while the crosshair was elsewhere or on something without a shield)
+		RE::FormID cross = 0;
 		if (const auto pick = RE::CrosshairPickData::GetSingleton()) {
 			if (const auto ref = pick->GetActiveTarget().get()) {
 				if (const auto actor = ref->As<RE::Actor>()) {
 					if (actor != a_player) {
-						g_enemyId = actor->GetFormID();
+						cross = actor->GetFormID();
 					}
 				}
 			}
+		}
+		if (cross && shield::ViewOf(cross).has) {
+			g_enemyId = cross;
+		} else if (const auto hit = shield::RecentlyHit(4.0f)) {
+			g_enemyId = hit;
 		}
 		return g_enemyId ? RE::TESForm::LookupByID<RE::Actor>(g_enemyId) : nullptr;
 	}

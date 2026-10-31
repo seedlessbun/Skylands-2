@@ -460,49 +460,43 @@ namespace shielditems
 			if (!dying || dying->IsPlayerRef()) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
-			{
-				// whether the shield is still in the body's pack a moment after the death and a few seconds later (nothing has dropped in the user's tests)
-				const RE::FormID bodyId = dying->GetFormID();
-				const RE::FormID item = shield::ItemOf(bodyId);
-				if (item) {
-					std::thread([bodyId, item]() {
-						for (const int ms : { 1500, 5000 }) {
-							std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-							shield::Queue([bodyId, item, ms]() {
-								const auto actor = RE::TESForm::LookupByID<RE::Actor>(bodyId);
-								const auto armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(item);
-								if (actor && armor) {
-									SKSE::log::info("shield items: {:08X} died wearing \"{}\": {} ms later it is {} its pack", bodyId, armor->GetName(), ms, InPack(actor, armor) ? "IN" : "NOT in");
-								}
-							});
-						}
-					}).detach();
-				}
-			}
+			// The shield is dealt with a moment after the death, from the game thread (changing a body's pack inside the event is a known crash). With the settings file's chance (a boss: always)
+			// it is DROPPED on the ground beside the body, like a Skylands gun (the rarity beam then marks it); otherwise it is taken out of the body's pack.
 			static thread_local std::mt19937 rng{ std::random_device{}() };
-			if (IsBoss(dying) || static_cast<int>(rng() % 100) < g_dropPercent) {  // a boss always leaves its shield; the others by the settings file's chance
-				return RE::BSEventNotifyControl::kContinue;
-			}
+			const bool drop = IsBoss(dying) || static_cast<int>(rng() % 100) < g_dropPercent;
 			const RE::FormID body = dying->GetFormID();
-			std::thread([body]() {
+			std::thread([body, drop]() {
 				std::this_thread::sleep_for(std::chrono::milliseconds(900));
-				shield::Queue([body]() {
+				shield::Queue([body, drop]() {
 					shield::g_stage = "shield drop";
 					const auto actor = RE::TESForm::LookupByID<RE::Actor>(body);
 					if (!actor || !actor->IsDead()) {
 						return;
 					}
-					RE::FormID by = 0;
-					{
-						const std::lock_guard guard(g_lock);
-						if (const auto it = g_equipped.find(body); it != g_equipped.end()) {
-							by = it->second;
+					// the shield in the body's pack: found by looking through it (the shield state is gone once the body is dead, and the equip events may have missed it)
+					RE::TESObjectARMO* armor = nullptr;
+					for (const auto& [object, entry] : actor->GetInventory([](RE::TESBoundObject& a_object) {
+							 const auto item = a_object.As<RE::TESObjectARMO>();
+							 return item && InfoOf(item).ok;
+						 })) {
+						armor = object ? object->As<RE::TESObjectARMO>() : nullptr;
+						if (armor) {
+							break;
 						}
 					}
-					const auto armor = by ? RE::TESForm::LookupByID<RE::TESObjectARMO>(by) : nullptr;
-					if (armor && InPack(actor, armor)) {
+					if (!armor) {
+						static std::atomic_int none{ 0 };
+						if (none.fetch_add(1) < 10) {
+							SKSE::log::info("shield items: {:08X} died with no shield item in its pack", body);
+						}
+						return;
+					}
+					if (drop) {
+						actor->RemoveItem(armor, 1, RE::ITEM_REMOVE_REASON::kDropping, nullptr, nullptr);
+						SKSE::log::info("shield items: {:08X} died; its shield \"{}\" was dropped on the ground", body, armor->GetName());
+					} else {
 						actor->RemoveItem(armor, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
-						SKSE::log::info("shield items: {:08X} died; its shield \"{}\" was not left on the body", body, armor->GetName());
+						SKSE::log::info("shield items: {:08X} died; its shield \"{}\" was not left", body, armor->GetName());
 					}
 				});
 			}).detach();
