@@ -173,6 +173,8 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
+  SHIELDS (0.40.1): the glow around enemies is off (ShieldGlow=1 turns it on again); EnemyShieldPercent goes back to 10 (+2 a level) and ShieldDropPercent to 25 once (your old values for them are replaced this one time);
+    a shield's description lists only its stats (no parts, no grades).
   SHIELDS (0.40.0): (1) an enemy with a shield is wrapped in a soft blue glow (dimmer as the shield is used up) that bursts when the shield breaks (ShieldAura=0 turns it off).
     (2) the enemy's shield bar now follows the enemy whose shield was hit last when the crosshair is not on a shielded enemy (before, it showed for the crosshair target only).
     (3) a dead person's shield is DROPPED on the ground (ShieldDropPercent says how often, 25 by default, a boss's always; your file says 100 for testing), not left in the body's pack.
@@ -191,7 +193,7 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
     - the shield bar is now the thin one above the game's health bar (ShieldHudMode=2), as wide as the game's health bar (read from the game: the log says "shield hud: player bar: ..."); the same above an enemy's bar.
       Note: the game's own health bar adds your health and your shield together, so it drops when the shield takes a hit. ShieldHudHealth=1 paints the inside of it with your real health alone (an experiment: tune
       with ShieldHudInsetX/Y if it sits wrong). ShieldHudWidth / ShieldHudX / ShieldHudY / ShieldHudHeight move and size the shield bar.
-    - FOR TESTING every person you meet carries a shield (EnemyShieldPercent=100 in SkylandsNative.ini; the odds you chose for play are 10 and 2). ShieldCapacityScale=2 doubles every shield's capacity.
+    - FOR TESTING (0.40.1: no longer) every person carried a shield; the odds you chose for play, 10 percent +2 a level, are EnemyShieldPercent / EnemyShieldPerLevel in SkylandsNative.ini. ShieldCapacityScale=2 doubles every shield's capacity.
     - about 370 shield items from Borderlands 2's parts, worn in a slot nothing else in your load order uses (the setup log says which); you are given a starter shield; a dead person's shield stays on the body 25 percent
       of the time (ShieldDropPercent), a boss's always; shields also turn up in boss chests, merchants (the setup log's "shield loot:" line says which chests, or names the candidates) and wear the rarity beam on the ground.
       The type effects (nova, spike, ...) are in the item text but not active yet.
@@ -207,7 +209,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-138.zip"
+    out = dist / "Skylands-TestBuild-139.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

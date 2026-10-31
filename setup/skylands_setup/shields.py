@@ -203,12 +203,11 @@ def stats_text(b: Build, rarity_word: str, resist_percent: float) -> str:
         return f"{v:+d}"
 
     lines = [f"{rarity_word} {TYPES[b.family.type_no].lower() if b.family.type_no else 'standard'} shield" + (f", {ELEMENT_WORDS[b.family.element].lower()}" if b.family.element else "") + ".",
-             f"Capacity {b.ratio * 100:.0f}% of your health (grade {signed(g[0])})",
-             f"Recharge {b.rate * 100:.0f}% of the capacity a second (grade {signed(g[1])})",
-             f"Starts recharging {b.delay:.1f} s after the last hit (grade {signed(g[2])})"]
+             f"Capacity {b.ratio * 100:.0f}% of your health",
+             f"Recharge {b.rate * 100:.0f}% of the capacity a second",
+             f"Starts recharging {b.delay:.1f} s after the last hit"]
     if b.resist:
         lines.append(f"Resists {RESIST_WORD[b.resist].lower()} {resist_percent:.0f}%")
-    lines.append(f"Parts: {b.body} body, {b.battery} battery, {b.capacitor.split('_')[0]} capacitor.")
     text = TYPE_TEXT[b.family.type_no]
     if text:
         lines.append(text + " (Not active in this version.)")

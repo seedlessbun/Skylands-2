@@ -10,7 +10,7 @@ namespace shieldaura
 {
 	using Clock = std::chrono::steady_clock;
 
-	inline bool  g_on = true;       // ShieldAura=0 turns the glow off
+	inline bool  g_on = false;      // ShieldGlow=1 turns the glow on (off by default since 0.40.1)
 	inline float g_range = 2200.0f; // only enemies this near get the glow (it costs a few temporary effects each)
 
 	// Game thread, every shield update (33 ms).
@@ -84,9 +84,9 @@ namespace shieldaura
 
 	inline bool Config(const std::string& a_key, const std::string& a_value)
 	{
-		if (a_key == "ShieldAura") {
-			g_on = a_value.find('0') == std::string::npos;
-		} else if (a_key == "ShieldAuraRange") {
+		if (a_key == "ShieldGlow") {
+			g_on = a_value.find('1') != std::string::npos;
+		} else if (a_key == "ShieldGlowRange") {
 			try {
 				g_range = std::clamp(std::stof(a_value), 300.0f, 8000.0f);
 			} catch (...) {

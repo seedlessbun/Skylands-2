@@ -309,7 +309,7 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
         assert text in hud_h, text
     assert "a_player->IsInCombat()" not in hud_h
     aura_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shieldaura.h").read_text(encoding="utf-8")
-    assert "kVersion = 377" in main and "{ 1, 18, 7, 0 }" in main
+    assert "kVersion = 378" in main and "{ 1, 18, 8, 0 }" in main
     assert "shieldaura::Frame();" in main and "shieldaura::Config(" in main and "RecentlyHit" in hud_h and "kDropping" in items_h and "Fx_ShieldBurst" in aura_h
 
 

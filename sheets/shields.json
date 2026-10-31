@@ -121,11 +121,11 @@
   },
   {
    "id": "enemy_percent",
-   "value": 100,
+   "value": 10,
    "unit": "percent at level 1",
    "source": "design",
    "bl2_object": "GD_ItempoolsEnemyUse.Shields.Pool_Shields_Standard_EnemyUse",
-   "note": "FOR TESTING (0.39.2, the user asked): every person carries a shield. The odds the user chose for play (loot interview) are 10 percent at level 1 plus enemy_percent_per_level 2 a level; bosses always",
+   "note": "the odds the user chose for play (loot interview): 10 percent at level 1 plus enemy_percent_per_level 2 a level; bosses always. (0.39.2 to 0.40.0 set 100 for testing; 0.40.1 back to 10.)",
    "read_verified": "no"
   },
   {

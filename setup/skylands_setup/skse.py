@@ -162,9 +162,11 @@ def merge_ini(default: str, old: str | None) -> tuple[str, bool]:
     if before.get("IniVersion") != after.get("IniVersion"):
         return default, False
     lines = []
+    # values put back to the defaults once when ShieldDefaultsRev changes (the testing values of 0.39.2 to 0.40.0: every person a shield, every shield dropped)
+    reset = {"EnemyShieldPercent", "ShieldDropPercent"} if before.get("ShieldDefaultsRev") != after.get("ShieldDefaultsRev") else set()
     for line in default.splitlines():
         key = line.partition("=")[0].strip()
-        if "=" in line and not line.strip().startswith((";", "[")) and key in before and key != "IniVersion":
+        if "=" in line and not line.strip().startswith((";", "[")) and key in before and key != "IniVersion" and key not in reset:
             line = f"{key}={before[key]}"
         lines.append(line)
     return "\n".join(lines) + "\n", True
@@ -194,8 +196,9 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
             "; shield items: the biped slot they are worn in (30-61; the installer picks one that nothing in your load order uses; change it here if another mod wants it, and reinstall)",
             f"ShieldSlot={slot}",
             "; who carries a shield: the chance (percent) for a person of level 1, and this much more for every level above 1 (at most 100). A boss (a named person, or ShieldBossLevel and higher) always has one, rare or better.",
-            "; FOR TESTING every person has one (100). The odds you chose for play are 10 and 2: set EnemyShieldPercent=10 again when the testing is done.",
             "; Each person is decided once by their own id, so a loaded game gives the same people shields.",
+            "; (ShieldDefaultsRev: when it changes, the installer puts EnemyShieldPercent and ShieldDropPercent back to these values once, whatever your old file said)",
+            "ShieldDefaultsRev=2",
             f"EnemyShieldPercent={S.SHIELDS['enemy_percent'].value:g}",
             f"EnemyShieldPerLevel={S.SHIELDS['enemy_percent_per_level'].value:g}",
             f"ShieldBossLevel={S.SHIELDS['boss_level'].value:g}",
@@ -227,9 +230,9 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
         "ShieldHudLog=0",
         "; your shield bar is shown while you are in combat, while the shield is not full, and for this many seconds after the shield or your health last changed, then it fades out (0 = always shown)",
         "ShieldHudHideAfter=3",
-        "; an enemy with a shield is wrapped in a soft blue glow that bursts when the shield breaks (ShieldAura=0: off; ShieldAuraRange: how near, in game units)",
-        "ShieldAura=1",
-        "ShieldAuraRange=2200",
+        "; an enemy with a shield can be wrapped in a soft blue glow that bursts when the shield breaks (ShieldGlow=1: on; ShieldGlowRange: how near, in game units). Off for now.",
+        "ShieldGlow=0",
+        "ShieldGlowRange=2200",
         "; ShieldHudHealth=1 (with mode 2): the game's own health bar shows health and shield added together, so it drops when the shield takes a hit; this paints the inside of it with your real health alone",
         "; (ShieldHudInsetX/Y: the share of the bar's width / height that is frame and caps, left alone). Off by default: it is a guess at the bar's insides.",
         "ShieldHudHealth=0",
