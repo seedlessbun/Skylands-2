@@ -585,6 +585,8 @@ Other commands:
 - 0.40.0 in game (user): shields drop, every enemy's shield HUD showed. 0.40.1 (TestBuild-139, plugin 1.18.8 = "SkylandsNative 378"), user requests: the glow is OFF by default (keys renamed `ShieldGlow` / `ShieldGlowRange` so the old `ShieldAura=1` in the user's file is ignored; `shieldaura.h` stays for later);
   `EnemyShieldPercent` back to 10 (+2 a level; sheet value 10) and `ShieldDropPercent` 25: `merge_ini` puts those two keys back ONCE when `ShieldDefaultsRev` (ini, now 2) differs from the old file's (the installer otherwise keeps the user's values); shield descriptions list only the stats
   (capacity, recharge, delay, resist, type text; the "Parts:" line and the "(grade +n)" notes are gone). UNCONFIRMED in game.
+- 0.40.1 in game (user): "everything's looking good", but the shield models look inside out ("I can see into it"; no screenshot arrived). Cause (found in code): the guns' meshes go through `gunparts.orientation` (a mirror: UE3 is left-handed; `meshes.transformed` reverses the triangles when det < 0),
+  the gestalt-cut shield parts did not, so backface culling showed the inside. 0.40.2 (TestBuild-140, python-only, plugin still 1.18.8): `shields.Models.mesh_for` mirrors x (`transformed` with diag(-1,1,1), centred) for real BL2 parts; the proxy orb is untouched. UNCONFIRMED in game. NEXT: relics (docs/relics.md; the user chose to do them next - interview first).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

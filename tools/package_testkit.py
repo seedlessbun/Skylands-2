@@ -173,6 +173,7 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
+  SHIELDS (0.40.2): the shield models were drawn inside out (you could see into them): Borderlands 2's meshes are left-handed and the shields lacked the mirror the guns get. Fixed. Needs a full reinstall (the meshes are rebuilt).
   SHIELDS (0.40.1): the glow around enemies is off (ShieldGlow=1 turns it on again); EnemyShieldPercent goes back to 10 (+2 a level) and ShieldDropPercent to 25 once (your old values for them are replaced this one time);
     a shield's description lists only its stats (no parts, no grades).
   SHIELDS (0.40.0): (1) an enemy with a shield is wrapped in a soft blue glow (dimmer as the shield is used up) that bursts when the shield breaks (ShieldAura=0 turns it off).
@@ -209,7 +210,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-139.zip"
+    out = dist / "Skylands-TestBuild-140.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

@@ -361,7 +361,9 @@ class Models:
             lo, hi = merged.bounds()
             size = max(hi[i] - lo[i] for i in range(3)) or 1.0
             centre = tuple((lo[i] + hi[i]) / 2 for i in range(3))
-            merged = M.transformed(merged, None, SIZE / size, tuple(-c * SIZE / size for c in centre))
+            # Borderlands 2 meshes are left-handed (UE3): the guns get a mirror in `gunparts.orientation`, which also reverses the triangles; the shield parts had none, so the game
+            # drew their insides (backface culling) - "I can see into it". Mirror x and the winding flips with it.
+            merged = M.transformed(merged, ((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)), SIZE / size, (centre[0] * SIZE / size, -centre[1] * SIZE / size, -centre[2] * SIZE / size))
             tex = atlas or self._plain(self.tint.get(b.body, (150, 150, 156)))
             shapes = [(merged, tex, self._flat())]
         else:
