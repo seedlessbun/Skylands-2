@@ -136,3 +136,15 @@ def test_relic_survey_finds_artifact_definitions_and_the_pools_that_hold_them(tm
     for needle in ("ArtifactDefinition", "GD_Artifacts.A_Item.Artifact_Aggression", "MaxValue=25.0*1.0", "Pool_Artifacts_All", "Finished. Report written"):
         assert needle in text, needle
     assert "Which enemy types carry" not in text  # the relic survey stops after the loot pools
+
+
+def test_deep_relic_survey_runs_on_a_fake_install(tmp_path):
+    bl2 = tmp_path / "bl2"
+    fake_bl2.pandora_install(bl2)
+    out = tmp_path / "deep.txt"
+    try:
+        assert shieldprobe.main(["--bl2", str(bl2), "--out", str(out), "--topic", "relic", "--deep", "--minutes", "1"]) in (0, 1)
+    finally:
+        shieldprobe.set_topic("shield")
+    text = out.read_text(encoding="utf-8")
+    assert "R1. The main game's relic parts" in text and "R2. The gear level" in text and "Finished" in text

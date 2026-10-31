@@ -830,6 +830,24 @@ def deep_hud(ctx: Ctx) -> None:
 
 # ---- main --------------------------------------------------------------------------------------------------------------------------
 
+def deep_relics(ctx: Ctx) -> None:
+    """The second relic survey: the first one stopped before the nested behaviours, so what each relic body and effect part actually changes (attribute, how much, scaled by
+    what), the grade parts of the Upgrade list, and the balances/pools by rarity were never seen. Dumped in full."""
+    ix = ctx.ix
+    ctx.head("R1. The main game's relic parts: bodies, effects, upgrade grades (down to the nested behaviours)")
+    seeds: list[str] = []
+    for group in ("gd_artifacts.body", "gd_artifacts.enable1st", "gd_artifacts.enable2nd", "gd_artifacts.enable3rd", "gd_artifacts.enable4th", "gd_artifacts.upgrade", "gd_artifacts.balanceattributes", "gd_artifacts.skills",
+                  "gd_artifacts.a_item", "gd_artifacts.a_item_unique", "d_attributes.artifacts"):
+        kids = children_of_group(ix, group)
+        ctx.say(f"{group}: {len(kids)} objects")
+        seeds += [k for k in kids if ":" not in k]
+    seeds = list(dict.fromkeys(seeds))
+    follow(ctx, seeds[:400], depth=4, cap=1800, lines_each=100000, title="relic parts", fanout=60)
+    ctx.head("R2. The gear level / rarity formulas the relic numbers hang on")
+    follow(ctx, ["D_Attributes.Inventory.ArtifactItemLevel", "GD_Artifacts.BalanceAttributes.Init_ModifierBase_Linear", "GD_Artifacts.BalanceAttributes.Attribute_SlotGrade_Effect2",
+                 "GD_Artifacts.BalanceAttributes.Attribute_SlotGrade_Effect3"], depth=3, cap=120, lines_each=100000, title="formulas")
+
+
 def main(argv: list[str]) -> int:
     import argparse
 
@@ -893,6 +911,12 @@ def main(argv: list[str]) -> int:
     def pool() -> None:
         state["pool_info"] = pools(ctx, {o.path for o in state["info"]["primary"]})
 
+    if a.deep and a.topic == "relic":
+        run("relic parts", lambda: deep_relics(ctx))
+        ctx.say("")
+        ctx.say(f"Finished{' (sections that failed: ' + ', '.join(failed) + ')' if failed else ''}. Report written to {out_path}. Send it to Claude.")
+        ctx.save()
+        return 1 if failed else 0
     if a.deep:
         run("sheet objects", lambda: deep_sheet(ctx))
         run("families", lambda: deep_families(ctx))
