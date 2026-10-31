@@ -38,6 +38,15 @@ PAWN_CLASS = re.compile(r"(?i)PawnBalanceDefinition$")
 MAX_PACKAGES = 70
 
 
+def set_topic(pattern: str) -> None:
+    """Point the survey at another kind of item (`--topic relic`: Borderlands 2 calls relics "artifacts"): the same name scan, census, definitions, attributes and loot pools."""
+    global SHIELD, CLASSLIKE, UI_NAME, SOUND_NAME
+    SHIELD = re.compile(rf"(?i)({pattern})")
+    CLASSLIKE = re.compile(rf"(?i)^[a-z]*({pattern})[a-z]*(definition|part|balance|pool|collection|attribute|resolver|slot|type|mod)[a-z]*$")
+    UI_NAME = re.compile(rf"(?i)(({pattern}).*(bar|meter|icon|hud|fill|gauge|flash|ui|gfx|swf|tex)|(hud|ui_|gfx|swf).*({pattern}))")
+    SOUND_NAME = re.compile(rf"(?i)(^ak[a-z0-9_]*({pattern}))")
+
+
 class Ctx:
     def __init__(self, ix: Index | None, out_path: Path, deadline: float) -> None:
         self.ix = ix
@@ -177,7 +186,7 @@ def name_scan(ctx: Ctx, bl2: Path, upks: list[Path]) -> dict:
             unreadable += 1
             continue
         for name in names:
-            if "shield" in name:
+            if SHIELD.search(name):
                 names_in[name].add(p.stem)
         if n % 300 == 0:
             print(f"  {n}/{len(upks)} name tables", flush=True)
@@ -829,8 +838,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out", default="BL2-Shield-Report.txt")
     ap.add_argument("--minutes", type=float, default=25.0, help="time allowed for reading packages (the index is extra)")
     ap.add_argument("--no-audio", action="store_true", help="do not read the sound banks")
+    ap.add_argument("--topic", default="", help="relic: survey relics (Borderlands 2 artifacts) instead of shields: names, census, definitions, attributes and loot pools only")
     ap.add_argument("--deep", action="store_true", help="the second survey: full dumps of the objects the shields sheet names, one balance per shield family, enemy formulas, the HUD classes' defaults, the HUD movie")
     a = ap.parse_args(argv)
+    if a.topic == "relic":
+        set_topic("relic|artifact")
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out_path = Path(a.out)
     ctx = Ctx(None, out_path, time.time() + a.minutes * 60)
@@ -896,6 +908,11 @@ def main(argv: list[str]) -> int:
     run("definitions", defs)
     run("attributes", lambda: attributes(ctx))
     run("pools", pool)
+    if a.topic == "relic":
+        ctx.say("")
+        ctx.say(f"Finished{' (sections that failed: ' + ', '.join(failed) + ')' if failed else ''}. Report written to {out_path}. Send it to Claude.")
+        ctx.save()
+        return 1 if failed else 0
     run("enemies", lambda: enemies(ctx, state["pool_info"]))
     run("art", lambda: art(ctx, state["objs"], state["info"]["fragments"]))
     run("hud", lambda: hud_movies(ctx))

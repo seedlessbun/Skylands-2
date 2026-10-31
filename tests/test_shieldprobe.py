@@ -113,3 +113,26 @@ def test_deep_survey_dumps_the_sheet_objects_in_full(tmp_path):
     text = out.read_text(encoding="utf-8")
     assert "D1. The objects the shields sheet names" in text and "D5. The HUD movie" in text and "Finished" in text
     assert "SECTION" not in text  # no section crashed on a fake install that has none of the real objects
+
+
+def test_relic_survey_finds_artifact_definitions_and_the_pools_that_hold_them(tmp_path):
+    bl2 = tmp_path / "bl2"
+    fake_bl2.pandora_install(bl2)
+    cooked = bl2 / "WillowGame" / "CookedPCConsole"
+    b = ObjBuilder()
+    b.obj("GD_Artifacts.Name.Title_Relic", "ItemNamePartDefinition", b.s("PartName", "Relic"))
+    b.obj("GD_Artifacts.A_Item.Artifact_Aggression", "ArtifactDefinition",
+          b.st("MaxValue", "AttributeInitializationData", b.f("BaseValueConstant", 25.0) + b.f("BaseValueScaleConstant", 1.0)) + b.o("PrefixName", "GD_Artifacts.Name.Title_Relic"))
+    b.obj("GD_Artifacts.Balance.Artifact_Aggression_Balance", "InventoryBalanceDefinition", b.o("InventoryDefinition", "GD_Artifacts.A_Item.Artifact_Aggression"))
+    b.obj("GD_Itempools.Artifacts.Pool_Artifacts_All", "ItemPoolDefinition",
+          b.arr_structs("BalancedItems", [b.o("InvBalanceDefinition", "GD_Artifacts.Balance.Artifact_Aggression_Balance") + b.f("Probability", 1.0)]))
+    (cooked / "Startup_Artifacts_Fake.upk").write_bytes(b.build())
+    out = tmp_path / "relics.txt"
+    try:
+        assert shieldprobe.main(["--bl2", str(bl2), "--out", str(out), "--topic", "relic", "--minutes", "2"]) == 0
+    finally:
+        shieldprobe.set_topic("shield")
+    text = out.read_text(encoding="utf-8")
+    for needle in ("ArtifactDefinition", "GD_Artifacts.A_Item.Artifact_Aggression", "MaxValue=25.0*1.0", "Pool_Artifacts_All", "Finished. Report written"):
+        assert needle in text, needle
+    assert "Which enemy types carry" not in text  # the relic survey stops after the loot pools
