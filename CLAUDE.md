@@ -639,6 +639,10 @@ Other commands:
   rarity shift, name prefix + size only, better carried gear LATER. Sheets `sheets/enemy_stats.json` (per Skyrim race class) and `sheets/badass_tiers.json` (per tier) -> `sheet_data.ENEMY_STATS/BADASS_TIERS`
   (not read by the build or plugin yet). Survey `badassprobe.py` (`python -m skylands_setup bl2badass`, `Check-BL2-Badass.bat`, writes `work\bl2-badass-report.txt`): pawn balances by tier, formulas, pools,
   badass objects, and ENEMY AUDIO (voice/sound events per family checked against the Wwise banks), dialog objects. NEXT: read the report, put BL2 values into the two sheets (`source: bl2`), then stage 1 (plugin: tiers + stats).
+- 0.45.2 in game (user): the survey STALLED in B1 (pawn balances). Cause (code): B1 walked every `gd_population*` / `gd_balance*` group with `group_objects`, and each population group is copied into many big level packages,
+  so with the index's 24-package cache the same packages were reopened and decompressed again and again, with no progress line. 0.45.3 (TestBuild-150, python only): `badassprobe.objects_in_groups` reads each group from ONE package
+  (most of the group, smallest file), bundles groups by package and opens every package once (progress line every 10 packages, deadline checked per package); B1 keeps the tier balances' properties for B2 (no second lookup);
+  B4's pool list uses the same reader over `gd_itempools*` only. Lesson: never loop `group_objects` over hundreds of groups of a real install. The shield survey's `enemies()` has the same loop (it finished for the user, slowly).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

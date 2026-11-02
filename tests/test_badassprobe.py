@@ -70,3 +70,43 @@ def test_tier_and_family_words():
     assert badassprobe.tier_of("PawnBalance_Nomad") == "regular"
     assert badassprobe.is_sound_name("Ak_Play_VO_Psycho_Taunt") and badassprobe.is_sound_name("Ak_Play_Skag_Bite")
     assert not badassprobe.is_sound_name("Ak_Play_Wep_SMG_Dahl_Shot") and not badassprobe.is_sound_name("PawnBalance_Skag")
+
+
+def test_balance_groups_copied_into_many_packages_are_read_once_each(tmp_path, monkeypatch):
+    # the real game copies GD_Population_<X>.Balance into many level packages; B1 used to reopen them group after group (it looked stuck)
+    bl2 = tmp_path / "bl2"
+    badass_install(bl2)
+    cooked = bl2 / "WillowGame" / "CookedPCConsole"
+    for n in range(3):
+        b = ObjBuilder()
+        b.obj("GD_Population_Marauder.Balance.PawnBalance_MarauderBadass", "AIPawnBalanceDefinition", b.f("HealthScale", 4.0))
+        b.obj(f"GD_Population_Rakk{n}.Balance.PawnBalance_Rakk{n}", "AIPawnBalanceDefinition", b.f("HealthScale", 1.0))
+        (cooked / f"Level_{n}_P.upk").write_bytes(b.build())
+    from skylands_setup.bl2 import upk
+
+    opened: list[str] = []
+    real = upk.open_package
+
+    def counting(path):
+        opened.append(Path(path).name)
+        return real(path)
+
+    monkeypatch.setattr(upk, "open_package", counting)
+    out = tmp_path / "report.txt"
+    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--no-audio", "--minutes", "2"]) == 0
+    text = out.read_text(encoding="utf-8")
+    b1 = text.split("B1. Every enemy")[1].split("========")[0]
+    assert b1.count("PawnBalance_MarauderBadass [") == 1  # one copy listed, not one per package
+    for n in range(3):
+        assert f"PawnBalance_Rakk{n}" in b1
+    # B1 on its own: every package it opens is opened once
+    import time
+
+    from skylands_setup.bl2.index import Index
+    from skylands_setup.shieldprobe import Ctx
+
+    ctx = Ctx(Index(bl2), tmp_path / "b1.txt", time.time() + 60)
+    opened.clear()
+    fams = badassprobe.balances(ctx)
+    assert opened and len(opened) == len(set(opened)), opened
+    assert sum(len(v) for v in fams.values()) == 8  # the fake install's 5 + the 3 Rakk; the copied MarauderBadass is counted once

@@ -23,7 +23,7 @@ from pathlib import Path
 from . import steam
 from .bl2 import upk
 from .bl2.index import Index
-from .shieldprobe import Ctx, PAWN_CLASS, POOL_CLASS, brief, children_of_group, follow, group_objects, props_at
+from .shieldprobe import Ctx, PAWN_CLASS, POOL_CLASS, brief, children_of_group, follow, props_at
 
 BADASS = re.compile(r"(?i)badass")
 # what a pawn balance's leaf name says about its tier; the first that matches wins
@@ -100,24 +100,85 @@ def name_scan(ctx: Ctx, upks: list[Path]) -> dict:
     return {"badass": badass, "sound": sound, "dialog": dialog}
 
 
+# ---- reading many groups: each package opened once -----------------------------------------------------------------------------
+
+def objects_in_groups(ctx: Ctx, groups: list[str], class_re: re.Pattern, keep_props=None, label: str = "groups") -> list[tuple[str, str, dict | None]]:
+    """(path, class, props or None) of every object directly in the groups whose class matches. A group is copied into many level packages; reading it
+    group by group opened and decompressed the same big packages again and again (the index keeps 24 open), which looked like a hang in B1. So each group
+    is read from ONE package (the one holding most of it, the smallest file among those), the groups are bundled by that package, and every package is
+    opened once. keep_props(path) says which objects' properties to read while the package is open."""
+    ix = ctx.ix
+    by_file: dict[int, list[str]] = defaultdict(list)
+    for g in groups:
+        entries = ix.groups.get(g) or []
+        if not entries:
+            continue
+        most = entries[0][1]
+        best = min((i for i, n in entries if n == most), key=lambda i: ix.files[i].stat().st_size)
+        by_file[best].append(g)
+    order = sorted(by_file, key=lambda i: ix.files[i].stat().st_size)
+    ctx.say(f"{label}: {len(groups)} groups in {len(order)} packages ({sum(ix.files[i].stat().st_size for i in order) / 1e6:.0f} MB to open)")
+    out: list[tuple[str, str, dict | None]] = []
+    seen: set[str] = set()
+    t0 = time.time()
+    for n, i in enumerate(order, 1):
+        if ctx.out_of_time():
+            ctx.say(f"(time is up after {n - 1} of {len(order)} packages; run again with a larger --minutes for the rest)")
+            break
+        f = ix.files[i]
+        try:
+            pkg = upk.open_package(f)  # not through the index's cache: read once and let go
+        except Exception as e:  # noqa: BLE001
+            ctx.put(f"  {f.name}: could not be opened ({type(e).__name__}: {str(e)[:100]})")
+            continue
+        for g in by_file[i]:
+            for idx in pkg.children_of(g):
+                cls = pkg.obj_class(idx)
+                if not class_re.search(cls):
+                    continue
+                path = pkg.path_of(idx)
+                if path in seen:
+                    continue
+                seen.add(path)
+                props = None
+                if keep_props is not None and keep_props(path):
+                    try:
+                        props = props_at(pkg, idx)
+                    except Exception:  # noqa: BLE001
+                        props = None
+                out.append((path, cls, props))
+        del pkg
+        if n % 10 == 0 or n == len(order):
+            print(f"  {label}: {n}/{len(order)} packages, {len(out)} objects ({time.time() - t0:.0f} s)", flush=True)
+    return out
+
+
 # ---- B1 ------------------------------------------------------------------------------------------------------------------------------
 
+def balance_groups(ix) -> list[str]:
+    """The groups that hold pawn balances: GD_Population_<X>.Balance (and the like: a 'balance' group of an enemy package)."""
+    out = []
+    for g in ix.groups:
+        top, _, sub = g.partition(".")
+        if "balance" in sub and top.startswith(("gd_population", "gd_enemy", "gd_pawn", "gd_ai")):
+            out.append(g)
+    return sorted(out)
+
+
 def balances(ctx: Ctx) -> dict[str, list[tuple[str, str, str]]]:
-    """family -> [(path, class, tier)] for every pawn balance."""
+    """family -> [(path, class, tier)] for every pawn balance; the properties of the tier balances are kept in ctx (for B2)."""
     ctx.head("B1. Every enemy (pawn) balance, by family and tier")
     ix = ctx.ix
     t0 = time.time()
     fams: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
-    for g in sorted(ix.groups):
-        if ctx.out_of_time():
-            ctx.say("(time is up while listing pawn balances)")
-            break
-        if not g.startswith(("gd_population", "gd_balance", "gd_enemy", "gd_pawn")) and "balance" not in g.split(".")[-1]:
-            continue
-        for _pkg, _i, path, cls in group_objects(ix, g, PAWN_CLASS):
-            top = path.split(".")[0]
-            fam = top[len("GD_Population_"):] if top.lower().startswith("gd_population_") else top
-            fams[fam].append((path, cls, tier_of(path.rsplit(".", 1)[-1])))
+    found = objects_in_groups(ctx, balance_groups(ix), PAWN_CLASS, keep_props=lambda p: tier_of(p.rsplit(".", 1)[-1]) != "regular", label="pawn balances")
+    ctx.tier_props = {}
+    for path, cls, props in found:
+        top = path.split(".")[0]
+        fam = top[len("GD_Population_"):] if top.lower().startswith("gd_population_") else top
+        fams[fam].append((path, cls, tier_of(path.rsplit(".", 1)[-1])))
+        if props is not None:
+            ctx.tier_props[path] = props
     total = sum(len(v) for v in fams.values())
     tiers = Counter(t for v in fams.values() for _p, _c, t in v)
     ctx.say(f"{total} pawn balances in {len(fams)} families ({time.time() - t0:.0f} s); by the tier their names say: {dict(tiers)}")
@@ -154,17 +215,12 @@ def tier_dumps(ctx: Ctx, fams: dict) -> None:
     ctx.head("B2. A regular enemy and its Badass / Super / Ultimate variants in full (archetype, AI class, start values, item pools)")
     seeds = pick_pairs(fams)
     ctx.say(f"{len(seeds)} balances chosen: {seeds}")
-    # one line each of every tier balance first (the display names and play-through pools side by side)
+    # one line each of every tier balance first (the display names and play-through pools side by side), from the properties B1 read
+    kept = getattr(ctx, "tier_props", {})
     for fam, rows in sorted(fams.items()):
         for path, _cls, tier in rows:
-            if tier == "regular":
-                continue
-            try:
-                got = ctx.ix.get(path)
-            except Exception:  # noqa: BLE001
-                got = None
-            if got:
-                ctx.put(f"{tier:8} {path} {brief(props_at(*got), 600)}")
+            if tier != "regular" and path in kept:
+                ctx.put(f"{tier:8} {path} {brief(kept[path], 600)}")
     ctx.save()
     follow(ctx, seeds, depth=3, cap=700, lines_each=400, title="tier balances", fanout=40)
 
@@ -200,13 +256,9 @@ def pools(ctx: Ctx) -> None:
     for g in lists:
         seeds += [p for p in children_of_group(ix, g) if ":" not in p]
     ctx.say(f"{len(seeds)} item-pool lists in {lists}")
-    named: list[str] = []
-    for g in sorted(ix.groups):
-        if not g.startswith(("gd_itempools", "gd_population")) or ctx.out_of_time():
-            continue
-        for _pkg, _i, path, _cls in group_objects(ix, g, POOL_CLASS):
-            if re.search(r"(?i)(badass|boss|raid|enemyuse|unique|named|loot|chubby)", path.rsplit(".", 1)[-1]):
-                named.append(path)
+    groups = [g for g in ix.groups if g.startswith("gd_itempools")]
+    named = [path for path, _cls, _p in objects_in_groups(ctx, sorted(groups), POOL_CLASS, label="item pools")
+             if re.search(r"(?i)(badass|boss|raid|enemyuse|unique|named|loot|chubby)", path.rsplit(".", 1)[-1])]
     ctx.say(f"{len(named)} pools named for badasses, bosses, enemy use or loot:")
     for p in named[:300]:
         ctx.put(f"  {p}")
