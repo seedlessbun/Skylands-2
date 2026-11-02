@@ -10,13 +10,14 @@
 
 #include "PCH.h"
 #include "shield.h"
+#include "relic.h"
 #include "shieldaura.h"
 #include "shieldhud.h"
 #include "shielditems.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 380;  // 1.19.0
+	constexpr std::int32_t kVersion = 381;  // 1.20.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -139,7 +140,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -2558,6 +2559,11 @@ namespace
 				shieldaura::Frame();
 			};
 			shielditems::Catalog();
+			relic::Catalog();
+			if (relic::g_ready) {
+				shield::g_relicPump = &relic::Pump;
+				shield::g_relicRevert = &relic::Revert;
+			}
 			if (shielditems::g_ready) {
 				shield::g_itemPump = &shielditems::Pump;
 			}
@@ -2571,6 +2577,11 @@ namespace
 					holder->AddEventSink(shielditems::EquipSink::Get());
 					holder->AddEventSink(shielditems::DeathSink::Get());
 					SKSE::log::info("shield item listeners registered");
+				}
+				if (relic::g_ready) {
+					holder->AddEventSink(relic::EquipSink::Get());
+					holder->AddEventSink(relic::DeathSink::Get());
+					SKSE::log::info("relic listeners registered");
 				}
 			}
 		}
@@ -2622,7 +2633,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 19, 0, 0 },
+	.Version = { 1, 20, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

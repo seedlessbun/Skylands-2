@@ -87,6 +87,9 @@ namespace shield
 	inline void (*g_afterUpdate)() = nullptr;
 	// called every 400 ms on the game thread in place of the test shields when shield items are in use (shielditems.h): it gives and takes away shields by what is worn
 	inline bool (*g_itemPump)(RE::PlayerCharacter*, RE::ProcessLists*) = nullptr;
+	// the same for relics (relic.h): the player's worn relic and the people who may carry one; called every 400 ms; and what to do when the game is replaced (a load, a new game)
+	inline void (*g_relicPump)(RE::PlayerCharacter*, RE::ProcessLists*) = nullptr;
+	inline void (*g_relicRevert)() = nullptr;
 	inline bool g_starterGiven = false;  // the player has been handed a starter shield in this game (the co-save keeps it)
 	inline Clock::time_point g_gameNow{};  // steady time minus the time the game was paused (a menu open): the delay before a recharge counts this clock, not the wall clock
 	inline std::atomic_int g_combatNear{ 0 };  // living actors within reach that have the player as their combat target (shielditems.h counts them; the display's fade reads it)
@@ -578,6 +581,9 @@ namespace shield
 			if (!g_itemPump || !g_itemPump(player, lists)) {  // no shield items in this game: the settings file's test shields
 				Acquire(player, lists);
 			}
+			if (g_relicPump) {
+				g_relicPump(player, lists);
+			}
 		}
 		// the game's clock stands still while it is paused (a menu is open): neither the delay nor the recharge runs then
 		static Clock::duration pausedTotal{};
@@ -757,6 +763,9 @@ namespace shield
 	inline void OnRevert(SKSE::SerializationInterface*)
 	{
 		// the game is being replaced (a load, a new game): what the plugin knew belongs to the old one
+		if (g_relicRevert) {
+			g_relicRevert();
+		}
 		const std::lock_guard guard(g_lock);
 		g_states.clear();
 		g_stale.clear();

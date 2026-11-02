@@ -177,7 +177,7 @@ SHIELD_KEYS = {"delay_s": "ShieldDelay", "rate_fraction": "ShieldRate", "gate": 
                "test_shield_percent": "TestShield", "test_enemy_percent": "TestEnemyShields"}
 
 
-def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
+def shield_ini(bl2_values: dict | None = None, slot: int = 0, relic_slot: int = 0) -> str:
     """The shield part of the settings file. bl2_values: {sheet row id: number read from Borderlands 2}."""
     from . import sheet_data as S
 
@@ -208,6 +208,15 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
             f"ShieldDropPercent={S.SHIELDS['drop_percent'].value:g}",
             "; you are given one shield to start (1) or not (0)",
             "StarterShield=1",
+        ]
+    if relic_slot:
+        lines += [
+            "; relics: the biped slot they are worn in (like ShieldSlot, a different one), the chance (percent) that a person of level 1 carries one and this much more per level, and how often a dead person's is dropped on the ground",
+            "Relics=1",
+            f"RelicSlot={relic_slot}",
+            "EnemyRelicPercent=8",
+            "EnemyRelicPerLevel=1",
+            "RelicDropPercent=100",
         ]
     lines += [
         "; the shield display over your health bar and the enemy's (upper half shield, lower half health). ShieldHud=0 turns it off (the plain lines come back).",
@@ -242,11 +251,11 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
     return "\n".join(lines) + "\n"
 
 
-def default_ini(bl2_values: dict | None = None, slot: int = 0) -> str:
-    return DEFAULT_INI.rstrip("\n") + "\n" + shield_ini(bl2_values, slot)
+def default_ini(bl2_values: dict | None = None, slot: int = 0, relic_slot: int = 0) -> str:
+    return DEFAULT_INI.rstrip("\n") + "\n" + shield_ini(bl2_values, slot, relic_slot)
 
 
-def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, bl2_shields: dict | None = None, shield_slot: int = 0) -> str | None:
+def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, bl2_shields: dict | None = None, shield_slot: int = 0, relic_slot: int = 0) -> str | None:
     """Put the Skylands plugin (if the build has it) and its settings in the stage folder, so they install and uninstall with the rest. The player's values in an
     installed settings file of the same IniVersion are kept; a file of another version is kept next to the new one as .old."""
     dll = Path(bin_dir) / PLUGIN_DLL
@@ -261,7 +270,7 @@ def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, b
             old = Path(existing_ini).read_text(encoding="utf-8", errors="replace")
         except OSError:
             old = None
-    text, kept = merge_ini(default_ini(bl2_shields, shield_slot), old)
+    text, kept = merge_ini(default_ini(bl2_shields, shield_slot, relic_slot), old)
     (dest / PLUGIN_INI).write_text(text, encoding="utf-8")
     if old and not kept:
         (dest / (PLUGIN_INI + ".old")).write_text(old, encoding="utf-8")

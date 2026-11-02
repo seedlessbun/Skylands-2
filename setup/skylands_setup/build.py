@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.42.0"
+VERSION = "0.43.0"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -278,6 +278,7 @@ def main(argv: list[str]) -> int:
             say(f"Looking for the Borderlands 2 shot sounds of {len(wanted)} gun type x manufacturer pairs ...")
             shot_sounds = audio.extract_shot_sounds(bl2, work, wanted, say)
         shield_slot = 0
+        relic_slot = 0
         if a.gun_shooting == "staff" and a.shields == "auto":
             from . import shields
 
@@ -289,7 +290,16 @@ def main(argv: list[str]) -> int:
                 kept = 0
             shield_slot, why = shields.choose_slot(sky / "Data", lambda msg: say(f"  {msg}"), kept)
             say(f"shields: the items are worn in {why}")
-        report = generate.generate(data, sky, stage, formids=ids, shot_sounds=shot_sounds, gun_models=a.gun_models, model_sources=sources, shield_slot=shield_slot,
+            from . import relics
+
+            keptr = 0
+            try:
+                keptr = int(skse._ini_values(ini_path.read_text(encoding="utf-8", errors="replace")).get("RelicSlot", "0")) if ini_path.is_file() else 0
+            except (OSError, ValueError):
+                keptr = 0
+            relic_slot, why = relics.choose_slot(sky / "Data", lambda msg: say(f"  {msg}"), keptr, taken=shield_slot)
+            say(f"relics: the items are worn in {why}")
+        report = generate.generate(data, sky, stage, formids=ids, shot_sounds=shot_sounds, gun_models=a.gun_models, model_sources=sources, shield_slot=shield_slot, relic_slot=relic_slot,
                                    model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")))
         for src in sources.values():
             say(src.summary())
@@ -308,7 +318,7 @@ def main(argv: list[str]) -> int:
         sk = skse.status(sky)
         for line in skse.describe(sk):
             say(f"  skse: {line}")
-        staged = skse.stage_plugin(stage, bin_dir, sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI, data.get("shields"), shield_slot)
+        staged = skse.stage_plugin(stage, bin_dir, sky / skse.PLUGIN_REL.rsplit('/', 1)[0] / skse.PLUGIN_INI, data.get("shields"), shield_slot, relic_slot)
         say(f"shields: read from Borderlands 2: {data.get('shields') or 'nothing (the sheet defaults are used)'}")
         say(f"SkylandsNative plugin: {'staged for install' if staged else 'not in this build (bin/SkylandsNative.dll is missing)'}")
         for old in OLD_SCRIPTS:  # scripts of earlier versions: a saved game still running one of them would keep acting on stale values

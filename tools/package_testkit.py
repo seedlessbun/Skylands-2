@@ -195,6 +195,10 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   Check-BL2-Relics.bat looks at how Borderlands 2 builds its relics (artifacts: stats, parts, rarities, loot; changes nothing, 10-25 minutes) and writes work\\bl2-relic-report.txt: send it, the relics are built from it.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
+  RELICS (0.43.0, plugin 1.20.0): 50 relic items (Vitality = health, Protection = shield capacity and recharge, Resistance = fire/shock/corrosive/explosive resistance, Stockpile = magazine size, Aggression = damage of all guns; 5 rarities, a
+    Prime build of each), worn in a biped slot of their own (the setup log says which; RelicSlot in SkylandsNative.ini). The bonuses are Borderlands 2's: character level x per-level + the rarity's grade x per-grade (the item text says it).
+    People carry one with EnemyRelicPercent (8) percent + 1 a level, bosses always (rare or better), and drop it on the ground when they die (RelicDropPercent); relics also join the chests, merchants and rarity beams.
+    The model is a plain ring with a coloured gem (a stand-in). Weapon-type, manufacturer and element relics come later. The log says "relics: the player wears ..." with the bonuses.
   RELIC VARIABLES (0.42.0, plugin 1.19.0; the relic items come next): the player's spare actor values now change the guns and the shield, so a relic only has to change a number. Try them in the console (player.modav variableNN X; X can be negative; 0 = no change):
     Variable01 shield capacity %, Variable02 shield recharge rate %, Variable03 shield recharge delay (shorter) %, Variable04 magazine size %, Variable06 fire rate %, Variable07 reload speed %, Variable08 accuracy %, Variable09 damage %.
     The log says "relic: damage x.. , magazine x.." when 04 or 09 changes. Damage works by launching the bullet with more power: UNCONFIRMED that the game scales a spell bullet's damage with it - compare what an enemy's shield absorbs
@@ -236,7 +240,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-143.zip"
+    out = dist / "Skylands-TestBuild-144.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
