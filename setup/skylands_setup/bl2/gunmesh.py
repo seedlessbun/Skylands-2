@@ -313,7 +313,7 @@ def element_uvs(data: bytes, off: int, size: int, count: int, pos_offset: int):
 
 def loose_uvs(data: bytes, arr, need: int, tris):
     """UVs by a looser test inside one vertex element, for meshes the strict test finds none in (the artifact mesh: 32-byte elements, position at 16): every 2-byte offset away from the
-    position, as a half-float pair or a float pair, kept when at least 9 in 10 values lie in 0..1 and they vary; among those the smoothest over the triangles wins (a texture layout
+    position, as a half-float pair or a float pair, kept when 3 in 10 values lie in 0..1, they vary and they are smooth (roughness under 0.03); among those the smoothest over the triangles wins (a texture layout
     changes little along a triangle's edge). Returns (uvs, a note listing what was looked at, for the log)."""
     off, size, count, pos_off, _pos = arr
     best = None
@@ -344,7 +344,7 @@ def loose_uvs(data: bytes, arr, need: int, tris):
             span = (max(u for u, _ in vals) - min(u for u, _ in vals)) + (max(v for _, v in vals) - min(v for _, v in vals)) or 1.0
             rough = (sum(abs(vals[a][0] - vals[b][0]) + abs(vals[a][1] - vals[b][1]) for a, b in edges if a < count and b < count) / max(1, len(edges))) / span
             seen.append(f"{o}{fmt[-1]}:in{inside:.2f}/n{distinct}/rough{rough:.3f}")
-            if inside >= 0.9 and distinct >= 32 and (best is None or rough < best[0]):
+            if inside >= 0.3 and distinct >= 32 and rough < 0.03 and (best is None or rough < best[0]):  # the artifact mesh: 40% inside 0..1 (it tiles), roughness 0.011; the other offsets 0.05 or more
                 best = (rough, o, fmt, vals)
     if best is None:
         return [], f"; loose uv search found none (offset+format:inside 0..1/distinct/roughness {seen[:14]})"

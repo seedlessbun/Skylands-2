@@ -86,12 +86,12 @@ def test_loose_uv_search_finds_half_float_uvs_in_a_32_byte_vertex_element():
     blob = bytearray()
     tris = []
     for i in range(count):
-        u, v = (i % 12) / 12.0, (i // 12) / 10.0
+        u, v = i / count, (i % 10) / 200.0
         blob += b"\x7f" * 8 + b"\x00" * 8 + struct.pack("<3f", float(i), float(i % 7), 0.0) + struct.pack("<2e", u, v)
         if i >= 2:
             tris.append((i - 2, i - 1, i))
     uvs, note = gunmesh.loose_uvs(bytes(blob), (0, size, count, pos_off, []), count, tris)
-    assert len(uvs) == count and abs(uvs[13][0] - 1 / 12.0) < 1e-3 and "offset 28" in note
+    assert len(uvs) == count and abs(uvs[12][0] - 12 / 120.0) < 1e-3 and "offset 28" in note
 
 
 def test_per_level_share_grows_with_rarity():

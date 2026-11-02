@@ -409,17 +409,41 @@ class Bl2Source:
                     self.log(f"gestalt texture: the mesh refers to no material; materials of the package named like '{word}': {mats}", force=True)
                 else:
                     self.log(f"gestalt texture: materials the mesh refers to: {mats}", force=True)
+                candidates: list[str] = []
                 for mat in mats:
                     params = gunmesh.texture_parameters(self.ix, mat)
                     diffuse, _normal = gunmesh.pick_textures(params)
                     self.log(f"gestalt texture: {mat}: parameters {dict(list(params.items())[:8])}; diffuse {diffuse}", force=True)
-                    if not diffuse:
-                        continue
-                    tkey = self._texture(diffuse)
+                    try:  # what the material is made of, for the log (a plain material keeps its textures in expression objects)
+                        props = self.ix.props(mat) or {}
+                        kids = list(self.ix.children(mat))[:12]
+                        self.log(f"gestalt texture: {mat}: properties {sorted(props)[:14]}; children {[(k, (self.ix.props(k) or {}).get('Texture')) for k in kids]}", force=True)
+                        for k in kids:
+                            tex = (self.ix.props(k) or {}).get("Texture")
+                            if isinstance(tex, str):
+                                candidates.append(tex)
+                    except Exception as e:  # noqa: BLE001
+                        self.log(f"gestalt texture: {mat}: children not readable ({type(e).__name__}: {str(e)[:60]})", force=True)
+                    if diffuse:
+                        candidates.insert(0, diffuse)
+                # textures of the artifact package itself (the shields' atlas is Item_Shields.Textures.Shield_Dif)
+                named = {}
+                for i, e in enumerate(pkg.exports, 1):
+                    if pkg.obj_class(i) == "Texture2D" and word in pkg.path_of(i).lower():
+                        named[e.name.lower()] = pkg.path_of(i)
+                self.log(f"gestalt texture: Texture2D objects of the package named like '{word}': {list(named.values())[:14]}", force=True)
+                if named:
+                    picked, _n = gunmesh.pick_textures(named)
+                    if picked:
+                        candidates.append(picked)
+                    candidates += [p for p in named.values() if p not in candidates]
+                for path in dict.fromkeys(candidates):
+                    tkey = self._texture(path)
                     raw = self.textures.pop(tkey, None) if tkey else None
                     if raw:
-                        self.log(f"gestalt texture: {diffuse} read ({len(raw)} bytes)", force=True)
+                        self.log(f"gestalt texture: {path} read ({len(raw)} bytes)", force=True)
                         return raw
+                    self.log(f"gestalt texture: {path} could not be decoded", force=True)
             except Exception as e:  # noqa: BLE001
                 self.log(f"gestalt texture {info['path']}: {type(e).__name__}: {str(e)[:100]}", force=True)
         return None

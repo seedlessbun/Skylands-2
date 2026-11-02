@@ -630,6 +630,10 @@ Other commands:
   relics stay plain read the "gestalt texture:" and "gestalt mesh Item_Artifacts" lines. (3) ini: `RelicHealth`, `RelicShieldCapacity`, `RelicShieldRecharge`, `RelicMagazine`, `RelicDamage`, `RelicFireResist`, `RelicShockResist`, `RelicCorrosiveResist`, `RelicExplosiveResist`
   = multipliers on that effect of every relic (plugin `relic::g_scale`; the item text shows the 1.0 numbers). (4) the user: the per-level share grows with rarity: `PER_LEVEL_FACTOR` 1..5 x BL2's number (Aggression 0.3 / 0.6 / 0.9 / 1.2 / 1.5 % a level), all kinds; the grade part is unchanged.
   The user's message about "adjusting some of the effects" ended at a colon (no list): ask what they want changed.
+- 0.45.0 in game (user, setup log 8e3ac6ef): relics stayed plain. READ: the artifact gestalt mesh's UVs ARE the half-float pair at element offset 28 (loose search: in0..1 0.40, 361 distinct, roughness 0.011; the strict test and my 90 percent rule rejected it because the layout tiles past 0..1);
+  the material `Item_Artifacts.Materials.Mat_ItemArtifact` is a plain Material (no TextureParameterValues; `texture_parameters` found nothing) and the mesh export refers to no material. 0.45.1 (TestBuild-148, python-only, plugin 1.21.0): `loose_uvs` accepts inside >= 0.3 with roughness < 0.03;
+  `gestalt_texture` also logs the material's properties and children (their `Texture`), lists the Texture2D objects whose path holds the word ("gestalt texture: Texture2D objects of the package named like 'item_artifacts'") and tries them (pick_textures, then all). READ those lines next: if no texture is found, the
+  artifact texture lives in another package (`fx_shared_items.Textures.Artifact_Dif` is the pickup icon) and the material's expression objects must be walked.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
