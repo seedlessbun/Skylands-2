@@ -8,6 +8,9 @@ staff gun script reads three **actor values of the player** every time it acts, 
 | `Variable06` | fire rate bonus, percent | time between two rounds = the gun's interval / (1 + value / 100) |
 | `Variable07` | reload speed bonus, percent | reload time = the gun's reload time / (1 + value / 100) |
 | `Variable08` | accuracy bonus, percent | the gun's shot spread (degrees) / (1 + value / 100) |
+| `Variable09` | damage bonus, percent (0.42.0) | the bullet is launched with power 1 + value / 100 (UNCONFIRMED that spell damage follows it) |
+| `Variable04` | magazine size bonus, percent (0.42.0) | clip = the gun's clip x (1 + value / 100), at least 1 |
+| `Variable01` / `02` / `03` | shield capacity % / recharge rate % / recharge delay shortened % (0.42.0) | the player's shield only; a change of 01 takes the shield's bonus off and puts the new size on |
 
 0 is no change; 50 is one and a half times as fast (or as tight); a negative value slows or loosens. The divisor never goes below 0.2.
 They are Skyrim's spare `Variable01`..`Variable10` actor values (`Variable10` shows the crossbow guns' stats line), so nothing else in the

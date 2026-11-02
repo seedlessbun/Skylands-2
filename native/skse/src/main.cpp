@@ -16,7 +16,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 378;  // 1.18.8
+	constexpr std::int32_t kVersion = 380;  // 1.19.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -45,6 +45,7 @@ namespace
 	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
 	float g_convergence = 3000.0f;  // how far ahead the bullets are aimed to cross the crosshair (game units)
+	std::atomic<float>       g_damageMult{ 1.0f };  // the player's relic damage bonus (Variable09) as a multiplier; Launch gives it to the player's bullets as their power
 	float g_recoilPitch = 0.55f;   // degrees the view kicks up with a shot at the reference fire rate (ini: RecoilPitch; 0 = no recoil)
 	float g_recoilYaw = 0.22f;     // ... and at most this far sideways, either way (ini: RecoilYaw)
 	float g_recoilRecover = 0.6f;  // the share of the kick the view comes back down by once the shooting stops (ini: RecoilRecover)
@@ -615,6 +616,9 @@ namespace
 			}
 			RE::Projectile::LaunchData data(shooter, origin, { aimPitch, aimHeading }, spell);
 			data.castingSource = RE::MagicSystem::CastingSource::kRightHand;
+			if (!npc) {
+				data.power = g_damageMult.load();  // a relic's damage bonus (UNCONFIRMED that a spell projectile's damage follows the launch power: the shield log's "took .. damage" shows it)
+			}
 			RE::ProjectileHandle handle{};
 			if (tell && pellet == 0) {
 				SKSE::log::info("launching {:08X}'s bullet (projectile {:08X}) from {:.0f} {:.0f} {:.0f}, {} pellet(s)", a_shooter,
@@ -996,6 +1000,7 @@ namespace
 		RE::FormID            weapon{ 0 };
 		GunInfo               info{};
 		int                   mag{ 0 };
+		int                   baseClip{ 0 };        // the gun's own magazine size; info.clip is this times the relic bonus (Variable04)
 		bool                  reloading{ false };
 		Clock::time_point     nextShot{};
 		Clock::time_point     reloadUntil{};
@@ -2135,6 +2140,7 @@ namespace
 			}
 			g_gun.weapon = weapon->GetFormID();
 			g_gun.info = info;
+			g_gun.baseClip = info.clip;
 			const auto kept = g_gun.mags.find(g_gun.weapon);
 			g_gun.mag = kept != g_gun.mags.end() ? kept->second : info.clip;
 			g_gun.reloading = false;
@@ -2165,6 +2171,22 @@ namespace
 		const float rate = Relic(player, RE::ActorValue::kVariable06);
 		const float quick = Relic(player, RE::ActorValue::kVariable07);
 		const float accuracy = Relic(player, RE::ActorValue::kVariable08);
+		{
+			// Variable09: damage bonus in percent (the bullets' power); Variable04: magazine size bonus in percent. 0.42.0: console `player.modav variable09 50`, `player.modav variable04 50`.
+			const auto  ao = player->AsActorValueOwner();
+			const float damage = (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable09) * 0.01f);
+			const float clipBonus = (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable04) * 0.01f);
+			g_damageMult = damage;
+			const int clip = (std::max)(1, static_cast<int>(static_cast<float>(g_gun.baseClip > 0 ? g_gun.baseClip : g_gun.info.clip) * clipBonus + 0.5f));
+			static float lastDamage = 1.0f, lastClip = 1.0f;
+			if (std::abs(damage - lastDamage) > 0.001f || std::abs(clipBonus - lastClip) > 0.001f) {
+				lastDamage = damage;
+				lastClip = clipBonus;
+				SKSE::log::info("relic: damage x{:.2f} (Variable09), magazine x{:.2f} (Variable04): {} rounds", damage, clipBonus, clip);
+			}
+			g_gun.info.clip = clip;
+			g_gun.mag = (std::min)(g_gun.mag, clip + (g_gun.chambered ? 1 : 0));
+		}
 		const float gap = g_gun.info.interval / rate;
 		g_rateTenths = static_cast<int>(10.0f / gap + 0.5f);
 		g_reloadMs = static_cast<int>(g_gun.info.reload / quick * 1000.0f + 0.5f);
@@ -2600,7 +2622,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 18, 8, 0 },
+	.Version = { 1, 19, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

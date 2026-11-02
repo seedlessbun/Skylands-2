@@ -195,6 +195,10 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   Check-BL2-Relics.bat looks at how Borderlands 2 builds its relics (artifacts: stats, parts, rarities, loot; changes nothing, 10-25 minutes) and writes work\\bl2-relic-report.txt: send it, the relics are built from it.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
+  RELIC VARIABLES (0.42.0, plugin 1.19.0; the relic items come next): the player's spare actor values now change the guns and the shield, so a relic only has to change a number. Try them in the console (player.modav variableNN X; X can be negative; 0 = no change):
+    Variable01 shield capacity %, Variable02 shield recharge rate %, Variable03 shield recharge delay (shorter) %, Variable04 magazine size %, Variable06 fire rate %, Variable07 reload speed %, Variable08 accuracy %, Variable09 damage %.
+    The log says "relic: damage x.. , magazine x.." when 04 or 09 changes. Damage works by launching the bullet with more power: UNCONFIRMED that the game scales a spell bullet's damage with it - compare what an enemy's shield absorbs
+    ("shield: .. took .. damage" lines in SkylandsNative.log) with Variable09 at 0 and at 100.
   SHIELDS (0.40.2): the shield models were drawn inside out (you could see into them): Borderlands 2's meshes are left-handed and the shields lacked the mirror the guns get. Fixed. Needs a full reinstall (the meshes are rebuilt).
   SHIELDS (0.40.1): the glow around enemies is off (ShieldGlow=1 turns it on again); EnemyShieldPercent goes back to 10 (+2 a level) and ShieldDropPercent to 25 once (your old values for them are replaced this one time);
     a shield's description lists only its stats (no parts, no grades).
@@ -232,7 +236,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-142.zip"
+    out = dist / "Skylands-TestBuild-143.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
