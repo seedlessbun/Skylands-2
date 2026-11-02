@@ -612,6 +612,9 @@ Other commands:
   h -> kHealth (fraction x base Health), s/r/m/d -> Variable01/02/04/09, f/k/c/x -> ResistFire/ResistShock/PoisonResist/ResistMagic (points); log "relics: the player wears ..". People: roll by `Mix(id ^ ..)`, `EnemyRelicPercent` 8 + `EnemyRelicPerLevel` 1 (max 100), bosses always rare+, `PutOn`; `DeathSink`: 1.1 s after death the relic in the pack is dropped
   (`RelicDropPercent` 100) or removed. Enemies get no effects from relics (loot only). Ini keys `Relics`, `RelicSlot`, `EnemyRelicPercent`, `EnemyRelicPerLevel`, `RelicDropPercent` (written when a relic slot was chosen). UNCONFIRMED in game: all of it (that the slot is free, that the relic equips and shows in the slot data, the ring model, the health/resist
   modifiers taking effect and coming off, the loot lists, the compile of relic.h). Not done: weapon-type / manufacturer / element relics, uniques, health regen, melee, XP, a real BL2 mesh (the artifact gestalt `Item_Artifacts.GestaltDef_Artifact`).
+- 0.43.0 in game (user): the game CRASHED after the Bethesda logo (Papyrus log empty of Skylands, no plugin log sent). Cause found in code: `relic::Catalog` held `g_lock` and called `InfoOf`, which locks the same non-recursive `std::mutex`
+  (deadlock/crash at the first relic found, at data load). 0.43.1 (TestBuild-145, plugin 1.20.1 = "SkylandsNative 382") parses first and locks only to push. LESSON: never call a function that takes a lock while holding it; the same pattern in new
+  plugin code should be grepped for (`lock_guard` blocks that call other helpers). Wait for the CI DLL (version 1.20.1) before packaging.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

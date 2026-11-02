@@ -107,9 +107,13 @@ namespace relic
 		}
 		int n = 0;
 		for (const auto armor : handler->GetFormArray<RE::TESObjectARMO>()) {
-			if (armor && InfoOf(armor).ok) {
+			if (!armor) {
+				continue;
+			}
+			const Info info = InfoOf(armor);  // takes g_lock itself: never call it while holding the lock (std::mutex is not recursive)
+			if (info.ok) {
 				const std::lock_guard guard(g_lock);
-				g_catalog[std::clamp(InfoOf(armor).level, 1, 6)].push_back(armor->GetFormID());
+				g_catalog[std::clamp(info.level, 1, 6)].push_back(armor->GetFormID());
 				++n;
 			}
 		}
