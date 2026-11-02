@@ -1,0 +1,87 @@
+{
+ "sheet": "enemy_drops",
+ "description": "What enemies drop, besides the Badass tiers (sheets/badass_tiers.json): the shares of guns, shields and relics, the creature drop rule and BL2's own odds for reference. source 'bl2' = read from the badass survey (tools/badass_report.py) or the shield survey; 'design' = a Skylands choice (the user's). See docs/badass-roadmap.md.",
+ "columns": {
+  "id": "row id",
+  "value": "the number",
+  "unit": "what the number means",
+  "source": "bl2 or design",
+  "bl2_object": "the Borderlands 2 object it comes from ('-' none)",
+  "note": "what it does",
+  "read_verified": "yes once read from a real BL2 install"
+ },
+ "rows": [
+  {
+   "id": "gun_weight",
+   "value": 44.44,
+   "unit": "percent share",
+   "source": "bl2",
+   "bl2_object": "GD_Itempools.EnemyDropPools.Pool_GunsAndGear_01_Common",
+   "note": "a creature's random item is a gun this often (BL2's enemy gear pool: weapons 44.44, shields 20.00, relics 8.89; grenade and class mods do not exist in Skylands, so the three are weighed against each other: gun 60 %, shield 27 %, relic 12 %)",
+   "read_verified": "yes"
+  },
+  {
+   "id": "shield_weight",
+   "value": 20.0,
+   "unit": "percent share",
+   "source": "bl2",
+   "bl2_object": "GD_Itempools.EnemyDropPools.Pool_GunsAndGear_01_Common",
+   "note": "a creature's random item is a shield this often (see gun_weight)",
+   "read_verified": "yes"
+  },
+  {
+   "id": "relic_weight",
+   "value": 8.89,
+   "unit": "percent share",
+   "source": "bl2",
+   "bl2_object": "GD_Itempools.EnemyDropPools.Pool_GunsAndGear_01_Common",
+   "note": "a creature's random item is a relic this often (BL2 artifacts; see gun_weight)",
+   "read_verified": "yes"
+  },
+  {
+   "id": "creature_drop_scale",
+   "value": 0.5,
+   "unit": "share of a person's chance",
+   "source": "design",
+   "bl2_object": "-",
+   "note": "the user's rule: a creature drops at half a person's rate (people: gun 25 % + shield carry x 25 % + relic carry x 100 %); per class in sheets/enemy_stats.json drop_scale",
+   "read_verified": "no"
+  },
+  {
+   "id": "creature_drop_cap",
+   "value": 60.0,
+   "unit": "percent",
+   "source": "design",
+   "bl2_object": "-",
+   "note": "a creature's chance never goes above this",
+   "read_verified": "no"
+  },
+  {
+   "id": "bl2_regular_gear_odds",
+   "value": 8.5,
+   "unit": "percent",
+   "source": "bl2",
+   "bl2_object": "GD_Itempools.DropWeights.DropODDS_GunsAndGear",
+   "note": "for reference: how often a regular BL2 enemy drops a gun or gear item in single player (Skylands people drop more: the user's 25 % gun roll); not used",
+   "read_verified": "yes"
+  },
+  {
+   "id": "bl2_boss_unique_odds",
+   "value": 3.3,
+   "unit": "percent",
+   "source": "bl2",
+   "bl2_object": "GD_Itempools.DropWeights.DropODDS_BossUniques",
+   "note": "for reference and the 'named bosses with a unique drop' idea: BL2's chance that a boss drops its unique item; not used yet",
+   "read_verified": "yes"
+  },
+  {
+   "id": "champion_damage_factor",
+   "value": 1.138,
+   "unit": "times",
+   "source": "bl2",
+   "bl2_object": "GD_Balance.WeightingPlayerCount.Enemy_Damage_PerPlayerPerPlaythroughByChampion",
+   "note": "single player, first playthrough: a champion (Badass) deals 0.74 where a regular enemy deals 0.65; it is folded into badass_tiers melee_damage_mult and gun_damage_mult",
+   "read_verified": "yes"
+  }
+ ]
+}

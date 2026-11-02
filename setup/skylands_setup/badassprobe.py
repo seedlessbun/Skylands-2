@@ -65,6 +65,8 @@ def name_scan(ctx: Ctx, upks: list[Path]) -> dict:
     badass: dict[str, set[str]] = defaultdict(set)
     sound: dict[str, set[str]] = defaultdict(set)
     dialog: dict[str, set[str]] = defaultdict(set)
+    banks: dict[str, set[str]] = defaultdict(set)  # akb_* : the Wwise bank names the packages load
+    vobd: dict[str, set[str]] = defaultdict(set)   # ak_play_vobd_*: battle dialog (taunts, pain, death ...) of enemies and heroes
     unreadable = 0
     for n, p in enumerate(upks):
         try:
@@ -75,6 +77,11 @@ def name_scan(ctx: Ctx, upks: list[Path]) -> dict:
         for name in names:
             if BADASS.search(name):
                 badass[name].add(p.stem)
+            low = name.lower()
+            if low.startswith("akb_"):
+                banks[name].add(p.stem)
+            if low.startswith("ak_play_") and "vobd_" in low:
+                vobd[name].add(p.stem)
             if is_sound_name(name):
                 sound[name].add(p.stem)
             elif re.search(r"(?i)dialog", name):
@@ -97,7 +104,7 @@ def name_scan(ctx: Ctx, upks: list[Path]) -> dict:
     for name in sorted(dialog)[:300]:
         ctx.put(f"  {name}  [{', '.join(sorted(dialog[name])[:2])}]")
     ctx.save()
-    return {"badass": badass, "sound": sound, "dialog": dialog}
+    return {"badass": badass, "sound": sound, "dialog": dialog, "banks": banks, "vobd": vobd}
 
 
 # ---- reading many groups: each package opened once -----------------------------------------------------------------------------
@@ -375,6 +382,94 @@ def dialog_objects(ctx: Ctx, scan: dict) -> None:
     ctx.save()
 
 
+# ---- B8: enemy voices (battle dialog) in every sound pack -------------------------------------------------------------------------------
+
+VOBD = re.compile(r"(?i)^ak_play_(?:[a-z0-9]+_)?vobd_([a-z0-9]+)_(.*)$")
+VOICE_KIND = (("death", re.compile(r"(?i)death|dying|die")), ("pain", re.compile(r"(?i)pain|injur|hurt")), ("taunt", re.compile(r"(?i)taunt|kill|victory|laugh")),
+              ("attack", re.compile(r"(?i)attack|melee|charge|throw|grenade|start")), ("spot", re.compile(r"(?i)spot|alert|see|found|confirm|focus")),
+              ("other", re.compile(".")))
+
+
+def voice_kind(rest: str) -> str:
+    for kind, rx in VOICE_KIND:
+        if rx.search(rest):
+            return kind
+    return "other"
+
+
+def voices(ctx: Ctx, bl2: Path, scan: dict) -> None:
+    """The first survey found no battle-dialog event (ak_play_vobd_*) in the main pack pair, though the packages name a bank akb_vobd_bandits:
+    the voices live in another pack (a DLC's, or a language's). Every .pck/.bnk in the install is listed with its banks (named where a bank
+    name's Wwise id matches), then each pack is loaded on its own and the dialog events are looked up in it."""
+    from .bl2 import wwise
+
+    ctx.head("B8. Enemy voices (battle dialog): every sound pack in the install, which banks it holds, which dialog events and audio it has")
+    names = sorted(scan.get("vobd", {}))
+    by_char: dict[str, list[str]] = defaultdict(list)
+    for n in names:
+        m = VOBD.match(n)
+        if m:
+            by_char[m.group(1).lower()].append(n)
+    ctx.say(f"{len(names)} battle-dialog names in the packages, {len(by_char)} speakers: "
+            + ", ".join(f"{c} {len(v)}" for c, v in sorted(by_char.items(), key=lambda kv: -len(kv[1]))[:60]))
+    for c, v in sorted(by_char.items()):
+        kinds = Counter(voice_kind(VOBD.match(n).group(2)) for n in v)
+        ctx.put(f"  -- {c} ({len(v)}): {dict(kinds)}")
+        for n in sorted(v)[:40]:
+            ctx.put(f"     {n}")
+    bank_names = {wwise.fnv1(b): b for b in scan.get("banks", {})}
+    ctx.say(f"{len(bank_names)} bank names (akb_*) in the packages: {sorted(bank_names.values())[:120]}")
+    packs = sorted(p for p in bl2.rglob("*") if p.is_file() and p.suffix.lower() in (".pck", ".bnk"))
+    ctx.say(f"{len(packs)} sound pack/bank files in the install:")
+    ids = {n: [i for _l, i in wwise.event_ids(n)] for n in names}
+    found_any: dict[str, list[str]] = defaultdict(list)
+    for f in packs:
+        if ctx.out_of_time():
+            ctx.say("(time is up in the voice search)")
+            break
+        rel = f.relative_to(bl2)
+        size = f.stat().st_size
+        try:
+            data = f.read_bytes()
+        except OSError as e:
+            ctx.put(f"  {rel}: unreadable ({e})")
+            continue
+        snd = wwise.Sounds()
+        if f.suffix.lower() == ".pck":
+            pack = wwise.read_pack(data)
+            snd.add_banks(data, pack)
+            if pack.sounds and pack.sound_score >= 0.5:
+                snd.add_streamed(data, pack)
+            langs = sorted({e.lang for e in pack.banks + pack.sounds})
+            named = [bank_names.get(e.id, f"{e.id:08X}") for e in pack.banks]
+            ctx.say(f"  {rel} ({size // 1048576} MB): layout [{pack.layout}], {len(pack.banks)} banks (match {pack.bank_score:.2f}), {len(pack.sounds)} streamed (match {pack.sound_score:.2f}), languages {langs}")
+            ctx.put(f"     banks: {named[:200]}")
+        else:
+            pack = wwise.Pack()
+            snd.add_banks(data, pack)
+            ctx.say(f"  {rel} ({size // 1024} KB): {len(snd.banks)} bank(s)")
+        del data
+        hits: list[str] = []
+        for n, idents in ids.items():
+            for ident in idents:
+                if snd.first(ident, (wwise.HIRC_EVENT,)) is None:
+                    continue
+                leads = snd.event_sounds(ident)
+                media = [m for m in (snd.media_of(s) for s in leads) if m]
+                sizes = [len(snd.audio(m) or b"") for m in media]
+                hits.append(f"{n}: {len(leads)} sound(s), {len(media)} audio file(s) found here, {sum(sizes) // 1024} KB")
+                found_any[str(rel)].append(n)
+                break
+        if hits:
+            ctx.say(f"     {len(hits)} battle-dialog events in this pack; the first 120:")
+            for h in hits[:120]:
+                ctx.put(f"       {h}")
+        ctx.save()
+    total = sum(len(v) for v in found_any.values())
+    ctx.say(f"battle-dialog events found: {total} of {len(names)} names, in {len(found_any)} packs: {[(k, len(v)) for k, v in found_any.items()]}")
+    ctx.save()
+
+
 # ---- main ----------------------------------------------------------------------------------------------------------------------------
 
 def main(argv: list[str]) -> int:
@@ -385,6 +480,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out", default="BL2-Badass-Report.txt")
     ap.add_argument("--minutes", type=float, default=25.0, help="time allowed for reading packages (the index is extra)")
     ap.add_argument("--no-audio", action="store_true", help="do not read the sound banks")
+    ap.add_argument("--voice", action="store_true", help="only the name scan and the enemy-voice search in every sound pack (B0, B8)")
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out_path = Path(a.out)
@@ -406,7 +502,7 @@ def main(argv: list[str]) -> int:
     ctx.say(f"groups with 'badass' in the name: {sorted(k for k in ix.groups if BADASS.search(k))[:120]}")
     ctx.save()
     failed: list[str] = []
-    state: dict = {"scan": {"badass": {}, "sound": {}, "dialog": {}}, "fams": {}}
+    state: dict = {"scan": {"badass": {}, "sound": {}, "dialog": {}, "banks": {}, "vobd": {}}, "fams": {}}
 
     def run(name: str, fn) -> None:
         try:
@@ -426,6 +522,12 @@ def main(argv: list[str]) -> int:
         state["fams"] = balances(ctx)
 
     run("names", names)
+    if a.voice:
+        run("voices", lambda: voices(ctx, bl2, state["scan"]))
+        ctx.say("")
+        ctx.say(f"Finished{' (sections that failed: ' + ', '.join(failed) + ')' if failed else ''}. Report written to {out_path}. Send it to Claude.")
+        ctx.save()
+        return 1 if failed else 0
     run("balances", fams)
     run("tier balances", lambda: tier_dumps(ctx, state["fams"]))
     run("formulas", lambda: formulas(ctx))

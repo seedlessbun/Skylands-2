@@ -643,6 +643,13 @@ Other commands:
   so with the index's 24-package cache the same packages were reopened and decompressed again and again, with no progress line. 0.45.3 (TestBuild-150, python only): `badassprobe.objects_in_groups` reads each group from ONE package
   (most of the group, smallest file), bundles groups by package and opens every package once (progress line every 10 packages, deadline checked per package); B1 keeps the tier balances' properties for B2 (no second lookup);
   B4's pool list uses the same reader over `gd_itempools*` only. Lesson: never loop `group_objects` over hundreds of groups of a real install. The shield survey's `enemies()` has the same loop (it finished for the user, slowly).
+- BADASS REPORT READ (user's `bl2-badass-report.txt` of TestBuild-150, 51,714 lines; facts in `docs/badass-roadmap.md` 1.1b; `python tools/badass_report.py <report>` derives the numbers): a Badass = `Champion=True` balance + its own AI class whose
+  `AttributeStartingValues` set `Attribute_HealthMultiplier` / `Attribute_EnemyNonWeaponDamageMultiplier` (melee, not guns) / shield multiplier; median Badass/regular health x3.0 (11 pairs), non-weapon damage x2.0, champion damage factor 0.74/0.65 = x1.14
+  (applies to guns too), champion health boost 1.0 in single player. Separate Super/Ultimate classes exist only for the Varkid and Loader; elsewhere "Super Badass X" is the Badass's TVHM name. Loot lists guarantee 1 uncommon / rare + uncommon /
+  very rare + rare + uncommon; regular enemies drop gear 8.5 %. Enemy creature/robot sounds (643 events) are in the main pack; HUMAN battle dialog (`Ak_Play_VOBD_*`, 696 names, bank `Akb_VOBD_Bandits`) is NOT in the main pack pair.
+  0.45.4 (TestBuild-151, python only, plugin 1.21.0): `sheets/badass_tiers.json` carries BL2's health 3.0/5.8/15, melee damage 2.28/2.6/2.6 (Ultimate held at Super's: asked), gun damage 1.14, shield 1.55/2.0/2.0 (later), floors 2/3/4, `bl2_drops` 1/2/3
+  (Skylands gives 1: the user's choice; asked); new `sheets/enemy_drops.json` (gun/shield/relic shares 44.44/20/8.89 from the enemy gear pool, creature scale 0.5, cap 60, BL2 odds for reference). `badassprobe --voice` / `Check-BL2-EnemyVoice.bat`
+  (writes `work\bl2-enemy-voice-report.txt`): name scan + B8 (every .pck/.bnk with banks named by Wwise id, each pack searched for the battle-dialog events, speakers' lines by kind). NEXT: read that report, then stage 1 (plugin: tiers + stats).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class BadassTiersRow:
-    """The Badass tiers: when they appear (by the PLAYER's level), how strong they are and how their guaranteed drop is shifted. Every number is a placeholder (source 'design') until the Borderlands 2 badass survey (Check-BL2-Badass.bat) gives BL2's own; the rule: BL2 file values replace static values. See docs/badass-roadmap.md."""
+    """The Badass tiers: when they appear (by the PLAYER's level), how strong they are and how their guaranteed drop is shifted. Health, damage, shield, the drop floor and the names are Borderlands 2's (read from the badass survey with tools/badass_report.py, the rule: BL2 file values replace static values); the chances, speed and size are Skylands choices (BL2's own spawn rules are in its population definitions, not read). See docs/badass-roadmap.md."""
 
     id: str
     name_prefix: str
@@ -17,20 +17,24 @@ class BadassTiersRow:
     max_percent: float
     max_near: int
     health_mult: float
-    damage_mult: float
+    melee_damage_mult: float
+    gun_damage_mult: float
     speed_mult: float
     size_mult: float
     rarity_shift: int
     min_rarity: int
+    shield_mult: float
+    bl2_drops: int
     source: str
+    bl2_columns: str
     bl2_object: str
     note: str
 
 
 BADASS_TIERS: dict[str, BadassTiersRow] = {
-    'badass': BadassTiersRow(id='badass', name_prefix='Badass', player_level_gate=1, percent=3.0, per_level=0.5, max_percent=25.0, max_near=4, health_mult=2.5, damage_mult=1.3, speed_mult=1.0, size_mult=1.15, rarity_shift=1, min_rarity=2, source='design', bl2_object='-', note="from level 1 (the user's choice); 3 percent then +0.5 a level"),
-    'super': BadassTiersRow(id='super', name_prefix='Super Badass', player_level_gate=12, percent=0.5, per_level=0.2, max_percent=8.0, max_near=1, health_mult=5.0, damage_mult=1.6, speed_mult=1.05, size_mult=1.3, rarity_shift=2, min_rarity=3, source='design', bl2_object='-', note='bosses and dragons are at least this tier'),
-    'ultimate': BadassTiersRow(id='ultimate', name_prefix='Ultimate Badass', player_level_gate=25, percent=0.2, per_level=0.1, max_percent=3.0, max_near=1, health_mult=10.0, damage_mult=2.0, speed_mult=1.1, size_mult=1.45, rarity_shift=3, min_rarity=4, source='design', bl2_object='-', note='a boss is Ultimate half the time from player level 25'),
+    'badass': BadassTiersRow(id='badass', name_prefix='Badass', player_level_gate=1, percent=3.0, per_level=0.5, max_percent=25.0, max_near=4, health_mult=3.0, melee_damage_mult=2.28, gun_damage_mult=1.14, speed_mult=1.0, size_mult=1.15, rarity_shift=1, min_rarity=2, shield_mult=1.55, bl2_drops=1, source='bl2+design', bl2_columns='name_prefix health_mult melee_damage_mult gun_damage_mult shield_mult min_rarity bl2_drops', bl2_object='GD_Population_*.Balance.PawnBalance_*Badass -> CharClass_*Badass AttributeStartingValues; GD_Balance.WeightingPlayerCount.Enemy_Damage_PerPlayerPerPlaythroughByChampion; GD_Itempools.ListDefs.BadassEnemyGunsAndGear', note="from level 1 (the user's choice), 3 percent then +0.5 a level. BL2: health x3.0 = median over 11 regular/Badass class pairs (2.65 without the Varkid, whose regular is a larva); melee x2.28 = median non-weapon damage 2.0 x champion 1.14; one guaranteed uncommon (BadassEnemyGunsAndGear)"),
+    'super': BadassTiersRow(id='super', name_prefix='Super Badass', player_level_gate=12, percent=0.5, per_level=0.2, max_percent=8.0, max_near=1, health_mult=5.8, melee_damage_mult=2.6, gun_damage_mult=1.14, speed_mult=1.05, size_mult=1.3, rarity_shift=2, min_rarity=3, shield_mult=2.0, bl2_drops=2, source='bl2+design', bl2_columns='name_prefix health_mult melee_damage_mult gun_damage_mult shield_mult min_rarity bl2_drops', bl2_object='GD_Population_*.Balance.PawnBalance_*Badass -> CharClass_*Badass AttributeStartingValues; GD_Balance.WeightingPlayerCount.Enemy_Damage_PerPlayerPerPlaythroughByChampion; GD_Itempools.ListDefs.SuperBadassEnemyGunsAndGear', note="bosses and dragons are at least this tier. BL2: a Super is x1.94 the health and x1.15 the damage of its family's Badass (Loader and Varkid, the only two families with a Super class; elsewhere 'Super Badass' is just the Badass's name in the second playthrough); shield x2.0 from the Loader alone; BL2 guarantees a rare + an uncommon"),
+    'ultimate': BadassTiersRow(id='ultimate', name_prefix='Ultimate Badass', player_level_gate=25, percent=0.2, per_level=0.1, max_percent=3.0, max_near=1, health_mult=15.0, melee_damage_mult=2.6, gun_damage_mult=1.14, speed_mult=1.1, size_mult=1.45, rarity_shift=3, min_rarity=4, shield_mult=2.0, bl2_drops=3, source='bl2+design', bl2_columns='name_prefix health_mult melee_damage_mult gun_damage_mult shield_mult min_rarity bl2_drops', bl2_object='GD_Population_*.Balance.PawnBalance_*Badass -> CharClass_*Badass AttributeStartingValues; GD_Balance.WeightingPlayerCount.Enemy_Damage_PerPlayerPerPlaythroughByChampion; GD_Itempools.ListDefs.UltimateBadassEnemyGunsAndGear', note="a boss is Ultimate half the time from player level 25. BL2: health x5 the Badass (the Varkid, the only Ultimate class); its damage x0.75 the Badass would make it hit softer than a Super, so damage and shield are held at the Super's (a choice, to confirm); BL2 guarantees a very rare + a rare + an uncommon"),
 }
 
 @dataclass(frozen=True)
@@ -136,6 +140,29 @@ ENEMIES: dict[str, EnemiesRow] = {
     'tier5': EnemiesRow(id='tier5', skyrim_edid_pattern='^EncBandit05(?!.*Boss)', bl2_read='b_enemy_goliath', badass='no', abilities='AbWeaknessFireConstant:15'),
     'tier6': EnemiesRow(id='tier6', skyrim_edid_pattern='^EncBandit06(?!.*Boss)', bl2_read='b_enemy_marauder_badass', badass='yes', abilities='AbFortifyHealth:100'),
     'boss': EnemiesRow(id='boss', skyrim_edid_pattern='^EncBandit0\\dBoss', bl2_read='b_enemy_nomad_badass', badass='yes', abilities='AbFortifyHealth:150'),
+}
+
+@dataclass(frozen=True)
+class EnemyDropsRow:
+    """What enemies drop, besides the Badass tiers (sheets/badass_tiers.json): the shares of guns, shields and relics, the creature drop rule and BL2's own odds for reference. source 'bl2' = read from the badass survey (tools/badass_report.py) or the shield survey; 'design' = a Skylands choice (the user's). See docs/badass-roadmap.md."""
+
+    id: str
+    value: float
+    unit: str
+    source: str
+    bl2_object: str
+    note: str
+
+
+ENEMY_DROPS: dict[str, EnemyDropsRow] = {
+    'gun_weight': EnemyDropsRow(id='gun_weight', value=44.44, unit='percent share', source='bl2', bl2_object='GD_Itempools.EnemyDropPools.Pool_GunsAndGear_01_Common', note="a creature's random item is a gun this often (BL2's enemy gear pool: weapons 44.44, shields 20.00, relics 8.89; grenade and class mods do not exist in Skylands, so the three are weighed against each other: gun 60 %, shield 27 %, relic 12 %)"),
+    'shield_weight': EnemyDropsRow(id='shield_weight', value=20.0, unit='percent share', source='bl2', bl2_object='GD_Itempools.EnemyDropPools.Pool_GunsAndGear_01_Common', note="a creature's random item is a shield this often (see gun_weight)"),
+    'relic_weight': EnemyDropsRow(id='relic_weight', value=8.89, unit='percent share', source='bl2', bl2_object='GD_Itempools.EnemyDropPools.Pool_GunsAndGear_01_Common', note="a creature's random item is a relic this often (BL2 artifacts; see gun_weight)"),
+    'creature_drop_scale': EnemyDropsRow(id='creature_drop_scale', value=0.5, unit="share of a person's chance", source='design', bl2_object='-', note="the user's rule: a creature drops at half a person's rate (people: gun 25 % + shield carry x 25 % + relic carry x 100 %); per class in sheets/enemy_stats.json drop_scale"),
+    'creature_drop_cap': EnemyDropsRow(id='creature_drop_cap', value=60.0, unit='percent', source='design', bl2_object='-', note="a creature's chance never goes above this"),
+    'bl2_regular_gear_odds': EnemyDropsRow(id='bl2_regular_gear_odds', value=8.5, unit='percent', source='bl2', bl2_object='GD_Itempools.DropWeights.DropODDS_GunsAndGear', note="for reference: how often a regular BL2 enemy drops a gun or gear item in single player (Skylands people drop more: the user's 25 % gun roll); not used"),
+    'bl2_boss_unique_odds': EnemyDropsRow(id='bl2_boss_unique_odds', value=3.3, unit='percent', source='bl2', bl2_object='GD_Itempools.DropWeights.DropODDS_BossUniques', note="for reference and the 'named bosses with a unique drop' idea: BL2's chance that a boss drops its unique item; not used yet"),
+    'champion_damage_factor': EnemyDropsRow(id='champion_damage_factor', value=1.138, unit='times', source='bl2', bl2_object='GD_Balance.WeightingPlayerCount.Enemy_Damage_PerPlayerPerPlaythroughByChampion', note='single player, first playthrough: a champion (Badass) deals 0.74 where a regular enemy deals 0.65; it is folded into badass_tiers melee_damage_mult and gun_damage_mult'),
 }
 
 @dataclass(frozen=True)

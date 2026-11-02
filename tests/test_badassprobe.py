@@ -110,3 +110,34 @@ def test_balance_groups_copied_into_many_packages_are_read_once_each(tmp_path, m
     fams = badassprobe.balances(ctx)
     assert opened and len(opened) == len(set(opened)), opened
     assert sum(len(v) for v in fams.values()) == 8  # the fake install's 5 + the 3 Rakk; the copied MarauderBadass is counted once
+
+
+def test_voice_search_finds_battle_dialog_in_a_pack_other_than_the_main_pair(tmp_path):
+    # the first real report found no ak_play_vobd_* event in Audio_Banks.pck although the packages name a bank akb_vobd_bandits
+    import fake_wwise as fw
+
+    from skylands_setup.bl2 import wwise
+
+    bl2 = tmp_path / "bl2"
+    badass_install(bl2)
+    cooked = bl2 / "WillowGame" / "CookedPCConsole"
+    b = ObjBuilder()
+    b.obj("Ake_VOBD_Marauder.Ak_Play_VOBD_Marauder_Gen_React_Death", "AkEvent", b"")
+    b.obj("Ake_VOBD_Marauder.Ak_Play_VOBD_Marauder_Gen_Start_Taunt", "AkEvent", b"")
+    b.obj("Akb_VOBD_Bandits.Akb_VOBD_Bandits", "AkBank", b"")
+    (cooked / "Startup_Voice_Fake.upk").write_bytes(b.build())
+    (cooked / "Audio_Banks.pck").write_bytes(fw.pck([(wwise.fnv1("akb_other"), fw.bank(wwise.fnv1("akb_other"), []))], []))
+    ev = wwise.fnv1("Play_VOBD_Marauder_Gen_React_Death")
+    death = fw.bank(wwise.fnv1("akb_vobd_bandits"), [fw.event(ev, [77]), fw.play_action(77, 88), fw.sound(88, 99)], {99: fw.pcm_wem()})
+    dlc = bl2 / "DLC" / "Lang" / "English(US)"
+    dlc.mkdir(parents=True)
+    (dlc / "Audio_Banks_VO.pck").write_bytes(fw.pck([(wwise.fnv1("akb_vobd_bandits"), death)], []))
+    out = tmp_path / "voice.txt"
+    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--voice", "--minutes", "2"]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "B8. Enemy voices" in text and "B1. Every enemy" not in text  # --voice runs only the names and the voices
+    assert "-- marauder (2): {'death': 1, 'taunt': 1}" in text
+    assert "akb_vobd_bandits" in text  # the bank named by its Wwise id
+    vo = text.split("Audio_Banks_VO.pck")[1]
+    assert "ak_play_vobd_marauder_gen_react_death: 1 sound(s), 1 audio file(s) found here" in vo
+    assert "battle-dialog events found: 1 of 2 names, in 1 packs" in text

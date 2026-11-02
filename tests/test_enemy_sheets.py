@@ -40,8 +40,22 @@ def test_tiers_grow_in_order_and_badass_starts_at_level_one():
     assert tiers[0].player_level_gate == 1  # the user's choice
     for a, b in zip(tiers, tiers[1:]):
         assert a.player_level_gate < b.player_level_gate
-        for col in ("health_mult", "damage_mult", "speed_mult", "size_mult", "rarity_shift", "min_rarity"):
+        for col in ("health_mult", "melee_damage_mult", "gun_damage_mult", "shield_mult", "speed_mult", "size_mult", "rarity_shift", "min_rarity", "bl2_drops"):
             assert getattr(a, col) <= getattr(b, col), col
         assert a.percent >= b.percent
     for t in tiers:
         assert t.percent <= t.max_percent and t.name_prefix.endswith("Badass")
+        for col in t.bl2_columns.split():
+            assert hasattr(t, col), col
+
+
+def test_tiers_carry_borderlands_numbers():
+    # read from the user's badass survey (tools/badass_report.py): BL2 file values replace the earlier design values
+    b, s, u = (S.BADASS_TIERS[t] for t in ("badass", "super", "ultimate"))
+    assert (b.health_mult, s.health_mult, u.health_mult) == (3.0, 5.8, 15.0)
+    assert b.gun_damage_mult == s.gun_damage_mult == u.gun_damage_mult == 1.14  # the champion factor; guns are the gun's damage
+    assert (b.min_rarity, s.min_rarity, u.min_rarity) == (2, 3, 4)  # uncommon, rare, very rare guaranteed
+    assert (b.bl2_drops, s.bl2_drops, u.bl2_drops) == (1, 2, 3)
+    w = S.ENEMY_DROPS
+    assert (w["gun_weight"].value, w["shield_weight"].value, w["relic_weight"].value) == (44.44, 20.0, 8.89)
+    assert w["creature_drop_scale"].value == 0.5 and w["creature_drop_scale"].source == "design"
