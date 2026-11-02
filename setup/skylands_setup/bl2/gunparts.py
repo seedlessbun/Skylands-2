@@ -148,7 +148,7 @@ class Bl2Source:
                 continue
             for hit in wanted & names:
                 self.name_files.setdefault(hit, []).append(f)
-            if "gestaltskeletalmeshdefinition" in names and any(n.startswith("gestaltdef_") for n in names) and ("startup" in f.stem.lower() or "gestaltdef_shields" in names):
+            if "gestaltskeletalmeshdefinition" in names and any(n.startswith("gestaltdef_") for n in names) and ("startup" in f.stem.lower() or "gestaltdef_shields" in names or "gestaltdef_artifact" in names):
                 self.gestalt_files.append(f)
             n += 1
             if n % 400 == 0:
@@ -309,7 +309,7 @@ class Bl2Source:
                 if pkg.obj_class(i) != "GestaltSkeletalMeshDefinition" or not e.name.lower().startswith("gestaltdef_"):
                     continue
                 path = pkg.path_of(i)
-                if "weap_" not in path.lower() and "item_shields" not in path.lower():  # the guns' definitions, and the shields' (their fragments are cut by shields.py)
+                if not any(w in path.lower() for w in ("weap_", "item_shields", "item_artifacts")):  # the guns' definitions, and the shields' and relics' (their fragments are cut by shields.py / relics.py)
                     continue
                 try:
                     props = upk.object_properties(pkg, i)

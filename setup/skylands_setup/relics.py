@@ -81,33 +81,92 @@ def choose_slot(data_dir: Path, say=None, wanted: int | None = None, taken: int 
     return slot, f"slot {slot} (every candidate is used by something; this one by {use.get(slot, 0)} records)"
 
 
-def write_assets(out_data: Path, colors: dict[int, tuple[int, int, int]]) -> dict[int, str]:
-    """A small ring with a gem, in a colour per rarity: one mesh each. Returns the mesh path (under Meshes\\) by rarity level. (A stand-in until Borderlands 2's artifact mesh is cut from its gestalt.)"""
+# the fragment of Borderlands 2's artifact gestalt (Item_Artifacts.GestaltDef_Artifact) each kind uses as its body (GestaltModeSkeletalMeshName of the body parts in GD_Artifacts.Body / Gladiolus),
+# and the ring fragments the upgrade parts name (Ring_Single / Ring_Double / Ring_Triple by grade); the colours are design values (the body parts carry a p_EmissiveColor, not read yet)
+BODY_FRAGMENT = {"vitality": "type_healthbuff", "protection": "type_shieldskillskills", "resistance": "type_elemental", "stockpile": "type_inventory", "aggression": "type_weapons"}
+BODY_COLOR = {"vitality": (200, 40, 40), "protection": (50, 110, 230), "resistance": (60, 190, 190), "stockpile": (210, 170, 50), "aggression": (230, 120, 30)}
+RING_OF_LEVEL = {1: "ring_single", 2: "ring_single", 3: "ring_double", 4: "ring_double", 5: "ring_triple"}
+RELIC_SIZE = 9.0  # the longest side of the cut model, in Skyrim units
+ATLAS_GUESSES = ("Item_Artifacts.Textures.Artifact_Dif", "Item_Artifacts.Textures.Artifact_Diffuse")
+
+
+def _cut(source, say, names: list[str]):
+    table = getattr(source, "gestalt_table", None) or {}
+    parts = []
+    for n in names:
+        if n not in table:
+            return None
+        got = source._read_gestalt_part("relic", n)
+        if not got:
+            return None
+        parts.append(got["mesh"])
+    return parts
+
+
+def _shape(mesh, tex: str, normal: str, centre, scale):
+    # UE3 is left-handed: mirror x (this also reverses the triangles, as in shields.Models), then centre and scale
+    return M.transformed(mesh, ((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)), scale, (centre[0] * scale, -centre[1] * scale, -centre[2] * scale)), tex, normal
+
+
+def write_assets(out_data: Path, colors: dict[int, tuple[int, int, int]], source=None, say=lambda _m: None) -> dict[tuple[str, int], str]:
+    """Relic models under Meshes\\Skylands\\Relics, one per kind and rarity, returned as {(kind id, level): path under Meshes\\}. With Borderlands 2's artifact mesh readable
+    each is the kind's body fragment plus the rarity's ring fragment cut from the gestalt mesh; else (or for a kind whose fragments are missing) a small ring with a gem, in a colour per rarity."""
     mesh_dir = Path(out_data) / "Meshes" / "Skylands" / "Relics"
     tex_dir = Path(out_data) / "Textures" / "Skylands" / "Relics"
     mesh_dir.mkdir(parents=True, exist_ok=True)
     tex_dir.mkdir(parents=True, exist_ok=True)
+    flat = f"{TEX_DIR}\\flat_n.dds"
     (tex_dir / "flat_n.dds").write_bytes(nif.dds_flat_normal())
     (tex_dir / "band.dds").write_bytes(nif.dds_solid((150, 150, 158)))
-    paths: dict[int, str] = {}
+    table = getattr(source, "gestalt_table", None) or {}
+    if source is not None:
+        near = sorted(n for n in table if n.startswith(("type_", "ring_", "rarity_")))
+        say(f"relic models: artifact fragments in the gestalt table: {near if near else 'none (Item_Artifacts.GestaltDef_Artifact was not read)'}")
+    atlas_raw = None
+    if source is not None and table:
+        for guess in ATLAS_GUESSES:
+            try:
+                key = source._texture(guess)
+                raw = source.textures.pop(key, None) if key else None
+            except Exception:  # noqa: BLE001
+                raw = None
+            if raw:
+                atlas_raw = raw
+                say(f"relic models: texture {guess} read")
+                break
+        if atlas_raw is None:
+            say("relic models: no artifact texture was found (tried " + ", ".join(ATLAS_GUESSES) + "); the cut parts get plain colours (kind colour for the body, the rarity's for the ring)")
+    written: dict[tuple[str, int], str] = {}
+    stats = {"real": 0, "ring": 0}
     for level, rgb in colors.items():
-        name = f"gem_{level}"
-        (tex_dir / f"{name}.dds").write_bytes(nif.dds_solid(rgb))
-        band = M.cylinder(0, 0, 0, 3.4, 1.0, axis=2, sides=18)
-        gem = M.box(0, 3.6, 0.3, 1.0, 1.0, 1.0)
-        shapes = []
-        for part, tex in ((band, "band"), (gem, name)):
-            shapes.append((part, f"{TEX_DIR}\\{tex}.dds", f"{TEX_DIR}\\flat_n.dds"))
-        allp = M.merged([s[0] for s in shapes])
-        lo, hi = allp.bounds()
-        half = tuple(max(0.02, (hi[i] - lo[i]) / 2 / HAVOK_SCALE) for i in range(3))
-        rel = f"Skylands\\Relics\\relic_{level}.nif"
-        (mesh_dir / f"relic_{level}.nif").write_bytes(nif.gun(shapes, half, 0.2, "SkylandsRelic"))  # type: ignore[arg-type]
-        paths[level] = rel
-    return paths
+        (tex_dir / f"gem_{level}.dds").write_bytes(nif.dds_solid(rgb))
+        for kid, body_frag in BODY_FRAGMENT.items():
+            (tex_dir / f"body_{kid}.dds").write_bytes(nif.dds_solid(BODY_COLOR[kid]))
+            rel = f"Skylands\\Relics\\relic_{kid}_{level}.nif"
+            parts = _cut(source, say, [body_frag, RING_OF_LEVEL[level]]) if table else None
+            if parts:
+                merged = M.merged(parts)
+                lo, hi = merged.bounds()
+                size = max(hi[i] - lo[i] for i in range(3)) or 1.0
+                centre = tuple((lo[i] + hi[i]) / 2 for i in range(3))
+                scale = RELIC_SIZE / size
+                shapes = [_shape(parts[0], f"{TEX_DIR}\\body_{kid}.dds", flat, centre, scale), _shape(parts[1], f"{TEX_DIR}\\gem_{level}.dds", flat, centre, scale)]
+                stats["real"] += 1
+            else:
+                band = M.cylinder(0, 0, 0, 3.4, 1.0, axis=2, sides=18)
+                gem = M.box(0, 3.6, 0.3, 1.0, 1.0, 1.0)
+                shapes = [(band, f"{TEX_DIR}\\band.dds", flat), (gem, f"{TEX_DIR}\\gem_{level}.dds", flat)]
+                stats["ring"] += 1
+            allp = M.merged([sh[0] for sh in shapes])
+            lo, hi = allp.bounds()
+            half = tuple(max(0.02, (hi[i] - lo[i]) / 2 / HAVOK_SCALE) for i in range(3))
+            (mesh_dir / f"relic_{kid}_{level}.nif").write_bytes(nif.gun(shapes, half, 0.2, "SkylandsRelic"))  # type: ignore[arg-type]
+            written[(kid, level)] = rel
+    say(f"relic models: {stats['real']} cut from Borderlands 2's artifact mesh, {stats['ring']} stand-in rings")
+    return written
 
 
-def make(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], report: dict, say, *, slot: int, stats_effect, rarity_colors: dict[int, tuple[int, int, int]]) -> dict[int, list[int]]:
+def make(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], report: dict, say, *, slot: int, stats_effect, rarity_colors: dict[int, tuple[int, int, int]], source=None) -> dict[int, list[int]]:
     """Write the relic records into the models plugin `view` and the assets under out_data. Returns the item form ids by rarity level (for the loot lists)."""
     if not slot:
         return {}
@@ -118,7 +177,7 @@ def make(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], r
     stats_donor = find_effects(m, r"^EnchArmor.*FortifyHealth|^EnchArmor.*Health") or find_effects(m, r"^EnchArmor")
     if stats_donor is None:
         say("relics: no vanilla armor enchantment was found to copy; the relics get no stats text")
-    meshes = write_assets(out_data, {lv: rarity_colors.get(lv, (200, 200, 200)) for lv in RARITY_OF_LEVEL})
+    meshes = write_assets(out_data, {lv: rarity_colors.get(lv, (200, 200, 200)) for lv in RARITY_OF_LEVEL}, source, say)
     vendor_kw = m.find("KYWD", "VendorItemClothing")
     numbers: dict[str, int] = {}
     ids_by_level: dict[int, list[int]] = {}
@@ -151,7 +210,7 @@ def make(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], r
                 a.add("OBND", struct.pack("<6h", -6, -6, -2, 6, 6, 2)).add("FULL", esp.zstr(name))
                 if ench_id:
                     a.add("EITM", esp.u32(ench_id))
-                a.add("MOD2", esp.zstr(meshes[level])).add("BOD2", struct.pack("<II", 1 << (slot - 30), 2)).add("RNAM", esp.u32(DEFAULT_RACE))
+                a.add("MOD2", esp.zstr(meshes[(kind.id, level)])).add("BOD2", struct.pack("<II", 1 << (slot - 30), 2)).add("RNAM", esp.u32(DEFAULT_RACE))
                 kws = [marker, numbers[kw], rarity_keywords[level]] + ([vendor_kw.form_id] if vendor_kw is not None else [])
                 a.add("KSIZ", esp.u32(len(kws))).add("KWDA", b"".join(esp.u32(k) for k in kws))
                 a.add("DESC", esp.zstr(text)).add("MODL", esp.u32(arma.form_id))

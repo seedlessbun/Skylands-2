@@ -615,6 +615,13 @@ Other commands:
 - 0.43.0 in game (user): the game CRASHED after the Bethesda logo (Papyrus log empty of Skylands, no plugin log sent). Cause found in code: `relic::Catalog` held `g_lock` and called `InfoOf`, which locks the same non-recursive `std::mutex`
   (deadlock/crash at the first relic found, at data load). 0.43.1 (TestBuild-145, plugin 1.20.1 = "SkylandsNative 382") parses first and locks only to push. LESSON: never call a function that takes a lock while holding it; the same pattern in new
   plugin code should be grepped for (`lock_guard` blocks that call other helpers). Wait for the CI DLL (version 1.20.1) before packaging.
+- 0.43.1 in game (user): no crash, relics drop. 0.44.0 (TestBuild-146, python-only, plugin still 1.20.1), user request "get the models from Borderlands 2": relic models are cut from the artifact gestalt mesh
+  `Item_Artifacts.GestaltDef_Artifact` (same machinery as the shields: `gunparts` now also loads definitions whose path has `item_artifacts` and files holding `gestaltdef_artifact`). `relics.write_assets(out, colors, source, say)`: one NIF per
+  kind x rarity (`relic_<kind>_<level>.nif`) = the kind's body fragment (`BODY_FRAGMENT`: vitality Type_HealthBuff, protection Type_ShieldsKillSkills, resistance Type_Elemental, stockpile Type_Inventory (a guess), aggression Type_Weapons) + the rarity's ring
+  (`RING_OF_LEVEL`: Ring_Single/Double/Triple; BL2's upgrade parts use Ring_Double for grades 8-11 and Ring_Triple 12+), x mirrored, scaled to `RELIC_SIZE` 9; fallback = the old ring-with-gem. Textures: the atlas name is NOT known (guesses `ATLAS_GUESSES`; the
+  deep report only shows `PickupFlagIcon fx_shared_items.Textures.Artifact_Dif`, the pickup icon), so the cut parts are plain colours (kind colour for the body, rarity colour for the ring). READ in the next setup log: "relic models:" lines (fragments found in the
+  table, texture result, "N cut from Borderlands 2's artifact mesh, M stand-in rings") and the "relic: gestalt part ..." lines (triangle counts). UNCONFIRMED in game: that the fragments exist under those names, orientation/size, looks. NEXT: the body parts' `p_EmissiveColor`
+  (in the deep report) can replace the design colours; find the atlas texture name from the setup log or a survey.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

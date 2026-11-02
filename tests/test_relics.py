@@ -47,4 +47,31 @@ def test_the_install_writes_relics_beside_the_shields(tmp_path):
     assert {"SkylandsRelicTier_1", "SkylandsRelicsAny", "SkylandsRelicsGood", "SkylandsRelicStock", "SkylandsShieldsAny"} <= lists
     beams = [r for r in recs["FLST"]]
     assert beams and len(beams[0].all("LNAM")) >= rep["relics"]["items"] + rep["shields"]["items"]
-    assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Relics" / "relic_3.nif").is_file()
+    assert (tmp_path / "out" / "Data" / "Meshes" / "Skylands" / "Relics" / "relic_vitality_3.nif").is_file()
+
+
+def test_relic_models_are_cut_from_the_artifact_gestalt_when_it_is_readable(tmp_path):
+    from skylands_setup import meshes as M
+    from skylands_setup import relics
+
+    class FakeSource:
+        gestalt_table = {n: ("k", 0, 1) for n in ("type_healthbuff", "type_shieldskillskills", "type_elemental", "type_inventory", "type_weapons", "ring_single", "ring_double", "ring_triple")}
+        textures: dict = {}
+
+        def _read_gestalt_part(self, part, name):
+            assert part == "relic"
+            return {"mesh": M.box(0, 0, 0, 1.0, 2.0, 3.0)}
+
+        def _texture(self, path):
+            return None
+
+    said: list[str] = []
+    colors = {1: (200, 200, 200), 2: (80, 200, 80), 3: (60, 100, 230), 4: (160, 60, 220), 5: (240, 140, 30)}
+    got = relics.write_assets(tmp_path, colors, FakeSource(), said.append)
+    assert len(got) == 25 and got[("vitality", 5)] == "Skylands\\Relics\\relic_vitality_5.nif"
+    assert (tmp_path / "Meshes" / "Skylands" / "Relics" / "relic_aggression_3.nif").is_file()
+    assert any("25 cut from Borderlands 2's artifact mesh" in s for s in said)
+    # without the mesh every relic is the stand-in ring
+    said.clear()
+    relics.write_assets(tmp_path / "b", colors, None, said.append)
+    assert any("25 stand-in rings" in s for s in said)

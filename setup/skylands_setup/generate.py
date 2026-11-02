@@ -610,7 +610,7 @@ def sndr_prefix(style: str) -> str:
     return style[:at] if at > 0 else ""
 
 
-STAFF_INFO_BUILD = "0.43.1"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
+STAFF_INFO_BUILD = "0.44.0"  # the build named in the staff gun's first message box (STAFF_REV names the id block and must not change)
 
 
 class Armory:
@@ -1435,7 +1435,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                           chest_list=next((r for r in view.records if r.type == "LVLI" and r.form_id == ammo_drop.form_id), None),
                           rarity_colors={row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()}, seed=seed,
                           relics_fn=(lambda v: relics.make(v, m, out_data, rarity_keywords, report, report.setdefault("model_log", []).append, slot=relic_slot, stats_effect=stats_effect,
-                                                           rarity_colors={row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()})) if relic_slot else None)
+                                                           rarity_colors={row.level: rarity_color(bl2["rarities"], row.level) for row in S.RARITIES.values()}, source=(model_sources or {}).get("native"))) if relic_slot else None)
         except Exception as e:  # noqa: BLE001 - the shields must never stop the install
             report["shields_error"] = f"{type(e).__name__}: {e}"
             report.setdefault("model_log", []).append(f"shields: not built ({type(e).__name__}: {e})")
