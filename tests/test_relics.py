@@ -20,7 +20,7 @@ def test_keyword_numbers_follow_borderlands_2s_formula():
     assert relics.keyword_text(vit, 3, 3) == "SkylandsRelic_l3_h1200x6000"
     prot = next(k for k in relics.KINDS if k.id == "protection")
     assert relics.keyword_text(prot, 5, 9) == "SkylandsRelic_l5_s1500x9000_r1500x9000"
-    assert "Health +0.4% per character level, +6% on top" in relics.stats_text(vit, 3, 3)
+    assert "Health +1.2% per character level, +6% on top" in relics.stats_text(vit, 3, 3)
 
 
 def test_the_slot_is_not_the_shields(tmp_path):
