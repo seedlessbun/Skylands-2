@@ -67,6 +67,7 @@ def name_scan(ctx: Ctx, upks: list[Path]) -> dict:
     dialog: dict[str, set[str]] = defaultdict(set)
     banks: dict[str, set[str]] = defaultdict(set)  # akb_* : the Wwise bank names the packages load
     vobd: dict[str, set[str]] = defaultdict(set)   # ak_play_vobd_*: battle dialog (taunts, pain, death ...) of enemies and heroes
+    popnames: dict[str, set[str]] = defaultdict(set)  # population (spawn) class and object names: PopDef_*, *PopulationDefinition, PopulationFactory*
     unreadable = 0
     for n, p in enumerate(upks):
         try:
@@ -78,6 +79,8 @@ def name_scan(ctx: Ctx, upks: list[Path]) -> dict:
             if BADASS.search(name):
                 badass[name].add(p.stem)
             low = name.lower()
+            if re.search(r"(population|^popdef)", low):
+                popnames[name].add(p.stem)
             if low.startswith("akb_"):
                 banks[name].add(p.stem)
             if low.startswith("ak_play_") and "vobd_" in low:
@@ -104,7 +107,7 @@ def name_scan(ctx: Ctx, upks: list[Path]) -> dict:
     for name in sorted(dialog)[:300]:
         ctx.put(f"  {name}  [{', '.join(sorted(dialog[name])[:2])}]")
     ctx.save()
-    return {"badass": badass, "sound": sound, "dialog": dialog, "banks": banks, "vobd": vobd}
+    return {"badass": badass, "sound": sound, "dialog": dialog, "banks": banks, "vobd": vobd, "popnames": popnames}
 
 
 # ---- reading many groups: each package opened once -----------------------------------------------------------------------------
@@ -470,6 +473,208 @@ def voices(ctx: Ctx, bl2: Path, scan: dict) -> None:
     ctx.save()
 
 
+def voice_banks_in_packages(ctx: Ctx, bl2: Path, scan: dict) -> None:
+    """Wwise banks can live INSIDE the game's packages (an AkBank object holding the bank's bytes, often in a localised _LOC_INT package) instead of a .pck:
+    the packages that name a voice bank (akb_*vo*) are opened, every export holding a bank (BKHD) is read, and the battle-dialog events are looked up in it.
+    Audio a bank does not hold itself is looked for among the streamed files of every .pck (by id)."""
+    from .bl2 import wwise
+
+    ctx.head("B8b. Voice banks stored inside the packages (AkBank objects)")
+    names = sorted(scan.get("vobd", {}))
+    ids = {n: [i for _l, i in wwise.event_ids(n)] for n in names}
+    voice_banks = {b: owners for b, owners in scan.get("banks", {}).items() if re.search(r"(?i)akb_.*(vo|dialog|dlg)", b)}
+    ctx.say(f"{len(voice_banks)} voice-looking bank names: {sorted(voice_banks)[:80]}")
+    streamed: dict[int, str] = {}
+    for f in sorted(p for p in bl2.rglob("*.pck") if p.is_file()):
+        try:
+            data = f.read_bytes()
+        except OSError:
+            continue
+        for e in wwise.read_pack(data).sounds:
+            streamed.setdefault(e.id, str(f.relative_to(bl2)))
+        del data
+    ctx.say(f"{len(streamed)} streamed audio files in the .pck files (audio a bank only points to)")
+    files = {f.stem.lower(): f for f in ctx.ix.files}
+    stems: set[str] = set()
+    for owners in voice_banks.values():
+        for s in owners:
+            stems.add(s.lower())
+            stems.add((s + "_LOC_INT").lower())
+    for s in list(files):
+        if s.endswith("_loc_int") and re.search(r"(?i)(vo|dialog|bandit|psycho|marauder|nomad|goliath|midget)", s):
+            stems.add(s)
+    chosen = sorted((files[s] for s in stems if s in files), key=lambda f: f.stat().st_size)[:120]
+    ctx.say(f"opening {len(chosen)} packages (those naming a voice bank, their _LOC_INT twins and voice-looking _LOC_INT packages), smallest first")
+    total, by_speaker = 0, Counter()
+    for f in chosen:
+        if ctx.out_of_time():
+            ctx.say("(time is up in the package bank search)")
+            break
+        try:
+            pkg = upk.open_package(f)
+        except Exception as e:  # noqa: BLE001
+            ctx.put(f"  {f.name}: could not be opened ({type(e).__name__})")
+            continue
+        for i, e in enumerate(pkg.exports, 1):
+            if e.serial_size < 64:
+                continue
+            cls = pkg.obj_class(i)
+            if "akbank" not in cls.lower() and not pkg.obj_name(i).lower().startswith("akb_"):
+                continue
+            data = pkg.export_data(i)
+            if b"BKHD" not in data:
+                ctx.put(f"  {f.name}: {pkg.path_of(i)} [{cls}] {e.serial_size} bytes, no bank inside")
+                continue
+            snd = wwise.Sounds()
+            snd.add_banks(data, wwise.Pack())
+            hits = []
+            for n, idents in ids.items():
+                for ident in idents:
+                    if snd.first(ident, (wwise.HIRC_EVENT,)) is None:
+                        continue
+                    leads = snd.event_sounds(ident)
+                    inside = outside = 0
+                    for s in leads:
+                        m = snd.media_of(s)
+                        if m and snd.audio(m):
+                            inside += 1
+                        else:
+                            # a streamed sound names its file id in its body; look for any streamed id there
+                            body_ids = wwise.contains_ids(s.body, streamed)
+                            outside += 1 if body_ids else 0
+                    hits.append(f"{n}: {len(leads)} sound(s), audio inside the bank {inside}, in a .pck {outside}")
+                    m2 = VOBD.match(n)
+                    if m2:
+                        by_speaker[m2.group(1).lower()] += 1
+                    break
+            total += len(hits)
+            ctx.say(f"  {f.name}: {pkg.path_of(i)} [{cls}] {e.serial_size // 1024} KB: {len(snd.banks)} bank(s), {sum(b.objects for b in snd.banks)} objects, "
+                    f"{sum(len(b.media) for b in snd.banks)} audio files inside, {len(hits)} battle-dialog events")
+            for h in hits[:60]:
+                ctx.put(f"       {h}")
+        del pkg
+        ctx.save()
+    ctx.say(f"battle-dialog events found in package banks: {total}; by speaker: {dict(by_speaker.most_common(60))}")
+    ctx.save()
+
+
+# ---- B9: how often a Badass spawns ---------------------------------------------------------------------------------------------
+
+def _struct_items(props: dict) -> list[dict]:
+    """Every struct inside every array of an object's properties."""
+    out: list[dict] = []
+    for v in props.values():
+        if isinstance(v, dict) and v.get("type") == "Array":
+            out += [x for x in v.get("items", []) if isinstance(x, dict)]
+    return out
+
+
+def _weight(entry: dict) -> tuple[float | None, str]:
+    """An entry's probability: (constant x scale, or None when it comes from an attribute/formula, and what it is)."""
+    for k, v in entry.items():
+        if "prob" in k.lower() or "weight" in k.lower():
+            if isinstance(v, dict) and "BaseValueConstant" in v:
+                attr, init = v.get("BaseValueAttribute"), v.get("InitializationDefinition")
+                c = float(v.get("BaseValueConstant") or 0) * float(v.get("BaseValueScaleConstant", 1) or 1)
+                if isinstance(attr, str) or isinstance(init, str):
+                    return None, f"{c} attr={str(attr).rsplit('.', 1)[-1]} init={str(init).rsplit('.', 1)[-1]}"
+                return c, f"{c}"
+            if isinstance(v, (int, float)):
+                return float(v), f"{v}"
+    return None, "no probability field"
+
+
+def _balance_of(ctx: Ctx, factory: str, depth: int = 0) -> list[str]:
+    """The pawn balances a spawn factory leads to (directly, or through a nested population definition)."""
+    if depth > 2:
+        return []
+    try:
+        props = ctx.ix.props(factory) or {}
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[str] = []
+    for k, v in props.items():
+        if isinstance(v, str) and "." in v:
+            if "pawnbalance" in v.lower() or "balance" in k.lower():
+                out.append(v)
+            elif "population" in k.lower() or "popdef" in v.lower():
+                out += _pop_balances(ctx, v, depth + 1)
+    return out
+
+
+def _pop_balances(ctx: Ctx, popdef: str, depth: int) -> list[str]:
+    try:
+        props = ctx.ix.props(popdef) or {}
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[str] = []
+    for e in _struct_items(props):
+        for k, v in e.items():
+            if isinstance(v, str) and "factory" in k.lower():
+                out += _balance_of(ctx, v, depth)
+    return out
+
+
+def spawns(ctx: Ctx, scan: dict) -> None:
+    """BL2 spawns enemies from population definitions (a mix of spawn factories, each pointing at a pawn balance, with a probability): the share of
+    the Badass / Super / Ultimate entries in each mix is how often a Badass replaces a regular spawn. Class and field names are not known yet,
+    so it looks by name: classes with 'population' in them, array entries with a '*Factory*' field and a '*Probability*'/'*Weight*' field."""
+    ctx.head("B9. How often a Badass spawns: the population definitions (spawn mixes)")
+    ix = ctx.ix
+    pn = scan.get("popnames", {})
+    cls_like = sorted(n for n in pn if re.match(r"(?i)^[a-z]*population[a-z]*(definition|factory|opportunity|den|encounter)[a-z]*$", n))
+    ctx.say(f"{len(pn)} population-looking names; class-like ({len(cls_like)}): {cls_like[:60]}")
+    popdefs = sorted(n for n in pn if n.lower().startswith("popdef"))
+    ctx.say(f"{len(popdefs)} PopDef_* names, e.g. {popdefs[:40]}")
+    groups = sorted(g for g in ix.groups if g.startswith("gd_population") and "balance" not in g.partition(".")[2])
+    found = objects_in_groups(ctx, groups, re.compile(r"(?i)population|popdef"), keep_props=lambda p: True, label="population definitions")
+    defs = [(p, c, pr) for p, c, pr in found if "factory" not in c.lower()]
+    ctx.say(f"{len(found)} population objects in {len(groups)} groups ({len(defs)} definitions); classes: {dict(Counter(c for _p, c, _pr in found))}")
+    shares: list[tuple[str, dict[str, float], int]] = []
+    unknown = 0
+    for path, cls, props in defs:
+        if ctx.out_of_time():
+            ctx.say("(time is up while reading the spawn mixes)")
+            break
+        entries = []
+        for e in _struct_items(props or {}):
+            fac = next((v for k, v in e.items() if isinstance(v, str) and "factory" in k.lower()), None)
+            if not fac:
+                continue
+            w, note = _weight(e)
+            bal = _balance_of(ctx, fac)
+            tiers = sorted({tier_of(b.rsplit(".", 1)[-1]) for b in bal}) or ["?"]
+            maxact = next((v for k, v in e.items() if "maxactive" in k.lower()), None)
+            entries.append((fac.rsplit(".", 1)[-1], [b.rsplit(".", 1)[-1] for b in bal][:3], tiers, w, note, maxact))
+        if not entries:
+            continue
+        tot: Counter = Counter()
+        for _f, _b, tiers, w, _n, _m in entries:
+            if w is None:
+                unknown += 1
+                continue
+            for tr in tiers:
+                tot[tr] += w / len(tiers)
+        s = sum(tot.values())
+        if s > 0:
+            shares.append((path, {k: v / s for k, v in tot.items()}, len(entries)))
+        ctx.put(f"{path} [{cls}]: " + "; ".join(f"{f} -> {b} {tr} p={note} max={m}" for f, b, tr, w, note, m in entries[:12]))
+    ctx.say(f"{len(shares)} spawn mixes with known probabilities ({unknown} entries had a formula/attribute instead of a number)")
+    with_badass = [(p, sh) for p, sh, _n in shares if any(k in sh for k in ("badass", "super", "ultimate"))]
+    ctx.say(f"{len(with_badass)} of them can spawn a Badass; their shares (badass / super / ultimate):")
+    for p, sh in with_badass[:200]:
+        ctx.put(f"  {p.rsplit('.', 1)[-1]}: " + ", ".join(f"{k} {v * 100:.1f}%" for k, v in sorted(sh.items())))
+    for tier in ("badass", "super", "ultimate"):
+        vals = sorted(sh.get(tier, 0.0) for _p, sh in with_badass)
+        allv = sorted(sh.get(tier, 0.0) for _p, sh, _n in shares)
+        if vals:
+            ctx.say(f"SHARE {tier}: median {vals[len(vals) // 2] * 100:.1f}% in the mixes that have Badasses, mean {sum(allv) / len(allv) * 100:.2f}% over all {len(allv)} mixes")
+    seeds = [p for p, _sh in with_badass[:6]] + [p for p, _c, _pr in defs[:4]]
+    if seeds:
+        follow(ctx, list(dict.fromkeys(seeds)), depth=2, cap=80, lines_each=200, title="spawn mix samples", fanout=20)
+    ctx.save()
+
+
 # ---- main ----------------------------------------------------------------------------------------------------------------------------
 
 def main(argv: list[str]) -> int:
@@ -480,7 +685,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out", default="BL2-Badass-Report.txt")
     ap.add_argument("--minutes", type=float, default=25.0, help="time allowed for reading packages (the index is extra)")
     ap.add_argument("--no-audio", action="store_true", help="do not read the sound banks")
-    ap.add_argument("--voice", action="store_true", help="only the name scan and the enemy-voice search in every sound pack (B0, B8)")
+    ap.add_argument("--voice", action="store_true", help="the name scan and the enemy-voice search: every sound pack and the voice banks inside packages (B0, B8, B8b)")
+    ap.add_argument("--spawns", action="store_true", help="the name scan and how often a Badass spawns: BL2's population definitions (B0, B9)")
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out_path = Path(a.out)
@@ -502,7 +708,7 @@ def main(argv: list[str]) -> int:
     ctx.say(f"groups with 'badass' in the name: {sorted(k for k in ix.groups if BADASS.search(k))[:120]}")
     ctx.save()
     failed: list[str] = []
-    state: dict = {"scan": {"badass": {}, "sound": {}, "dialog": {}, "banks": {}, "vobd": {}}, "fams": {}}
+    state: dict = {"scan": {"badass": {}, "sound": {}, "dialog": {}, "banks": {}, "vobd": {}, "popnames": {}}, "fams": {}}
 
     def run(name: str, fn) -> None:
         try:
@@ -522,8 +728,12 @@ def main(argv: list[str]) -> int:
         state["fams"] = balances(ctx)
 
     run("names", names)
-    if a.voice:
-        run("voices", lambda: voices(ctx, bl2, state["scan"]))
+    if a.voice or a.spawns:
+        if a.spawns:
+            run("spawns", lambda: spawns(ctx, state["scan"]))
+        if a.voice:
+            run("voices", lambda: voices(ctx, bl2, state["scan"]))
+            run("voice banks in packages", lambda: voice_banks_in_packages(ctx, bl2, state["scan"]))
         ctx.say("")
         ctx.say(f"Finished{' (sections that failed: ' + ', '.join(failed) + ')' if failed else ''}. Report written to {out_path}. Send it to Claude.")
         ctx.save()

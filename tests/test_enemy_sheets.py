@@ -40,7 +40,7 @@ def test_tiers_grow_in_order_and_badass_starts_at_level_one():
     assert tiers[0].player_level_gate == 1  # the user's choice
     for a, b in zip(tiers, tiers[1:]):
         assert a.player_level_gate < b.player_level_gate
-        for col in ("health_mult", "melee_damage_mult", "gun_damage_mult", "shield_mult", "speed_mult", "size_mult", "rarity_shift", "min_rarity", "bl2_drops"):
+        for col in ("health_mult", "melee_damage_mult", "gun_damage_mult", "shield_mult", "speed_mult", "size_mult", "rarity_shift", "min_rarity", "drops"):
             assert getattr(a, col) <= getattr(b, col), col
         assert a.percent >= b.percent
     for t in tiers:
@@ -55,7 +55,19 @@ def test_tiers_carry_borderlands_numbers():
     assert (b.health_mult, s.health_mult, u.health_mult) == (3.0, 5.8, 15.0)
     assert b.gun_damage_mult == s.gun_damage_mult == u.gun_damage_mult == 1.14  # the champion factor; guns are the gun's damage
     assert (b.min_rarity, s.min_rarity, u.min_rarity) == (2, 3, 4)  # uncommon, rare, very rare guaranteed
-    assert (b.bl2_drops, s.bl2_drops, u.bl2_drops) == (1, 2, 3)
+    assert (b.drops, s.drops, u.drops) == (1, 2, 3)  # BL2's 1 / 2 / 3 guaranteed items (the user chose BL2's system)
+    for tier in (b, s, u):
+        floors = [int(x) for x in tier.drop_floors.split()]
+        assert len(floors) == tier.drops and max(floors) == tier.min_rarity
     w = S.ENEMY_DROPS
     assert (w["gun_weight"].value, w["shield_weight"].value, w["relic_weight"].value) == (44.44, 20.0, 8.89)
     assert w["creature_drop_scale"].value == 0.5 and w["creature_drop_scale"].source == "design"
+
+
+def test_super_and_ultimate_are_rerolls_of_the_badass_chance_and_bosses_get_double_odds():
+    b, s, u = (S.BADASS_TIERS[t] for t in ("badass", "super", "ultimate"))
+    assert b.roll == "chance" and s.roll == u.roll == "reroll"
+    assert (s.percent, s.per_level, s.max_percent) == (u.percent, u.per_level, u.max_percent) == (b.percent, b.per_level, b.max_percent)
+    assert b.player_level_gate == 1 and s.player_level_gate == 12 and u.player_level_gate == 25
+    assert b.boss_odds == s.boss_odds == u.boss_odds == 2.0
+    assert u.melee_damage_mult == s.melee_damage_mult  # the user: keep the Ultimate at the Super's damage

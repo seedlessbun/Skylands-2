@@ -650,6 +650,11 @@ Other commands:
   0.45.4 (TestBuild-151, python only, plugin 1.21.0): `sheets/badass_tiers.json` carries BL2's health 3.0/5.8/15, melee damage 2.28/2.6/2.6 (Ultimate held at Super's: asked), gun damage 1.14, shield 1.55/2.0/2.0 (later), floors 2/3/4, `bl2_drops` 1/2/3
   (Skylands gives 1: the user's choice; asked); new `sheets/enemy_drops.json` (gun/shield/relic shares 44.44/20/8.89 from the enemy gear pool, creature scale 0.5, cap 60, BL2 odds for reference). `badassprobe --voice` / `Check-BL2-EnemyVoice.bat`
   (writes `work\bl2-enemy-voice-report.txt`): name scan + B8 (every .pck/.bnk with banks named by Wwise id, each pack searched for the battle-dialog events, speakers' lines by kind). NEXT: read that report, then stage 1 (plugin: tiers + stats).
+- 0.45.5 (TestBuild-152, python only, plugin 1.21.0), the user's answers: Ultimate keeps the Super's damage; BL2's 1/2/3 guaranteed drops (`badass_tiers.drops` + `drop_floors` "2" / "3 2" / "4 3 2"); spawn rates: survey BL2 first, FALLBACK = roll the
+  Badass chance p (3 % + 0.5 %/player level, max 25), then only after a hit reroll p for Super (from player level 12), then reroll p for Ultimate (from 25): p, p^2, p^3 (`roll` chance/reroll); people and creatures alike; bosses and dragons get NO guaranteed tier,
+  they roll at `boss_odds` 2x and keep boss loot. Open: whether the Super/Ultimate level gates stay (default yes). Surveys: `bl2badass --spawns` / `Check-BL2-Spawns.bat` (B9, writes `work\bl2-spawn-report.txt`: population definitions under `GD_Population_*`
+  read generically (arrays of structs with a *Factory* field and a *Probability*/*Weight* field; factory -> PawnBalance -> tier), Badass share per mix and the median; class/field names UNCONFIRMED); `--voice` adds B8b: `AkBank` objects stored INSIDE packages
+  (those naming a voice bank `akb_*vo*`, their `_LOC_INT` twins, voice-looking `_LOC_INT` packages), battle-dialog events looked up there, audio inside the bank or a streamed id in any .pck. NEXT: read both reports; then stage 1.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

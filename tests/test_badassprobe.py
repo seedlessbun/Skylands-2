@@ -141,3 +141,59 @@ def test_voice_search_finds_battle_dialog_in_a_pack_other_than_the_main_pair(tmp
     vo = text.split("Audio_Banks_VO.pck")[1]
     assert "ak_play_vobd_marauder_gen_react_death: 1 sound(s), 1 audio file(s) found here" in vo
     assert "battle-dialog events found: 1 of 2 names, in 1 packs" in text
+
+
+def test_spawn_survey_reads_the_badass_share_of_a_spawn_mix(tmp_path):
+    bl2 = tmp_path / "bl2"
+    badass_install(bl2)  # holds PawnBalance_Marauder and PawnBalance_MarauderBadass
+    cooked = bl2 / "WillowGame" / "CookedPCConsole"
+    b = ObjBuilder()
+    b.obj("GD_Population_Marauder.Balance.PawnBalance_Marauder", "AIPawnBalanceDefinition", b"")
+    b.obj("GD_Population_Marauder.Balance.PawnBalance_MarauderBadass", "AIPawnBalanceDefinition", b"")
+    b.obj("GD_Population_Marauder.Population.PopDef_MarauderMix", "WillowPopulationDefinition", b"")
+    b.obj("GD_Population_Marauder.Population.PopDef_MarauderMix:PopulationFactoryBalancedAIPawn_0", "PopulationFactoryBalancedAIPawn",
+          b.o("PawnBalanceDefinition", "GD_Population_Marauder.Balance.PawnBalance_Marauder"))
+    b.obj("GD_Population_Marauder.Population.PopDef_MarauderMix:PopulationFactoryBalancedAIPawn_1", "PopulationFactoryBalancedAIPawn",
+          b.o("PawnBalanceDefinition", "GD_Population_Marauder.Balance.PawnBalance_MarauderBadass"))
+    mix = b.arr_structs("ActorArchetypeList", [
+        b.o("SpawnFactory", "GD_Population_Marauder.Population.PopDef_MarauderMix:PopulationFactoryBalancedAIPawn_0")
+        + b.st("Probability", "AttributeInitializationData", b.f("BaseValueConstant", 0.9) + b.f("BaseValueScaleConstant", 1.0)) + b.i("MaxActiveAtOneTime", 6),
+        b.o("SpawnFactory", "GD_Population_Marauder.Population.PopDef_MarauderMix:PopulationFactoryBalancedAIPawn_1")
+        + b.st("Probability", "AttributeInitializationData", b.f("BaseValueConstant", 0.1) + b.f("BaseValueScaleConstant", 1.0)) + b.i("MaxActiveAtOneTime", 1)])
+    idx = b.paths["GD_Population_Marauder.Population.PopDef_MarauderMix"]
+    b.exports[idx - 1]["body"] = b.exports[idx - 1]["body"][:4] + mix + b.none()
+    (cooked / "Startup_Pop_Fake.upk").write_bytes(b.build())
+    out = tmp_path / "spawns.txt"
+    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--spawns", "--no-audio", "--minutes", "2"]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "B9. How often a Badass spawns" in text and "B8." not in text
+    assert "PopDef_MarauderMix: badass 10.0%, regular 90.0%" in text
+    assert "SHARE badass: median 10.0%" in text
+    assert "SECTION" not in text
+
+
+def test_voice_banks_inside_packages_are_searched(tmp_path):
+    import fake_wwise as fw
+
+    from skylands_setup.bl2 import wwise
+
+    bl2 = tmp_path / "bl2"
+    badass_install(bl2)
+    cooked = bl2 / "WillowGame" / "CookedPCConsole"
+    names = ObjBuilder()
+    names.obj("Ake_VOBD_Psycho.Ak_Play_VOBD_Psycho_Gen_React_Pain", "AkEvent", b"")
+    names.obj("Akb_VOBD_Bandits.Akb_VOBD_Bandits", "AkBank", b"")
+    (cooked / "Bandit_Dialog.upk").write_bytes(names.build())
+    ev = wwise.fnv1("Play_VOBD_Psycho_Gen_React_Pain")
+    bank = fw.bank(wwise.fnv1("akb_vobd_bandits"), [fw.event(ev, [5]), fw.play_action(5, 6), fw.sound(6, 7)], {7: fw.pcm_wem()})
+    loc = ObjBuilder()
+    i = loc.obj("Akb_VOBD_Bandits.Akb_VOBD_Bandits", "AkBank", b"")
+    loc.exports[i - 1]["body"] += bank
+    (cooked / "Bandit_Dialog_LOC_INT.upk").write_bytes(loc.build())
+    out = tmp_path / "voice.txt"
+    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--voice", "--minutes", "2"]) == 0
+    text = out.read_text(encoding="utf-8")
+    part = text.split("B8b. Voice banks stored inside the packages")[1]
+    assert "Bandit_Dialog_LOC_INT.upk: Akb_VOBD_Bandits.Akb_VOBD_Bandits [AkBank]" in part
+    assert "ak_play_vobd_psycho_gen_react_pain: 1 sound(s), audio inside the bank 1" in part
+    assert "by speaker: {'psycho': 1}" in part

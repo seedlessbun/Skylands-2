@@ -92,17 +92,20 @@ scaled or renamed actor over a save. All listed in section 7.
 ### 3.1 Which actors, which tier
 * **Eligible:** any living actor near the player that is hostile to the player (`IsHostileToActor`), not a child, not the player, not a summon of the player, not a follower. People (`IsPerson`) and creatures alike.
 * **Rolled once**, at first sight, from `Mix(formId ^ salt)` compared with chances that use the **player's level at that moment**. The result (including "none") is stored in a map and in a co-save record, so a loaded game gives the same enemies the same tier.
-* Defaults (percent chance for an eligible actor; the three rolls are exclusive and the highest tier that hits wins):
+* **The roll (the user's rule, the fallback until the spawn survey is read):** p = 3 % + 0.5 % per player level above 1, at most 25 %. Roll p: a hit makes a **Badass**. Only then, from player level 12, roll p AGAIN:
+  a hit makes it a **Super Badass**. Only then, from player level 25, roll p a third time: a hit makes it an **Ultimate Badass**. Each tier is recursively rarer (p, p², p³). The same rates for people and creatures (the user's choice).
 
-| Tier | From player level | Chance | Cap on the chance |
+| Player level | p (Badass) | Super (p², from 12) | Ultimate (p³, from 25) |
 |---|---|---|---|
-| Badass | 1 | 3 % + 0.5 % per level above 1 | 25 % |
-| Super Badass | 12 | 0.5 % + 0.2 % per level above 12 | 8 % |
-| Ultimate Badass | 25 | 0.2 % + 0.1 % per level above 25 | 3 % |
+| 1 | 3 % | - | - |
+| 12 | 8.5 % | 0.72 % | - |
+| 25 | 15 % | 2.25 % | 0.34 % |
+| 45+ | 25 % | 6.25 % | 1.56 % |
 
-  (The user chose level 1: a new character meets about 3 % Badasses from the start, and the Badass row's health x2.5 is the main difficulty knob; ini keys `BadassGate/Percent/PerLevel/Max` per tier, defaults from `sheets/badass_tiers.json`.)
+  A boss rolls each step at `boss_odds` x p (2x: a level 25 boss: 30 % / 9 % / 2.7 %). Ini keys `BadassGate/Percent/PerLevel/Max` (and the Super/Ultimate gates), defaults from `sheets/badass_tiers.json`.
+  When the spawn survey (`Check-BL2-Spawns.bat`, section 5) shows BL2's own shares, the user confirms whether they replace these numbers.
 * **Area cap:** at most `BadassMaxNear` (default 4) living Badasses of any tier within the pump's reach (6000 units) at the same time, and at most 1 Super and 1 Ultimate. An eligible actor that would exceed the cap is not rolled yet (tried again later), so a pack does not all turn Badass.
-* **Bosses** (unique base record, or level >= 35, hostile): at least Super Badass; Ultimate Badass if the player is level 25 or more (50 % by their roll). **Dragons** (keyword `ActorTypeDragon`, race editor id with "Dragon"): bosses by this rule.
+* **Bosses** (unique base record, or level >= 35, hostile) and **dragons** (keyword `ActorTypeDragon`, race editor id with "Dragon"): NO guaranteed tier (the user's choice): they roll like everyone else at double odds, and always drop boss loot (rare or better).
   A boss that is already named does not get a prefix twice (section 3.4). Allies, followers and quest-protected actors are never given a tier.
 
 ### 3.2 Stats (Borderlands 2's, from section 1.1b; speed and size are Skylands choices)
@@ -139,8 +142,9 @@ Rarity machinery: `kWeight` 122:50:20:6:1:1 and the gates `kLevelFor` are reused
 
 * **LATER (the user's decision): Badass humans carry better gear.** At the roll, in the same pass, a Badass person is given **a shield and a relic** of the shifted rarity (`shielditems::PickFor` / `relic::PickFor` already take `a_minRarity`) with `PutOn`, and a **gun** of the shifted rarity
   when the plugin can place one (see R6: guns are placed by Papyrus today). Its gear drops as for bosses (`IsBoss` currently forces the drop; a tier forces it too).
-* **Guaranteed drop, one item, any tier.** At death (the existing 0.9 to 1.1 s game-thread pattern, never inside the event): a Badass human drops **one of the items it carries** (random among gun, shield, relic); a Badass creature (nothing equipped)
-  gets **one random item** added to its pack and dropped: gun, shield or relic, chosen by the weights in 3.5, with the shifted rarity. If it carried nothing to drop, it is given one at death.
+* **Guaranteed drops, BL2's 1 / 2 / 3 (the user chose BL2's system).** At death (the existing 0.9 to 1.1 s game-thread pattern, never inside the event) a Badass drops 1 item (at least uncommon), a Super 2 (one at least rare, one at
+  least uncommon), an Ultimate 3 (at least epic, rare, uncommon) (`drop_floors` in the sheet). A Badass human drops what it carries first (gun, shield, relic) and is given the rest; a creature gets every item added to its pack and dropped.
+  Each item is a gun, shield or relic by the weights in 3.5, with the tier's rarity shift and that item's floor.
 * The ordinary drop chances (25 % shield, 100 % relic, Papyrus gun roll) are unchanged for non-Badasses.
 
 ### 3.4 Presentation
@@ -167,6 +171,7 @@ Rarity machinery: `kWeight` 122:50:20:6:1:1 and the gates `kLevelFor` are reused
 |---|---|---|
 | **0. BL2 survey** (0.45.2, TestBuild-149, python only) | `Check-BL2-Badass.bat` (`python -m skylands_setup bl2badass`, `badassprobe.py`) writes `work\bl2-badass-report.txt`: B0 names (badass, enemy sound/voice, dialog), B1 every pawn balance by family and tier, B2 regular + tier variants in full down to the AI class, B3 health/damage formulas and rarity weights, B4 enemy item-pool lists and badass/boss pools, B5 badass-named objects (particles, name parts), B6 enemy sound events per family checked against the Wwise banks, B7 dialog objects | run it, send the report |
 | **0b. Enemy voice search** (0.45.4, TestBuild-151, python only) | `Check-BL2-EnemyVoice.bat` (`bl2badass --voice`): the name scan, then B8: every `.pck`/`.bnk` in the install with its banks (named by Wwise id), and each pack searched for the battle-dialog events; lists every speaker's lines by kind (death, pain, taunt, attack, spot) | run it (about 5-10 minutes), send `work\bl2-enemy-voice-report.txt` |
+| **0c. Spawn and voice surveys** (0.45.5, TestBuild-152, python only) | `Check-BL2-Spawns.bat` (`bl2badass --spawns`, B9): every population definition (spawn mix) under `GD_Population_*`, each entry's spawn factory -> pawn balance -> tier and probability, the Badass / Super / Ultimate share per mix and the median; `Check-BL2-EnemyVoice.bat` (`--voice`) now also opens the packages that name a voice bank and their `_LOC_INT` twins and reads the `AkBank` objects stored INSIDE them (B8b): which battle-dialog lines each holds and whether the audio is inside | run both, send `work\bl2-spawn-report.txt` and `work\bl2-enemy-voice-report.txt` |
 | **1. Tiers and stats** (plugin only) | the roll, the cap, the co-save, health / damage / speed modifiers, log lines for every tier given and every modifier read back ("badass: <id> level L tier T: health 77 -> 193 ..."); name and size **off** (so stats alone can be judged) | fight at levels 3 to 12; send `SkylandsNative.log` |
 | **2. Loot for Badasses** | the guaranteed drop, rarity shift and floors (carried better gear: later) | kill some Badasses, send the log |
 | **3. Creature drops and dragons** | `CreatureDropScale`, creature roll at death, dragon boss rule | kill wolves, spiders, a dragon; log |
@@ -209,8 +214,10 @@ name strings, and every enemy- or voice-looking sound event (`Ak_Play_*` with an
 3. ANSWERED: better gear is later. (Was: a Badass human's **gun** (R6): is it enough that the Badass drops a **tier-boosted gun at death** (the plugin adds it to the pack at the roll and drops it), without changing what it shoots? Default yes (no Papyrus change).)
 4. ANSWERED: survey first. (Was: do you want the survey **before** stage 1 so the first build already uses BL2's numbers? Default: no, build the framework first on placeholders.)
 
-5. NEW (from the BL2 numbers): an **Ultimate Badass** in BL2 (the Varkid) hits SOFTER than a Super; I held its damage at the Super's (x2.6). Keep that, or follow the file (x1.7)?
-6. NEW: BL2 gives **1 / 2 / 3** guaranteed items to Badass / Super / Ultimate. You chose one item whatever the tier (with the rarity raised). Keep one, or follow BL2?
+5. ANSWERED: the Ultimate keeps the Super's damage (x2.6).
+6. ANSWERED: BL2's 1 / 2 / 3 guaranteed items.
+7. ANSWERED: spawn rates: survey BL2 first; fallback = the Badass chance, then rerolls for Super and Ultimate; the same for people and creatures; bosses and dragons get no guaranteed tier (double odds).
+8. Open: the Super and Ultimate keep their player-level gates (12 and 25) on top of the rerolls (my default; set the gates to 1 to drop them).
 
 ## 9. Further features I would suggest (prioritised; none built without your pick)
 

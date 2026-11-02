@@ -9,7 +9,7 @@
   "health_mult": "general health multiplier for the class before any Badass tier (1.0 = Skyrim's own)",
   "damage_mult": "general damage multiplier for the class before any Badass tier",
   "badass": "yes = may roll a Badass tier; no = never",
-  "boss": "always = always a boss (at least Super Badass, always drops); level = a boss when unique or level >= ShieldBossLevel (35); no = never",
+  "boss": "always = always a boss (dragons); level = a boss when unique or level >= ShieldBossLevel (35); no = never. A boss rolls the Badass tiers at boss_odds (badass_tiers) times the chance and always drops boss loot (rare or better); no tier is guaranteed",
   "drop_scale": "the share of a person's drop chance this class gets at death (people 1.0, creatures 0.5 = the user's 'half', critters 0); bosses always drop",
   "min_rarity": "lowest rarity a drop of this class can be (1 common ... 6 e-tech)",
   "source": "bl2 or design",
@@ -399,7 +399,7 @@
    "min_rarity": 3,
    "source": "design",
    "bl2_object": "-",
-   "note": "bosses: always drop, rare or better, at least Super Badass (docs/badass-roadmap.md 3.1); Tiny Tina's dragons are the nearest BL2 enemy",
+   "note": "bosses: always drop, rare or better; they roll the Badass tiers at double odds (no guaranteed tier, the user's choice); Tiny Tina's dragons are the nearest BL2 enemy",
    "in_game": "no"
   },
   {
