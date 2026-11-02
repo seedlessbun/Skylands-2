@@ -634,6 +634,11 @@ Other commands:
   the material `Item_Artifacts.Materials.Mat_ItemArtifact` is a plain Material (no TextureParameterValues; `texture_parameters` found nothing) and the mesh export refers to no material. 0.45.1 (TestBuild-148, python-only, plugin 1.21.0): `loose_uvs` accepts inside >= 0.3 with roughness < 0.03;
   `gestalt_texture` also logs the material's properties and children (their `Texture`), lists the Texture2D objects whose path holds the word ("gestalt texture: Texture2D objects of the package named like 'item_artifacts'") and tries them (pick_textures, then all). READ those lines next: if no texture is found, the
   artifact texture lives in another package (`fx_shared_items.Textures.Artifact_Dif` is the pickup icon) and the material's expression objects must be walked.
+- BADASS ENEMIES, PHASE 1 + stage 0 (0.45.2, TestBuild-149, python only, plugin still 1.21.0): `docs/badass-roadmap.md` (interview answers, design, stages, risks), APPROVED with the user's changes (its section 2a):
+  three tiers by the PLAYER's level (Badass from level 1), people AND creatures, dragons are bosses, creatures drop one random gun/shield/relic at half the people's chance, every Badass one guaranteed drop with a
+  rarity shift, name prefix + size only, better carried gear LATER. Sheets `sheets/enemy_stats.json` (per Skyrim race class) and `sheets/badass_tiers.json` (per tier) -> `sheet_data.ENEMY_STATS/BADASS_TIERS`
+  (not read by the build or plugin yet). Survey `badassprobe.py` (`python -m skylands_setup bl2badass`, `Check-BL2-Badass.bat`, writes `work\bl2-badass-report.txt`): pawn balances by tier, formulas, pools,
+  badass objects, and ENEMY AUDIO (voice/sound events per family checked against the Wwise banks), dialog objects. NEXT: read the report, put BL2 values into the two sheets (`source: bl2`), then stage 1 (plugin: tiers + stats).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

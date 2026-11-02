@@ -1,6 +1,6 @@
 # Badass enemies: plan (phase 1 deliverable)
 
-Status: **WAITING FOR THE USER'S APPROVAL. No feature code is written.** Written from the code at 0.45.1 and the user's interview answers (section 2). **Confirmed** = read in the
+Status: **APPROVED with the defaults, with the user's changes in section 2a. Stage 0 (the BL2 survey, 0.45.2, TestBuild-149) is built; no plugin code yet.** Written from the code at 0.45.1 and the user's interview answers (section 2). **Confirmed** = read in the
 code or a log of this project. **Unconfirmed** = my reading or a guess, with how it will be checked. No Borderlands 2 install is available to this session and no logs were
 attached, so no new BL2 numbers were read; the BL2 facts below come from `docs/shield-roadmap.md` (the earlier shield survey) and `sheets/`.
 
@@ -39,6 +39,14 @@ attached, so no new BL2 numbers were read; the BL2 facts below come from `docs/s
 `SetDisplayName` and `SetScale` on a live actor, whether spell (bullet) damage follows `LaunchData.power`, whether `kAttackDamageMult` / `kSpeedMult` modifiers on a non-player stick, and what the game does with a
 scaled or renamed actor over a save. All listed in section 7.
 
+## 2a. The user's decisions after reading the plan
+* **Survey first** (stage 0 below), and it **looks for the enemy audio too** (voice and sound events per enemy family, checked against the Wwise banks) so enemy sounds can come sooner.
+* **A general enemy stats sheet** for easy changes and lookups: `sheets/enemy_stats.json` (one row per Skyrim enemy class, matched by race editor id: kind, closest BL2 family,
+  health and damage multipliers, may be Badass, boss rule, drop share, lowest rarity) and `sheets/badass_tiers.json` (one row per tier: level gate, chances, area cap, stat multipliers,
+  rarity shift and floor). Both in `sheet_data.py` (`ENEMY_STATS`, `BADASS_TIERS`); tested in `tests/test_enemy_sheets.py`.
+* **Badasses appear from player level 1** (gate 1, 3 % + 0.5 % a level).
+* The other defaults stay. **Focus on stats and drops now; better gear carried by Badasses is LATER** (section 3.3 marks it). For now a Badass human carries the gear anyone may roll; its guaranteed drop gets the tier's rarity shift.
+
 ## 2. Interview answers (the design inputs)
 
 | Question | Answer |
@@ -61,11 +69,11 @@ scaled or renamed actor over a save. All listed in section 7.
 
 | Tier | From player level | Chance | Cap on the chance |
 |---|---|---|---|
-| Badass | 3 | 3 % + 0.5 % per level above 3 | 25 % |
+| Badass | 1 | 3 % + 0.5 % per level above 1 | 25 % |
 | Super Badass | 12 | 0.5 % + 0.2 % per level above 12 | 8 % |
 | Ultimate Badass | 25 | 0.2 % + 0.1 % per level above 25 | 3 % |
 
-  (A new character meets none before level 3 and about 3 % Badasses at level 3, which fits "tuned for a new character"; ini keys `BadassGate/Percent/PerLevel/Max` per tier.)
+  (The user chose level 1: a new character meets about 3 % Badasses from the start, and the Badass row's health x2.5 is the main difficulty knob; ini keys `BadassGate/Percent/PerLevel/Max` per tier, defaults from `sheets/badass_tiers.json`.)
 * **Area cap:** at most `BadassMaxNear` (default 4) living Badasses of any tier within the pump's reach (6000 units) at the same time, and at most 1 Super and 1 Ultimate. An eligible actor that would exceed the cap is not rolled yet (tried again later), so a pack does not all turn Badass.
 * **Bosses** (unique base record, or level >= 35, hostile): at least Super Badass; Ultimate Badass if the player is level 25 or more (50 % by their roll). **Dragons** (keyword `ActorTypeDragon`, race editor id with "Dragon"): bosses by this rule.
   A boss that is already named does not get a prefix twice (section 3.4). Allies, followers and quest-protected actors are never given a tier.
@@ -98,7 +106,7 @@ Rarity machinery: `kWeight` 122:50:20:6:1:1 and the gates `kLevelFor` are reused
 
 ("Up n" means each rarity takes the weight of the rarity n below it, so the common weight lands on rarity 1+n.) The floors also guarantee a Badass is never given a common.
 
-* **Badass humans carry gear.** At the roll, in the same pass, a Badass person is given **a shield and a relic** of the shifted rarity (`shielditems::PickFor` / `relic::PickFor` already take `a_minRarity`) with `PutOn`, and a **gun** of the shifted rarity
+* **LATER (the user's decision): Badass humans carry better gear.** At the roll, in the same pass, a Badass person is given **a shield and a relic** of the shifted rarity (`shielditems::PickFor` / `relic::PickFor` already take `a_minRarity`) with `PutOn`, and a **gun** of the shifted rarity
   when the plugin can place one (see R6: guns are placed by Papyrus today). Its gear drops as for bosses (`IsBoss` currently forces the drop; a tier forces it too).
 * **Guaranteed drop, one item, any tier.** At death (the existing 0.9 to 1.1 s game-thread pattern, never inside the event): a Badass human drops **one of the items it carries** (random among gun, shield, relic); a Badass creature (nothing equipped)
   gets **one random item** added to its pack and dropped: gun, shield or relic, chosen by the weights in 3.5, with the shifted rarity. If it carried nothing to drop, it is given one at death.
@@ -126,19 +134,20 @@ Rarity machinery: `kWeight` 122:50:20:6:1:1 and the gates `kLevelFor` are reused
 
 | Stage | Content | You do |
 |---|---|---|
+| **0. BL2 survey** (0.45.2, TestBuild-149, python only) | `Check-BL2-Badass.bat` (`python -m skylands_setup bl2badass`, `badassprobe.py`) writes `work\bl2-badass-report.txt`: B0 names (badass, enemy sound/voice, dialog), B1 every pawn balance by family and tier, B2 regular + tier variants in full down to the AI class, B3 health/damage formulas and rarity weights, B4 enemy item-pool lists and badass/boss pools, B5 badass-named objects (particles, name parts), B6 enemy sound events per family checked against the Wwise banks, B7 dialog objects | run it, send the report |
 | **1. Tiers and stats** (plugin only) | the roll, the cap, the co-save, health / damage / speed modifiers, log lines for every tier given and every modifier read back ("badass: <id> level L tier T: health 77 -> 193 ..."); name and size **off** (so stats alone can be judged) | fight at levels 3 to 12; send `SkylandsNative.log` |
-| **2. Loot for Badasses** | carried gear at the roll, the guaranteed drop, rarity shift and floors | kill some Badasses, send the log |
+| **2. Loot for Badasses** | the guaranteed drop, rarity shift and floors (carried better gear: later) | kill some Badasses, send the log |
 | **3. Creature drops and dragons** | `CreatureDropScale`, creature roll at death, dragon boss rule | kill wolves, spiders, a dragon; log |
 | **4. Name and size** | `SetDisplayName` / `SetScale` with the double-prefix rule | check the name after saving and loading |
-| **5. BL2 numbers** | `Check-BL2-Badass.bat` (`bl2shields --topic badass`) writes `work\bl2-badass-report.txt`; read it, fill `sheets/badass.json` (`source: bl2` rows replace the design values), then a build | send the report |
+| **5. Enemy audio** | from the stage-0 report: enemy voice lines and sounds cut to WAV like the gun sounds and played at the actor by the plugin (taunt on spawn of a Badass, death lines), with a cooldown | listen |
 
-Dialog and effects (section 6) stay out until stage 5 is read.
+The stage-0 report fills `sheets/badass_tiers.json` and `sheets/enemy_stats.json` (`source: bl2` rows replace the design values) before stage 1 is built. Effects (section 6) stay later.
 
-## 5. The survey for stage 5 (BL2 numbers)
-`shieldprobe.set_topic("badass")` on the same pattern as `--topic relic`: name scan for `badass|superbadass|ultimate`, the `AIPawnBalanceDefinition` census under `GD_Population_*` and `GD_Balance`, then in full: three balances of different families
+## 5. The survey (stage 0, built in 0.45.2)
+A module of its own, `badassprobe.py`, reusing the shield survey's helpers (it looks at more than a topic switch could): name scan for `badass|superbadass|ultimate`, the `AIPawnBalanceDefinition` census under `GD_Population_*` and `GD_Balance`, then in full: three balances of different families
 (for example Marauder, Marauder Badass, Super Badass Marauder, Ultimate Badass Marauder if they exist), their `PlayThroughs`, `DefaultItemPoolIncludedLists` and `CustomItemPoolList`, the health / damage scale attributes
 (`Att_*Health*`, `Att_*Damage*` on the pawn's `AIClass` / `PawnBalance` / `BodyClass`), the pools that badasses use (`Pool_GunsAndGear_0x`, the rarity weights `Weight_*`), the enemy
-name strings, and a separate list of Wwise events and particle objects whose name holds `Badass`, `Taunt`, `Death`, `Spawn` (names only; extraction is a later job). The survey is read-only and takes 10 to 20 minutes like the others.
+name strings, and every enemy- or voice-looking sound event (`Ak_Play_*` with an enemy family word or `vo/taunt/death/pain/attack/...`), grouped by family and checked against the Wwise banks (how many sounds and audio files each event leads to). Extraction comes in stage 5. The survey is read-only and takes 10 to 20 minutes like the others.
 
 ## 6. Dialog and effects (later)
 * Voice lines: events in the Wwise banks (`Ak_Play_*`), cut to WAV with the existing `bl2/audio.py`, made into SNDR records and played at the actor by the plugin's `PlaySound`. Risk: many Skyrim actors have their own voice; a taunt on spawn needs a cooldown.
@@ -163,10 +172,10 @@ name strings, and a separate list of Wwise events and particle objects whose nam
 | R13 | Friendly actors and quest targets: the tier is rolled only for actors hostile to the player; a bandit leader whose death triggers a quest is fine (stats only), but a protected or essential actor (`IsEssential`/`IsProtected`) is skipped | code |
 
 ## 8. Questions still open for you
-1. The 3 % / 0.5 % per level chances and the level-3 gate are my defaults (the answer was "based on the player's level"). Fine, or should Badasses appear from level 1?
-2. R9: keep the Pandora bandits' fixed `AbFortifyHealth` as it is (default), or turn it off once the plugin gives a tier?
-3. A Badass human's **gun** (R6): is it enough that the Badass drops a **tier-boosted gun at death** (the plugin adds it to the pack at the roll and drops it), without changing what it shoots? Default yes (no Papyrus change).
-4. Do you want the survey (stage 5) **before** stage 1 so the first build already uses BL2's numbers? Default: no, build the framework first on placeholders.
+1. ANSWERED: level 1. (Was: the 3 % / 0.5 % per level chances and the level-3 gate are my defaults (the answer was "based on the player's level"). Fine, or should Badasses appear from level 1?)
+2. Still open (default applies): R9: keep the Pandora bandits' fixed `AbFortifyHealth` as it is (default), or turn it off once the plugin gives a tier?
+3. ANSWERED: better gear is later. (Was: a Badass human's **gun** (R6): is it enough that the Badass drops a **tier-boosted gun at death** (the plugin adds it to the pack at the roll and drops it), without changing what it shoots? Default yes (no Papyrus change).)
+4. ANSWERED: survey first. (Was: do you want the survey **before** stage 1 so the first build already uses BL2's numbers? Default: no, build the framework first on placeholders.)
 
 ## 9. Further features I would suggest (prioritised; none built without your pick)
 
@@ -178,4 +187,4 @@ name strings, and a separate list of Wwise events and particle objects whose nam
 6. **Loot midget style treasure enemies** (medium). A small rare actor that runs away and drops several items: needs a new actor record (models plugin) and flee AI; best done after the framework is proven.
 7. **Area difficulty** (large). Use Skyrim location data (a hold or a dungeon type) in the chance, not only the player's level. Needs a survey of locations. Skip unless levels alone feel flat.
 8. **Raid-boss set pieces** (large). A scripted Ultimate Badass with an arena. Needs quests, worth it only after 1 and 2.
-9. **A general "enemy stats" sheet** (small, useful now). Your request to "adjust enemy stats and drop pools generally": a sheet by race/keyword for health, damage and carry chances, read by the same pump, with the BL2 values filled in after the survey. Same machinery as the tiers (a "tier 0" row).
+9. **A general "enemy stats" sheet** (DONE in 0.45.2: `sheets/enemy_stats.json`). Your request to "adjust enemy stats and drop pools generally": a sheet by race/keyword for health, damage and carry chances, read by the same pump, with the BL2 values filled in after the survey. Same machinery as the tiers (a "tier 0" row).

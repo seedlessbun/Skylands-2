@@ -6,6 +6,34 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class BadassTiersRow:
+    """The Badass tiers: when they appear (by the PLAYER's level), how strong they are and how their guaranteed drop is shifted. Every number is a placeholder (source 'design') until the Borderlands 2 badass survey (Check-BL2-Badass.bat) gives BL2's own; the rule: BL2 file values replace static values. See docs/badass-roadmap.md."""
+
+    id: str
+    name_prefix: str
+    player_level_gate: int
+    percent: float
+    per_level: float
+    max_percent: float
+    max_near: int
+    health_mult: float
+    damage_mult: float
+    speed_mult: float
+    size_mult: float
+    rarity_shift: int
+    min_rarity: int
+    source: str
+    bl2_object: str
+    note: str
+
+
+BADASS_TIERS: dict[str, BadassTiersRow] = {
+    'badass': BadassTiersRow(id='badass', name_prefix='Badass', player_level_gate=1, percent=3.0, per_level=0.5, max_percent=25.0, max_near=4, health_mult=2.5, damage_mult=1.3, speed_mult=1.0, size_mult=1.15, rarity_shift=1, min_rarity=2, source='design', bl2_object='-', note="from level 1 (the user's choice); 3 percent then +0.5 a level"),
+    'super': BadassTiersRow(id='super', name_prefix='Super Badass', player_level_gate=12, percent=0.5, per_level=0.2, max_percent=8.0, max_near=1, health_mult=5.0, damage_mult=1.6, speed_mult=1.05, size_mult=1.3, rarity_shift=2, min_rarity=3, source='design', bl2_object='-', note='bosses and dragons are at least this tier'),
+    'ultimate': BadassTiersRow(id='ultimate', name_prefix='Ultimate Badass', player_level_gate=25, percent=0.2, per_level=0.1, max_percent=3.0, max_near=1, health_mult=10.0, damage_mult=2.0, speed_mult=1.1, size_mult=1.45, rarity_shift=3, min_rarity=4, source='design', bl2_object='-', note='a boss is Ultimate half the time from player level 25'),
+}
+
+@dataclass(frozen=True)
 class Bl2ReadsRow:
     """Every Borderlands 2 object the setup reads from the player's own install. Object paths are from the OpenBLCMM BL2 data pack; read_verified is 'yes' once read from a real install."""
 
@@ -108,6 +136,54 @@ ENEMIES: dict[str, EnemiesRow] = {
     'tier5': EnemiesRow(id='tier5', skyrim_edid_pattern='^EncBandit05(?!.*Boss)', bl2_read='b_enemy_goliath', badass='no', abilities='AbWeaknessFireConstant:15'),
     'tier6': EnemiesRow(id='tier6', skyrim_edid_pattern='^EncBandit06(?!.*Boss)', bl2_read='b_enemy_marauder_badass', badass='yes', abilities='AbFortifyHealth:100'),
     'boss': EnemiesRow(id='boss', skyrim_edid_pattern='^EncBandit0\\dBoss', bl2_read='b_enemy_nomad_badass', badass='yes', abilities='AbFortifyHealth:150'),
+}
+
+@dataclass(frozen=True)
+class EnemyStatsRow:
+    """Enemy classes of Skyrim, matched by race editor id (first matching row wins; no match = 'creature' defaults), with their general stat multipliers, whether they can be Badass, the boss rule and the drop chance. source 'bl2' = the numbers come from the Borderlands 2 enemy named in bl2_family (badass survey); 'design' = a Skylands choice. See docs/badass-roadmap.md."""
+
+    id: str
+    race_pattern: str
+    kind: str
+    bl2_family: str
+    health_mult: float
+    damage_mult: float
+    badass: str
+    boss: str
+    drop_scale: float
+    min_rarity: int
+    source: str
+    bl2_object: str
+    note: str
+
+
+ENEMY_STATS: dict[str, EnemyStatsRow] = {
+    'person': EnemyStatsRow(id='person', race_pattern='(?i)^(Nord|Breton|Imperial|Redguard|Khajiit|Argonian|HighElf|DarkElf|WoodElf|Orc|Elder)Race', kind='person', bl2_family='marauder', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=1.0, min_rarity=1, source='design', bl2_object='-', note='people (the ActorTypeNPC keyword or a race word in shielditems::IsPerson); the human drop chance the creatures are measured against'),
+    'draugr': EnemyStatsRow(id='draugr', race_pattern='(?i)^Draugr', kind='person', bl2_family='psycho', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=1.0, min_rarity=1, source='design', bl2_object='-', note='counted as people by IsPerson (race word), so they carry gear like humans'),
+    'falmer': EnemyStatsRow(id='falmer', race_pattern='(?i)^Falmer', kind='person', bl2_family='psycho', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=1.0, min_rarity=1, source='design', bl2_object='-', note='people by IsPerson'),
+    'forsworn_hagraven': EnemyStatsRow(id='forsworn_hagraven', race_pattern='(?i)^(Forsworn|Hagraven)', kind='person', bl2_family='nomad', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=1.0, min_rarity=1, source='design', bl2_object='-', note='people by IsPerson'),
+    'vampire': EnemyStatsRow(id='vampire', race_pattern='(?i)Vampire', kind='person', bl2_family='nomad', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=1.0, min_rarity=1, source='design', bl2_object='-', note='people by IsPerson (vampire lords included by the race word)'),
+    'skeleton': EnemyStatsRow(id='skeleton', race_pattern='(?i)^Skeleton', kind='creature', bl2_family='skeleton', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note="Tiny Tina's skeletons are the nearest BL2 enemy (DLC; unconfirmed in the user's install)"),
+    'wolf': EnemyStatsRow(id='wolf', race_pattern='(?i)^Wolf', kind='creature', bl2_family='skag', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='pack animals: the area cap keeps a pack from turning Badass together'),
+    'bear': EnemyStatsRow(id='bear', race_pattern='(?i)^Bear', kind='creature', bl2_family='bullymong', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='black, brown and snow bears'),
+    'sabre_cat': EnemyStatsRow(id='sabre_cat', race_pattern='(?i)^SabreCat', kind='creature', bl2_family='stalker', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='sabre cats and snowy sabre cats'),
+    'spider': EnemyStatsRow(id='spider', race_pattern='(?i)^FrostbiteSpider', kind='creature', bl2_family='spiderant', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='the giant frostbite spider counts by level like the rest'),
+    'troll': EnemyStatsRow(id='troll', race_pattern='(?i)^Troll', kind='creature', bl2_family='bullymong', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='trolls and frost trolls'),
+    'chaurus': EnemyStatsRow(id='chaurus', race_pattern='(?i)^Chaurus', kind='creature', bl2_family='varkid', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='reapers and hunters (Dawnguard) too'),
+    'dwarven': EnemyStatsRow(id='dwarven', race_pattern='(?i)^Dwarven(Spider|Sphere|Centurion)', kind='creature', bl2_family='loader', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='Dwemer automatons: the robots of Skyrim'),
+    'atronach': EnemyStatsRow(id='atronach', race_pattern='(?i)^Atronach', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='a summoned atronach is never rolled (summons are skipped)'),
+    'spriggan': EnemyStatsRow(id='spriggan', race_pattern='(?i)^Spriggan', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='forest spirits'),
+    'ice_wraith_wisp': EnemyStatsRow(id='ice_wraith_wisp', race_pattern='(?i)^(IceWraith|Wisp)', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='ice wraiths and wisps'),
+    'giant': EnemyStatsRow(id='giant', race_pattern='(?i)^Giant', kind='creature', bl2_family='goliath', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='only rolled while hostile to the player (giants are neutral until provoked)'),
+    'mammoth': EnemyStatsRow(id='mammoth', race_pattern='(?i)^Mammoth', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='no', boss='no', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='neutral herd animal: drops when killed hostile, never Badass'),
+    'mudcrab_slaughterfish': EnemyStatsRow(id='mudcrab_slaughterfish', race_pattern='(?i)^(Mudcrab|Slaughterfish)', kind='creature', bl2_family='crystalisk', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='small water creatures'),
+    'skeever_horker': EnemyStatsRow(id='skeever_horker', race_pattern='(?i)^(Skeever|Horker)', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='skeevers and horkers'),
+    'werewolf': EnemyStatsRow(id='werewolf', race_pattern='(?i)^Werewolf', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note="werewolves (the player's own werewolf form is never rolled)"),
+    'dremora': EnemyStatsRow(id='dremora', race_pattern='(?i)^Dremora', kind='person', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=1.0, min_rarity=1, source='design', bl2_object='-', note='humanoid daedra; whether IsPerson takes them depends on the ActorTypeNPC keyword (unconfirmed)'),
+    'dragon_priest': EnemyStatsRow(id='dragon_priest', race_pattern='(?i)^DragonPriest', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='dragon priests are liches, not dragons (kept out of the dragon row); most are named (unique), so the boss rule usually applies'),
+    'dragon': EnemyStatsRow(id='dragon', race_pattern='(?i)^(?!DragonPriest)(\\w*Dragon|Alduin)', kind='dragon', bl2_family='dragon', health_mult=1.0, damage_mult=1.0, badass='yes', boss='always', drop_scale=1.0, min_rarity=3, source='design', bl2_object='-', note="bosses: always drop, rare or better, at least Super Badass (docs/badass-roadmap.md 3.1); Tiny Tina's dragons are the nearest BL2 enemy"),
+    'dlc_creature': EnemyStatsRow(id='dlc_creature', race_pattern='(?i)^(Gargoyle|DeathHound|Riekling|Lurker|Seeker|AshHopper|Netch|Ash(Spawn|Guardian))', kind='creature', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='yes', boss='level', drop_scale=0.5, min_rarity=1, source='design', bl2_object='-', note='Dawnguard and Dragonborn creatures (race editor ids unconfirmed: the log names rejected races)'),
+    'critter': EnemyStatsRow(id='critter', race_pattern='(?i)^(Deer|Elk|Goat|Fox|Hare|Rabbit|Chicken|Cow|Horse|Dog|Salmon|Butterfly|Moth|Dragonfly|Bee|Torchbug)', kind='critter', bl2_family='-', health_mult=1.0, damage_mult=1.0, badass='no', boss='no', drop_scale=0.0, min_rarity=1, source='design', bl2_object='-', note='game and farm animals: no tier, no drop (they are not enemies and would be easy to farm)'),
 }
 
 @dataclass(frozen=True)
