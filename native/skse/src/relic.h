@@ -44,6 +44,13 @@ namespace relic
 	inline std::atomic_bool                           g_ready{ false };
 	inline RE::FormID                                 g_playerWorn = 0;  // the relic the equip events last said the player put on (0: took off)
 	inline std::unordered_set<RE::FormID>             g_decided;
+	// Ini: Relic<Effect> multiplies that effect of every relic (1.0 = Borderlands 2's numbers, 0 = switched off); by effect letter
+	inline std::unordered_map<char, float> g_scale{ { 'h', 1.0f }, { 's', 1.0f }, { 'r', 1.0f }, { 'm', 1.0f }, { 'd', 1.0f }, { 'f', 1.0f }, { 'k', 1.0f }, { 'c', 1.0f }, { 'x', 1.0f } };
+	inline float Scale(char a_code)
+	{
+		const auto it = g_scale.find(a_code);
+		return it == g_scale.end() ? 1.0f : it->second;
+	}
 	inline std::unordered_map<RE::ActorValue, float>  g_applied;         // what this plugin has added to each actor value so far (the game does not keep temporary values across a load)
 
 	inline Info Parse(RE::TESObjectARMO* a_armor)
@@ -198,7 +205,7 @@ namespace relic
 		want[RE::ActorValue::kResistFire] = want[RE::ActorValue::kResistShock] = want[RE::ActorValue::kPoisonResist] = want[RE::ActorValue::kResistMagic] = 0.0f;
 		const float baseHealth = a_player->AsActorValueOwner()->GetBaseActorValue(RE::ActorValue::kHealth);
 		for (const auto& e : info.effects) {
-			const float fraction = static_cast<float>(level) * e.perLevel + e.flat;
+			const float fraction = (static_cast<float>(level) * e.perLevel + e.flat) * Scale(e.code);
 			switch (e.code) {
 			case 'h': want[RE::ActorValue::kHealth] += fraction * baseHealth; break;
 			case 's': want[RE::ActorValue::kVariable01] += fraction * 100.0f; break;
@@ -223,7 +230,7 @@ namespace relic
 			if (told++ < 40) {
 				std::string text;
 				for (const auto& e : info.effects) {
-					text += fmt::format(" {}{:+.1f}%", e.code, (static_cast<float>(level) * e.perLevel + e.flat) * 100.0f);
+					text += fmt::format(" {}{:+.1f}%", e.code, (static_cast<float>(level) * e.perLevel + e.flat) * Scale(e.code) * 100.0f);
 				}
 				if (worn) {
 					SKSE::log::info("relics: the player wears \"{}\" (character level {}):{}", worn->GetName(), level, text);
@@ -360,6 +367,19 @@ namespace relic
 		}
 	};
 
+	// The effect letter an ini key like RelicHealth belongs to, 0 when it is none
+	inline char ScaleKey(const std::string& a_key)
+	{
+		static const std::pair<const char*, char> names[] = { { "RelicHealth", 'h' }, { "RelicShieldCapacity", 's' }, { "RelicShieldRecharge", 'r' }, { "RelicMagazine", 'm' }, { "RelicDamage", 'd' },
+			{ "RelicFireResist", 'f' }, { "RelicShockResist", 'k' }, { "RelicCorrosiveResist", 'c' }, { "RelicExplosiveResist", 'x' } };
+		for (const auto& [name, code] : names) {
+			if (a_key == name) {
+				return code;
+			}
+		}
+		return 0;
+	}
+
 	inline bool Config(const std::string& a_key, const std::string& a_value)
 	{
 		const auto number = [&](int a_lo, int a_hi, int& a_out) {
@@ -381,6 +401,11 @@ namespace relic
 			}
 		} else if (a_key == "RelicDropPercent") {
 			number(0, 100, g_dropPercent);
+		} else if (a_key.rfind("Relic", 0) == 0 && ScaleKey(a_key) != 0) {
+			try {
+				g_scale[ScaleKey(a_key)] = std::clamp(std::stof(a_value), 0.0f, 20.0f);
+			} catch (...) {
+			}
 		} else {
 			return false;
 		}

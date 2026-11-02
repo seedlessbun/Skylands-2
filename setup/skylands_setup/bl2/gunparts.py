@@ -374,6 +374,56 @@ class Bl2Source:
         self._gestalt_full[key] = result
         return result
 
+    def gestalt_texture(self, word: str) -> bytes | None:
+        """The diffuse texture (a DDS file) of the gestalt mesh whose path holds `word` (e.g. "item_artifacts"), found through the materials its mesh export refers to, else through
+        the material instances of its package whose name holds the word. Everything it looks at is logged. None when nothing usable is found."""
+        spent = self.prof.get("texture_s", 0)
+        self.prof["texture_s"] = min(spent, 100)  # the texture time budget must not stop this one
+        try:
+            return self._gestalt_texture(word)
+        finally:
+            self.prof["texture_s"] = spent + 0.0
+
+    def _gestalt_texture(self, word: str) -> bytes | None:
+        for key, info in self.gestalt_meshes.items():
+            if word not in info["path"].lower():
+                continue
+            try:
+                pkg = self.ix.package(info["file"])
+                idx = pkg.find(info["path"])
+                data = pkg.export_data(idx) if idx else b""
+                props_end = 4
+                for start in (4, 0, 8):
+                    try:
+                        _p, props_end = upk.read_properties(pkg, data, start)
+                        break
+                    except Exception:  # noqa: BLE001
+                        continue
+                mats = gunmesh.material_refs(pkg, data, props_end) if data else []
+                if not mats:
+                    for i, e in enumerate(pkg.exports, 1):
+                        if word.split("_")[-1].rstrip("s") in e.name.lower() and pkg.obj_class(i) in gunmesh.MATERIAL_CLASSES:
+                            mats.append(pkg.path_of(i))
+                            if len(mats) >= 8:
+                                break
+                    self.log(f"gestalt texture: the mesh refers to no material; materials of the package named like '{word}': {mats}", force=True)
+                else:
+                    self.log(f"gestalt texture: materials the mesh refers to: {mats}", force=True)
+                for mat in mats:
+                    params = gunmesh.texture_parameters(self.ix, mat)
+                    diffuse, _normal = gunmesh.pick_textures(params)
+                    self.log(f"gestalt texture: {mat}: parameters {dict(list(params.items())[:8])}; diffuse {diffuse}", force=True)
+                    if not diffuse:
+                        continue
+                    tkey = self._texture(diffuse)
+                    raw = self.textures.pop(tkey, None) if tkey else None
+                    if raw:
+                        self.log(f"gestalt texture: {diffuse} read ({len(raw)} bytes)", force=True)
+                        return raw
+            except Exception as e:  # noqa: BLE001
+                self.log(f"gestalt texture {info['path']}: {type(e).__name__}: {str(e)[:100]}", force=True)
+        return None
+
     def _read_gestalt_part(self, part: str, name: str) -> dict | None:
         key, first, count = self.gestalt_table[name]
         full = self._gestalt_mesh(key)

@@ -217,6 +217,16 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0, relic_slot: int = 
             "EnemyRelicPercent=8",
             "EnemyRelicPerLevel=1",
             "RelicDropPercent=100",
+            "; how strong each relic effect is: 1.0 = Borderlands 2's numbers, 2.0 = double, 0 = off (the item text shows the 1.0 numbers)",
+            "RelicHealth=1.0",
+            "RelicShieldCapacity=1.0",
+            "RelicShieldRecharge=1.0",
+            "RelicMagazine=1.0",
+            "RelicDamage=1.0",
+            "RelicFireResist=1.0",
+            "RelicShockResist=1.0",
+            "RelicCorrosiveResist=1.0",
+            "RelicExplosiveResist=1.0",
         ]
     lines += [
         "; the shield display over your health bar and the enemy's (upper half shield, lower half health). ShieldHud=0 turns it off (the plain lines come back).",

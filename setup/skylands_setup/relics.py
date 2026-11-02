@@ -12,12 +12,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import meshes as M
-from .skyrim import esp, nif
+from .skyrim import dxt, esp, nif
 from .shields import DEFAULT_RACE, HAVOK_SCALE, RARITY_OF_LEVEL, SLOT_ORDER, find_effects, slot_use
 
 MESH = "Skylands\\Relics\\relic.nif"
 TEX_DIR = "textures\\skylands\\relics"
 GRADE_OF_LEVEL = {1: 0, 2: 1, 3: 3, 4: 6, 5: 9}  # the grade a rarity brings (BL2's maximum is 12); design values
+# the per-level share grows with the rarity: Borderlands 2's number at common, five times it at legendary, one more step each rarity (0.3% -> 0.6% -> 0.9% -> 1.2% -> 1.5% a level for Aggression)
+PER_LEVEL_FACTOR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 RARITY_WORDS = {1: "Common", 2: "Uncommon", 3: "Rare", 4: "Epic", 5: "Legendary"}
 DAMAGE_NOTE = "Borderlands 2's Aggression relic raises the damage of ONE weapon type; this one raises the damage of all guns (design, until the type relics are made)"
 
@@ -58,14 +60,14 @@ def pct(x: float) -> str:
 def keyword_text(kind: Kind, level: int, grade: int) -> str:
     parts = [f"SkylandsRelic_l{level}"]
     for e in kind.effects:
-        parts.append(f"{e.code}{round(e.per_level * 100000)}x{round(e.per_grade * grade * 100000)}")
+        parts.append(f"{e.code}{round(e.per_level * PER_LEVEL_FACTOR[level] * 100000)}x{round(e.per_grade * grade * 100000)}")
     return "_".join(parts)
 
 
 def stats_text(kind: Kind, level: int, grade: int) -> str:
-    lines = [f"{RARITY_WORDS[level]} {kind.title.lower()} relic."]
+    lines = [f"{RARITY_WORDS[level]} {kind.title.lower()} relic (strength: Relic settings in SkylandsNative.ini)."]
     for e in kind.effects:
-        lines.append(f"{e.text} +{pct(e.per_level)}% per character level, +{pct(e.per_grade * grade)}% on top")
+        lines.append(f"{e.text} +{pct(e.per_level * PER_LEVEL_FACTOR[level])}% per character level, +{pct(e.per_grade * grade)}% on top")
     return "\n".join(lines)
 
 
@@ -86,8 +88,7 @@ def choose_slot(data_dir: Path, say=None, wanted: int | None = None, taken: int 
 BODY_FRAGMENT = {"vitality": "type_healthbuff", "protection": "type_shieldskillskills", "resistance": "type_elemental", "stockpile": "type_inventory", "aggression": "type_weapons"}
 BODY_COLOR = {"vitality": (200, 40, 40), "protection": (50, 110, 230), "resistance": (60, 190, 190), "stockpile": (210, 170, 50), "aggression": (230, 120, 30)}
 RING_OF_LEVEL = {1: "ring_single", 2: "ring_single", 3: "ring_double", 4: "ring_double", 5: "ring_triple"}
-RELIC_SIZE = 9.0  # the longest side of the cut model, in Skyrim units
-ATLAS_GUESSES = ("Item_Artifacts.Textures.Artifact_Dif", "Item_Artifacts.Textures.Artifact_Diffuse")
+RELIC_SIZE = 27.0  # the longest side of the cut model, in Skyrim units
 
 
 def _cut(source, say, names: list[str]):
@@ -122,20 +123,26 @@ def write_assets(out_data: Path, colors: dict[int, tuple[int, int, int]], source
     if source is not None:
         near = sorted(n for n in table if n.startswith(("type_", "ring_", "rarity_")))
         say(f"relic models: artifact fragments in the gestalt table: {near if near else 'none (Item_Artifacts.GestaltDef_Artifact was not read)'}")
-    atlas_raw = None
-    if source is not None and table:
-        for guess in ATLAS_GUESSES:
-            try:
-                key = source._texture(guess)
-                raw = source.textures.pop(key, None) if key else None
-            except Exception:  # noqa: BLE001
-                raw = None
-            if raw:
-                atlas_raw = raw
-                say(f"relic models: texture {guess} read")
-                break
-        if atlas_raw is None:
-            say("relic models: no artifact texture was found (tried " + ", ".join(ATLAS_GUESSES) + "); the cut parts get plain colours (kind colour for the body, the rarity's for the ring)")
+    atlas = None
+    if source is not None and table and hasattr(source, "gestalt_texture"):
+        try:
+            raw = source.gestalt_texture("item_artifacts")
+            atlas = dxt.prepare(raw) if raw else None
+        except Exception as e:  # noqa: BLE001
+            say(f"relic models: the artifact texture could not be read ({type(e).__name__}: {str(e)[:80]})")
+        if atlas is None:
+            say("relic models: no artifact texture was found (see the 'gestalt texture:' lines above); the cut parts get plain colours (kind colour for the body, the rarity's for the ring)")
+        else:
+            say("relic models: the artifact texture was read; the body is shaded in the kind's colour, the ring in the rarity's")
+    shaded: dict[str, str] = {}
+
+    def atlas_path(name: str, rgb: tuple[int, int, int]) -> str:
+        if name not in shaded:
+            data, _note = dxt.shade(atlas, rgb)
+            (tex_dir / f"{name}.dds").write_bytes(data)
+            shaded[name] = f"{TEX_DIR}\\{name}.dds"
+        return shaded[name]
+
     written: dict[tuple[str, int], str] = {}
     stats = {"real": 0, "ring": 0}
     for level, rgb in colors.items():
@@ -150,7 +157,9 @@ def write_assets(out_data: Path, colors: dict[int, tuple[int, int, int]], source
                 size = max(hi[i] - lo[i] for i in range(3)) or 1.0
                 centre = tuple((lo[i] + hi[i]) / 2 for i in range(3))
                 scale = RELIC_SIZE / size
-                shapes = [_shape(parts[0], f"{TEX_DIR}\\body_{kid}.dds", flat, centre, scale), _shape(parts[1], f"{TEX_DIR}\\gem_{level}.dds", flat, centre, scale)]
+                body_tex = atlas_path(f"abody_{kid}", BODY_COLOR[kid]) if atlas is not None and parts[0].uvs else f"{TEX_DIR}\\body_{kid}.dds"
+                ring_tex = atlas_path(f"aring_{level}", colors[level]) if atlas is not None and parts[1].uvs else f"{TEX_DIR}\\gem_{level}.dds"
+                shapes = [_shape(parts[0], body_tex, flat, centre, scale), _shape(parts[1], ring_tex, flat, centre, scale)]
                 stats["real"] += 1
             else:
                 band = M.cylinder(0, 0, 0, 3.4, 1.0, axis=2, sides=18)

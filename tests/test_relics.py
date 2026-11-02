@@ -17,9 +17,9 @@ from skylands_setup.skyrim.esm import read_plugin  # noqa: E402
 def test_keyword_numbers_follow_borderlands_2s_formula():
     vit = relics.KINDS[0]
     # level x 0.004 + grade x 0.02 (the deep survey): at grade 3 the flat part is 0.06
-    assert relics.keyword_text(vit, 3, 3) == "SkylandsRelic_l3_h400x6000"
+    assert relics.keyword_text(vit, 3, 3) == "SkylandsRelic_l3_h1200x6000"
     prot = next(k for k in relics.KINDS if k.id == "protection")
-    assert relics.keyword_text(prot, 5, 9) == "SkylandsRelic_l5_s300x9000_r300x9000"
+    assert relics.keyword_text(prot, 5, 9) == "SkylandsRelic_l5_s1500x9000_r1500x9000"
     assert "Health +0.4% per character level, +6% on top" in relics.stats_text(vit, 3, 3)
 
 
@@ -75,3 +75,29 @@ def test_relic_models_are_cut_from_the_artifact_gestalt_when_it_is_readable(tmp_
     said.clear()
     relics.write_assets(tmp_path / "b", colors, None, said.append)
     assert any("25 stand-in rings" in s for s in said)
+
+
+def test_loose_uv_search_finds_half_float_uvs_in_a_32_byte_vertex_element():
+    import struct
+
+    from skylands_setup.bl2 import gunmesh
+
+    count, size, pos_off = 120, 32, 16
+    blob = bytearray()
+    tris = []
+    for i in range(count):
+        u, v = (i % 12) / 12.0, (i // 12) / 10.0
+        blob += b"\x7f" * 8 + b"\x00" * 8 + struct.pack("<3f", float(i), float(i % 7), 0.0) + struct.pack("<2e", u, v)
+        if i >= 2:
+            tris.append((i - 2, i - 1, i))
+    uvs, note = gunmesh.loose_uvs(bytes(blob), (0, size, count, pos_off, []), count, tris)
+    assert len(uvs) == count and abs(uvs[13][0] - 1 / 12.0) < 1e-3 and "offset 28" in note
+
+
+def test_per_level_share_grows_with_rarity():
+    from skylands_setup import relics
+
+    kind = next(k for k in relics.KINDS if k.id == "aggression")
+    shares = [int(relics.keyword_text(kind, lv, relics.GRADE_OF_LEVEL[lv]).split("_d")[1].split("x")[0]) for lv in range(1, 6)]
+    assert shares == [300, 600, 900, 1200, 1500]
+    assert "+1.5% per character level" in relics.stats_text(kind, 5, 9)

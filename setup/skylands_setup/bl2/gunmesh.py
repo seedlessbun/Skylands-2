@@ -311,6 +311,46 @@ def element_uvs(data: bytes, off: int, size: int, count: int, pos_offset: int):
     return None
 
 
+def loose_uvs(data: bytes, arr, need: int, tris):
+    """UVs by a looser test inside one vertex element, for meshes the strict test finds none in (the artifact mesh: 32-byte elements, position at 16): every 2-byte offset away from the
+    position, as a half-float pair or a float pair, kept when at least 9 in 10 values lie in 0..1 and they vary; among those the smoothest over the triangles wins (a texture layout
+    changes little along a triangle's edge). Returns (uvs, a note listing what was looked at, for the log)."""
+    off, size, count, pos_off, _pos = arr
+    best = None
+    seen = []
+    edges = [(a, b) for a, b, c in tris[:: max(1, len(tris) // 600)] for a, b in ((a, b), (b, c))]
+    for o in range(0, size - 3, 2):
+        if pos_off - 4 < o < pos_off + 12:
+            continue
+        for fmt, width in (("<2e", 4), ("<2f", 8)):
+            if o + width > size or (width == 8 and o % 4):
+                continue
+            vals = []
+            ok = True
+            for i in range(count):
+                try:
+                    u, v = struct.unpack_from(fmt, data, off + i * size + o)
+                except struct.error:
+                    ok = False
+                    break
+                if not (_finite(u) and _finite(v)) or abs(u) > 64 or abs(v) > 64:
+                    ok = False
+                    break
+                vals.append((u, v))
+            if not ok or not vals:
+                continue
+            inside = sum(1 for u, v in vals if -0.01 <= u <= 1.01 and -0.01 <= v <= 1.01) / len(vals)
+            distinct = len({(round(u, 3), round(v, 3)) for u, v in vals[:400]})
+            span = (max(u for u, _ in vals) - min(u for u, _ in vals)) + (max(v for _, v in vals) - min(v for _, v in vals)) or 1.0
+            rough = (sum(abs(vals[a][0] - vals[b][0]) + abs(vals[a][1] - vals[b][1]) for a, b in edges if a < count and b < count) / max(1, len(edges))) / span
+            seen.append(f"{o}{fmt[-1]}:in{inside:.2f}/n{distinct}/rough{rough:.3f}")
+            if inside >= 0.9 and distinct >= 32 and (best is None or rough < best[0]):
+                best = (rough, o, fmt, vals)
+    if best is None:
+        return [], f"; loose uv search found none (offset+format:inside 0..1/distinct/roughness {seen[:14]})"
+    return best[3][:need], f"; uvs by the loose search at element offset {best[1]} ({'half' if best[2] == '<2e' else 'float'} pair, roughness {best[0]:.3f}; looked at {seen[:14]})"
+
+
 def _read_bulk_mesh(data: bytes, props_end: int, label: str) -> RawMesh | None:
     bounds = read_bounds(data, props_end)
     start = props_end + (28 if bounds else 0)
@@ -347,10 +387,13 @@ def _read_bulk_mesh(data: bytes, props_end: int, label: str) -> RawMesh | None:
     uvs = uvs[:need] if have_uv and len(uvs) >= need else []
     if not uvs:  # UVs in a buffer of their own, one element per vertex
         uvs = find_uvs(data, start, len(pts), use[0][0]) or []
+    loose = ""
+    if not uvs and len(use) == 1:  # a looser look inside the one vertex element (the artifact mesh: 32-byte elements, position at 16, UVs not found by the strict test)
+        uvs, loose = loose_uvs(data, use[0], len(pts), tris)
     m = M.Mesh(positions=[(q[0], q[1], q[2]) for q in pts], uvs=uvs, tris=tris)
     sizes = [(u[1], u[3]) for u in use]
     return RawMesh(m, f"{label}: {len(pts)} vertices, {len(tris)} triangles, uvs {'yes' if uvs else 'no'}, "
-                      f"bulk arrays {len(use)} (element size, position offset: {sizes}), bounds {'yes' if bounds else 'no'}", [])
+                      f"bulk arrays {len(use)} (element size, position offset: {sizes}), bounds {'yes' if bounds else 'no'}{loose}", [])
 
 
 def material_refs(pkg: upk.Package, data: bytes, start: int) -> list[str]:

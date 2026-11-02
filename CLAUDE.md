@@ -622,6 +622,14 @@ Other commands:
   deep report only shows `PickupFlagIcon fx_shared_items.Textures.Artifact_Dif`, the pickup icon), so the cut parts are plain colours (kind colour for the body, rarity colour for the ring). READ in the next setup log: "relic models:" lines (fragments found in the
   table, texture result, "N cut from Borderlands 2's artifact mesh, M stand-in rings") and the "relic: gestalt part ..." lines (triangle counts). UNCONFIRMED in game: that the fragments exist under those names, orientation/size, looks. NEXT: the body parts' `p_EmissiveColor`
   (in the deep report) can replace the design colours; find the atlas texture name from the setup log or a survey.
+- 0.44.0 in game (user, setup log d185fef1): the relic models "look good" (25 of 25 cut; the artifact fragments are Ring_Single/Double/Triple and Type_ActionSkill, DownState, Economy, Elemental, Enemies, Grenades, HealthBuff, Inventory, Melee,
+  ShieldsKillSkills, Vehicle, Weapons, XP); too small. The artifact texture was NOT found (the guessed names do not exist) and the gestalt mesh was read with NO UVs ("1256 vertices, 1672 triangles, uvs no", element 32 bytes, position at 16).
+  0.45.0 (TestBuild-147, plugin 1.21.0 = "SkylandsNative 383"): (1) `RELIC_SIZE` 27 (3x). (2) textures: `gunparts.gestalt_texture("item_artifacts")` finds the diffuse through the materials the gestalt mesh export refers to (`gunmesh.material_refs` ->
+  `texture_parameters` -> `pick_textures`; lines "gestalt texture: ..." in the setup log, the texture time budget is lifted for it), `relics.write_assets` shades it per kind (body) and per rarity (ring) with `dxt.shade`; `gunmesh.loose_uvs` is a looser UV search inside a
+  one-array vertex element (accepts >= 90% of values inside 0..1, picks the smoothest candidate over the triangles; the note lists every candidate, "loose uv search found none (...)" says why not). UNCONFIRMED: that the texture is found and the UVs right; if the
+  relics stay plain read the "gestalt texture:" and "gestalt mesh Item_Artifacts" lines. (3) ini: `RelicHealth`, `RelicShieldCapacity`, `RelicShieldRecharge`, `RelicMagazine`, `RelicDamage`, `RelicFireResist`, `RelicShockResist`, `RelicCorrosiveResist`, `RelicExplosiveResist`
+  = multipliers on that effect of every relic (plugin `relic::g_scale`; the item text shows the 1.0 numbers). (4) the user: the per-level share grows with rarity: `PER_LEVEL_FACTOR` 1..5 x BL2's number (Aggression 0.3 / 0.6 / 0.9 / 1.2 / 1.5 % a level), all kinds; the grade part is unchanged.
+  The user's message about "adjusting some of the effects" ended at a colon (no list): ask what they want changed.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
