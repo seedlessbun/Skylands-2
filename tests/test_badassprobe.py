@@ -133,7 +133,7 @@ def test_voice_search_finds_battle_dialog_in_a_pack_other_than_the_main_pair(tmp
     dlc.mkdir(parents=True)
     (dlc / "Audio_Banks_VO.pck").write_bytes(fw.pck([(wwise.fnv1("akb_vobd_bandits"), death)], []))
     out = tmp_path / "voice.txt"
-    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--voice", "--minutes", "2"]) == 0
+    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--voice-packs", "--minutes", "2"]) == 0
     text = out.read_text(encoding="utf-8")
     assert "B8. Enemy voices" in text and "B1. Every enemy" not in text  # --voice runs only the names and the voices
     assert "-- marauder (2): {'death': 1, 'taunt': 1}" in text
@@ -191,9 +191,41 @@ def test_voice_banks_inside_packages_are_searched(tmp_path):
     loc.exports[i - 1]["body"] += bank
     (cooked / "Bandit_Dialog_LOC_INT.upk").write_bytes(loc.build())
     out = tmp_path / "voice.txt"
-    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--voice", "--minutes", "2"]) == 0
+    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--voice-packs", "--minutes", "2"]) == 0
     text = out.read_text(encoding="utf-8")
     part = text.split("B8b. Voice banks stored inside the packages")[1]
     assert "Bandit_Dialog_LOC_INT.upk: Akb_VOBD_Bandits.Akb_VOBD_Bandits [AkBank]" in part
     assert "ak_play_vobd_psycho_gen_react_pain: 1 sound(s), audio inside the bank 1" in part
     assert "by speaker: {'psycho': 1}" in part
+
+
+def test_voice_lines_resolve_across_the_language_pack_the_sound_pack_and_the_streamed_audio(tmp_path):
+    # the base game's case: the event is in English(US)/Audio_Banks.pck, the sound object it plays is in the language-free Audio_Banks.pck,
+    # and the audio file is streamed from English(US)/Audio_Streaming.pck (the first voice survey loaded each pack alone and found 0 sounds)
+    import fake_wwise as fw
+
+    from skylands_setup.bl2 import wwise
+
+    bl2 = tmp_path / "bl2"
+    badass_install(bl2)
+    cooked = bl2 / "WillowGame" / "CookedPCConsole"
+    names = ObjBuilder()
+    names.obj("Ake_VOBD_Psycho1.Ak_Play_VOBD_Psycho1_Gen_React_Death", "AkEvent", b"")
+    names.obj("Ake_VOBD_Psycho1.Ak_Play_VOBD_Psycho1_Hum_Start_Taunt", "AkEvent", b"")
+    (cooked / "Psycho_Dialog.upk").write_bytes(names.build())
+    death, taunt = wwise.fnv1("Play_VOBD_Psycho1_Gen_React_Death"), wwise.fnv1("Play_VOBD_Psycho1_Hum_Start_Taunt")
+    lang = fw.bank(wwise.fnv1("akb_vobd_bandits"), [fw.event(death, [11]), fw.play_action(11, 21), fw.event(taunt, [12]), fw.play_action(12, 99)])
+    sfx = fw.bank(wwise.fnv1("akb_vobd_shared"), [fw.sound(21, 31, streamed=True)])
+    (cooked / "Audio_Banks.pck").write_bytes(fw.pck([(wwise.fnv1("akb_vobd_shared"), sfx)], []))
+    eng = cooked / "English(US)"
+    eng.mkdir()
+    (eng / "Audio_Banks.pck").write_bytes(fw.pck([(wwise.fnv1("akb_vobd_bandits"), lang)], []))
+    (eng / "Audio_Streaming.pck").write_bytes(fw.pck([], [(31, fw.pcm_wem())]))
+    out = tmp_path / "work" / "voice.txt"
+    assert badassprobe.main(["--bl2", str(bl2), "--out", str(out), "--voice", "--minutes", "2"]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "B10. Enemy voice lines" in text and "B8. Enemy voices" not in text
+    assert "psycho1 [base game]: 2 / 1 / 1 /" in text and "<- bandit-like" in text  # 2 events, 1 leads to a sound with streamed audio
+    assert "1 events lead to no sound" in text and "ak_play_vobd_psycho1_hum_start_taunt event" in text  # its structure is dumped
+    wavs = list((tmp_path / "work" / "voice-samples").glob("psycho1_death_*.wav"))
+    assert len(wavs) == 1 and wavs[0].read_bytes()[:4] == b"RIFF"  # PCM decodes without the decoder tool

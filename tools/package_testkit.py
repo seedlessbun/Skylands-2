@@ -134,7 +134,7 @@ VOICE_PROBE = r"""@echo off
 setlocal
 cd /d "%~dp0"
 set "PYTHONPATH=%~dp0app"
-echo Looking for Borderlands 2's enemy voices (battle dialog: taunts, pain, death) in every sound pack of the install (changes nothing; about 5-15 minutes) ...
+echo Finding Borderlands 2's enemy voice lines (taunts, pain, death...) and saving a few as WAV samples in work\voice-samples (changes nothing; about 5-15 minutes) ...
 "%~dp0python\python.exe" -X utf8 -m skylands_setup bl2badass --voice --out "%~dp0work\bl2-enemy-voice-report.txt" %*
 echo.
 echo Send work\bl2-enemy-voice-report.txt back to Claude.
@@ -224,7 +224,7 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   Check-BL2-Badass.bat looks at how Borderlands 2 makes its Badass / Super Badass / Ultimate Badass enemies (health and damage, loot pools, enemy voice and sound events
     checked against the sound banks; changes nothing, 15-30 minutes) and writes work\\bl2-badass-report.txt: send it, the Badass enemies are built from it.
   Check-BL2-Spawns.bat looks at how often Borderlands 2 spawns its Badass / Super Badass / Ultimate Badass enemies (changes nothing, 5-15 minutes) and writes work\\bl2-spawn-report.txt.
-  Check-BL2-EnemyVoice.bat looks for the human enemies' voices (battle dialog: taunts, pain, death lines) in every Borderlands 2 sound pack AND in the voice banks stored inside the game's packages (changes nothing, 5-15 minutes) and writes
+  Check-BL2-EnemyVoice.bat finds the human enemies' voice lines (taunts, pain, death...) in Borderlands 2's English voice packs, saves a few of every bandit-like voice as WAV files in work\\voice-samples to listen to (changes nothing, 5-15 minutes), and writes
     work\\bl2-enemy-voice-report.txt: send it, the enemy voices are extracted from what it finds.
   Check-BL2-Relics-Deep.bat is the second relic survey (what each relic type changes and by how much; changes nothing, 10-20 minutes): work\\bl2-relic-deep-report.txt.
   Check-BL2-Relics.bat looks at how Borderlands 2 builds its relics (artifacts: stats, parts, rarities, loot; changes nothing, 10-25 minutes) and writes work\\bl2-relic-report.txt: send it, the relics are built from it.
@@ -275,7 +275,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-152.zip"
+    out = dist / "Skylands-TestBuild-153.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

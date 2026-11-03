@@ -558,6 +558,138 @@ def voice_banks_in_packages(ctx: Ctx, bl2: Path, scan: dict) -> None:
     ctx.save()
 
 
+# ---- B10: the human enemies' voice lines, resolved and sampled ------------------------------------------------------------------------------
+
+BANDIT_SPEAKERS = re.compile(r"(?i)^(maraud|psycho|nomad|goliath|banditheavy|bandit|bt$|rat|ratleader|midget|savage|biker|bulkybiker|boomboom|scav|bndt|piratepsycho|lilac|bikemarauder)")
+SAMPLE_KINDS = ("death", "pain", "taunt", "attack", "spot")
+
+
+class VoiceSet:
+    """One language's voices: its bank pack, its streamed audio, and the language-free bank pack of the same folder (which can hold the sound objects the
+    voice events lead to: the first voice survey loaded each pack on its own and found the base game's events but no sounds behind them)."""
+
+    def __init__(self, lang_banks: Path) -> None:
+        from .bl2 import wwise
+
+        self.lang_banks = lang_banks
+        self.dir = lang_banks.parent
+        self.sfx_dir = self.dir.parent
+        self.snd = wwise.Sounds()
+        self.stream_index: dict[int, tuple[Path, int, int]] = {}
+        self.files: list[str] = []
+
+    def load(self, ctx: Ctx) -> None:
+        from .bl2 import wwise
+
+        stem = self.lang_banks.name.replace("Audio_Banks", "Audio_Streaming")
+        sfx_banks = self.sfx_dir / self.lang_banks.name
+        for f, kind in ((self.lang_banks, "banks"), (sfx_banks, "banks"), (self.dir / stem, "stream"), (self.sfx_dir / stem, "stream")):
+            if not f.is_file():
+                continue
+            data = f.read_bytes()
+            pack = wwise.read_pack(data)
+            if kind == "banks":
+                self.snd.add_banks(data, pack)
+            for e in pack.sounds:
+                self.stream_index.setdefault(e.id, (f, e.offset, e.size))
+            self.snd.media_ids.update(e.id for e in pack.sounds)
+            self.files.append(f"{f.name} ({len(data) // 1048576} MB, {len(pack.banks)} banks, {len(pack.sounds)} streamed)")
+            del data
+
+    def audio(self, media: int) -> bytes | None:
+        got = self.snd.audio(media)
+        if got:
+            return got
+        where = self.stream_index.get(media)
+        if not where:
+            return None
+        f, off, size = where
+        with f.open("rb") as h:
+            h.seek(off)
+            return h.read(size)
+
+
+def voice_lines(ctx: Ctx, bl2: Path, scan: dict, out_dir: Path, decode_samples: bool = True) -> None:
+    """For every English voice pack set (base game and DLCs): which battle-dialog lines resolve to audio, per speaker; the structure of lines that do not;
+    and a few lines of the bandit-like speakers decoded to WAV in work\\voice-samples so they can be heard."""
+    from .bl2 import audio as bl2audio
+    from .bl2 import wwise
+
+    ctx.head("B10. Enemy voice lines: each English voice pack with its streamed audio and its sound pack, resolved per speaker, with samples")
+    names = sorted(scan.get("vobd", {}))
+    lang_packs = sorted(p for p in bl2.rglob("Audio_Banks*.pck") if p.parent.name.lower().startswith("english"))
+    ctx.say(f"{len(names)} battle-dialog names; {len(lang_packs)} English voice packs: {[str(p.relative_to(bl2)) for p in lang_packs]}")
+    samples_dir = out_dir / "voice-samples"
+    decoder_box: list = [None, decode_samples]
+    total_samples = 0
+    summary: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])  # speaker -> events, with sounds, with audio, KB
+    for lp in lang_packs:
+        if ctx.out_of_time():
+            ctx.say("(time is up in the voice line search)")
+            break
+        vs = VoiceSet(lp)
+        try:
+            vs.load(ctx)
+        except MemoryError:
+            ctx.say(f"  {lp.relative_to(bl2)}: out of memory while loading")
+            continue
+        ctx.say(f"  {lp.relative_to(bl2)}: loaded {vs.files}")
+        unresolved: list[tuple[str, int]] = []
+        per_kind_samples: dict[tuple[str, str], int] = defaultdict(int)
+        for n in names:
+            m = VOBD.match(n)
+            if not m:
+                continue
+            speaker = m.group(1).lower()
+            ident = next((i for _l, i in wwise.event_ids(n) if vs.snd.first(i, (wwise.HIRC_EVENT,)) is not None), None)
+            if ident is None:
+                continue
+            row = summary[f"{speaker} [{lp.parent.parent.parent.name if 'DLC' in str(lp) else 'base game'}]"]
+            row[0] += 1
+            leads = vs.snd.event_sounds(ident)
+            if not leads:
+                unresolved.append((n, ident))
+                continue
+            row[1] += 1
+            media = list(dict.fromkeys(mm for mm in (vs.snd.media_of(s) for s in leads) if mm))
+            blobs = [(mm, vs.audio(mm)) for mm in media]
+            blobs = [(mm, b) for mm, b in blobs if b]
+            if blobs:
+                row[2] += 1
+                row[3] += sum(len(b) for _mm, b in blobs) // 1024
+            kind = voice_kind(m.group(2))
+            if decode_samples and blobs and BANDIT_SPEAKERS.match(speaker) and kind in SAMPLE_KINDS and per_kind_samples[(speaker, kind)] < 1 and total_samples < 80:
+                if decoder_box[0] is None and decoder_box[1]:
+                    decoder_box[0] = bl2audio.find_decoder(out_dir) or bl2audio.download_decoder(out_dir, ctx.say)
+                    decoder_box[1] = False
+                samples_dir.mkdir(parents=True, exist_ok=True)
+                for k, (mm, b) in enumerate(blobs[:2]):
+                    wav = bl2audio.decode(b, out_dir, f"vo_{speaker}_{mm:08X}", decoder_box[0], ctx.put)
+                    if wav:
+                        dest = samples_dir / f"{speaker}_{kind}_{m.group(2)[:40]}_{k + 1}.wav"
+                        dest.write_bytes(wav)
+                        total_samples += 1
+                        ctx.put(f"     sample: {dest.name} ({len(wav) // 1024} KB) from {n}")
+                per_kind_samples[(speaker, kind)] += 1
+        ctx.say(f"     {len(unresolved)} events lead to no sound; the structure of the first ones:")
+        for n, ident in unresolved[:5]:
+            ev = vs.snd.first(ident, (wwise.HIRC_EVENT,))
+            ctx.put(f"     {n} event {ident:08X}: {len(ev.body)} bytes {ev.body[:48].hex()}")
+            for aid in wwise.contains_ids(ev.body, vs.snd.objs)[:4]:
+                act = vs.snd.first(aid)
+                ctx.put(f"        -> {aid:08X} type {act.type} ({len(act.body)} bytes) {act.body[:40].hex()}")
+                for tid in wwise.contains_ids(act.body, vs.snd.objs)[:4]:
+                    tgt = vs.snd.first(tid)
+                    ctx.put(f"           -> {tid:08X} type {tgt.type} ({len(tgt.body)} bytes) {tgt.body[:40].hex()}")
+        del vs
+        ctx.save()
+    ctx.say("per speaker: events found / leading to sounds / with audio / KB of audio:")
+    for sp, (a, b, c, kb) in sorted(summary.items(), key=lambda kv: (not BANDIT_SPEAKERS.match(kv[0]), kv[0])):
+        ctx.put(f"  {sp}: {a} / {b} / {c} / {kb} KB" + ("   <- bandit-like" if BANDIT_SPEAKERS.match(sp) else ""))
+    ctx.say(f"{total_samples} sample WAV files written to {samples_dir}" if decode_samples else "(no samples: --no-audio)")
+    ctx.save()
+
+
 # ---- B9: how often a Badass spawns ---------------------------------------------------------------------------------------------
 
 def _struct_items(props: dict) -> list[dict]:
@@ -685,7 +817,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out", default="BL2-Badass-Report.txt")
     ap.add_argument("--minutes", type=float, default=25.0, help="time allowed for reading packages (the index is extra)")
     ap.add_argument("--no-audio", action="store_true", help="do not read the sound banks")
-    ap.add_argument("--voice", action="store_true", help="the name scan and the enemy-voice search: every sound pack and the voice banks inside packages (B0, B8, B8b)")
+    ap.add_argument("--voice", action="store_true", help="the name scan and the enemy voice lines: each English voice pack with its audio, per speaker, with WAV samples (B0, B10)")
+    ap.add_argument("--voice-packs", action="store_true", help="the name scan and the first voice search: every sound pack on its own and the voice banks inside packages (B0, B8, B8b)")
     ap.add_argument("--spawns", action="store_true", help="the name scan and how often a Badass spawns: BL2's population definitions (B0, B9)")
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
@@ -728,12 +861,14 @@ def main(argv: list[str]) -> int:
         state["fams"] = balances(ctx)
 
     run("names", names)
-    if a.voice or a.spawns:
+    if a.voice or a.spawns or a.voice_packs:
         if a.spawns:
             run("spawns", lambda: spawns(ctx, state["scan"]))
-        if a.voice:
+        if a.voice_packs:
             run("voices", lambda: voices(ctx, bl2, state["scan"]))
             run("voice banks in packages", lambda: voice_banks_in_packages(ctx, bl2, state["scan"]))
+        if a.voice:
+            run("voice lines", lambda: voice_lines(ctx, bl2, state["scan"], out_path.parent, decode_samples=not a.no_audio))
         ctx.say("")
         ctx.say(f"Finished{' (sections that failed: ' + ', '.join(failed) + ')' if failed else ''}. Report written to {out_path}. Send it to Claude.")
         ctx.save()

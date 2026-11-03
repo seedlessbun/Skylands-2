@@ -655,6 +655,11 @@ Other commands:
   they roll at `boss_odds` 2x and keep boss loot. Open: whether the Super/Ultimate level gates stay (default yes). Surveys: `bl2badass --spawns` / `Check-BL2-Spawns.bat` (B9, writes `work\bl2-spawn-report.txt`: population definitions under `GD_Population_*`
   read generically (arrays of structs with a *Factory* field and a *Probability*/*Weight* field; factory -> PawnBalance -> tier), Badass share per mix and the median; class/field names UNCONFIRMED); `--voice` adds B8b: `AkBank` objects stored INSIDE packages
   (those naming a voice bank `akb_*vo*`, their `_LOC_INT` twins, voice-looking `_LOC_INT` packages), battle-dialog events looked up there, audio inside the bank or a streamed id in any .pck. NEXT: read both reports; then stage 1.
+- SPAWN + VOICE REPORTS READ (TestBuild-152; facts in `docs/badass-roadmap.md` 1.1c): BL2 has no global Badass rate (dedicated 100 % Badass `PopDef_*` placed by designers; over 169 mixes Badass 10.5 %, Super 1.25 %, Ultimate 0.6 %); the user CONFIRMED
+  the rolled table with the level gates. Human voices = `Ak_Play_VOBD_<speaker>_...` events in the LANGUAGE packs (`WillowGame\CookedPCConsole\English(US)\Audio_Banks.pck` + `Audio_Streaming.pck` 480 MB, and one English(US) pair per DLC);
+  DLC events resolve to sounds (audio in the streaming twin), base-game events lead to no sound when the pack is read alone. 0.45.6 (TestBuild-153, python only, plugin 1.21.0): `bl2badass --voice` = B10 (`VoiceSet`: language banks + language-free
+  banks of the parent folder + streamed index of both streaming packs read by seek; per speaker events / with sounds / with audio / KB; hex structure of unresolved events; one line per kind of every bandit-like speaker decoded with `audio.decode`
+  to `work\voice-samples\<speaker>_<kind>_<line>_<n>.wav`, max 80); the old pass is `--voice-packs`. NEXT: the user listens and maps voices to Skyrim enemies; then stage 1 (plugin: tiers + stats) and the voice stage.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
