@@ -201,7 +201,7 @@ def build_full(root: Path) -> Path:
     npcs = [record("NPC_", 0x7000, [sub("EDID", z("EncBandit02TemplateMelee")), sub("FULL", sid(3)), sub("SHRT", sid(3)),
                                     sub("ACBS", b"\0" * 24), sub("SPCT", struct.pack("<I", 1)), sub("SPLO", struct.pack("<I", 0x5001))]),
             record("NPC_", 0x7001, [sub("EDID", z("EncBandit02Melee1HNordM")), sub("ACBS", b"\0" * 24)]),
-            record("NPC_", 0x7002, [sub("EDID", z("EncBandit03Boss1HNordM")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24)])]
+            record("NPC_", 0x7002, [sub("EDID", z("EncBandit03Boss1HNordM")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24), sub("VTCK", struct.pack("<I", 0x13AD2))])]
     extra.append(group("NPC_", npcs))
     lv = struct.pack("<HHIHH", 1, 0, 0x1234, 1, 0)
     def sndr(form_id, edid):

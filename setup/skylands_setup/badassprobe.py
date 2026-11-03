@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import steam
 from .bl2 import upk
+from .bl2.voice import VoiceSet
 from .bl2.index import Index
 from .shieldprobe import Ctx, PAWN_CLASS, POOL_CLASS, brief, children_of_group, follow, props_at
 
@@ -564,51 +565,6 @@ BANDIT_SPEAKERS = re.compile(r"(?i)^(maraud|psycho|nomad|goliath|banditheavy|ban
 SAMPLE_KINDS = ("death", "pain", "taunt", "attack", "spot")
 
 
-class VoiceSet:
-    """One language's voices: its bank pack, its streamed audio, and the language-free bank pack of the same folder (which can hold the sound objects the
-    voice events lead to: the first voice survey loaded each pack on its own and found the base game's events but no sounds behind them)."""
-
-    def __init__(self, lang_banks: Path) -> None:
-        from .bl2 import wwise
-
-        self.lang_banks = lang_banks
-        self.dir = lang_banks.parent
-        self.sfx_dir = self.dir.parent
-        self.snd = wwise.Sounds()
-        self.stream_index: dict[int, tuple[Path, int, int]] = {}
-        self.files: list[str] = []
-
-    def load(self, ctx: Ctx) -> None:
-        from .bl2 import wwise
-
-        stem = self.lang_banks.name.replace("Audio_Banks", "Audio_Streaming")
-        sfx_banks = self.sfx_dir / self.lang_banks.name
-        for f, kind in ((self.lang_banks, "banks"), (sfx_banks, "banks"), (self.dir / stem, "stream"), (self.sfx_dir / stem, "stream")):
-            if not f.is_file():
-                continue
-            data = f.read_bytes()
-            pack = wwise.read_pack(data)
-            if kind == "banks":
-                self.snd.add_banks(data, pack)
-            for e in pack.sounds:
-                self.stream_index.setdefault(e.id, (f, e.offset, e.size))
-            self.snd.media_ids.update(e.id for e in pack.sounds)
-            self.files.append(f"{f.name} ({len(data) // 1048576} MB, {len(pack.banks)} banks, {len(pack.sounds)} streamed)")
-            del data
-
-    def audio(self, media: int) -> bytes | None:
-        got = self.snd.audio(media)
-        if got:
-            return got
-        where = self.stream_index.get(media)
-        if not where:
-            return None
-        f, off, size = where
-        with f.open("rb") as h:
-            h.seek(off)
-            return h.read(size)
-
-
 def voice_lines(ctx: Ctx, bl2: Path, scan: dict, out_dir: Path, decode_samples: bool = True) -> None:
     """For every English voice pack set (base game and DLCs): which battle-dialog lines resolve to audio, per speaker; the structure of lines that do not;
     and a few lines of the bandit-like speakers decoded to WAV in work\\voice-samples so they can be heard."""
@@ -644,7 +600,7 @@ def voice_lines(ctx: Ctx, bl2: Path, scan: dict, out_dir: Path, decode_samples: 
             ident = next((i for _l, i in wwise.event_ids(n) if vs.snd.first(i, (wwise.HIRC_EVENT,)) is not None), None)
             if ident is None:
                 continue
-            row = summary[f"{speaker} [{lp.parent.parent.parent.name if 'DLC' in str(lp) else 'base game'}]"]
+            row = summary[f"{speaker} [{lp.parts[lp.parts.index('DLC') + 1] if 'DLC' in lp.parts else 'base game'}]"]
             row[0] += 1
             leads = vs.snd.event_sounds(ident)
             if not leads:

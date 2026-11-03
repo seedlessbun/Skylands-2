@@ -660,6 +660,14 @@ Other commands:
   DLC events resolve to sounds (audio in the streaming twin), base-game events lead to no sound when the pack is read alone. 0.45.6 (TestBuild-153, python only, plugin 1.21.0): `bl2badass --voice` = B10 (`VoiceSet`: language banks + language-free
   banks of the parent folder + streamed index of both streaming packs read by seek; per speaker events / with sounds / with audio / KB; hex structure of unresolved events; one line per kind of every bandit-like speaker decoded with `audio.decode`
   to `work\voice-samples\<speaker>_<kind>_<line>_<n>.wav`, max 80); the old pass is `--voice-packs`. NEXT: the user listens and maps voices to Skyrim enemies; then stage 1 (plugin: tiers + stats) and the voice stage.
+- VOICE REPORT READ (TestBuild-153, 80 samples written): with the language pack + sound pack + streaming loaded together EVERY enemy speaker of the base game resolves to audio (nomad 46 lines 6.8 MB, psycho1/2 26, goliath 38,
+  banditheavy 15, marauder voices 36 each ...); only the player characters (assassin, commando, siren, merc: switch containers, type 6) do not. The user's choices: voices for the Pandora-named bandits NOW, by name (other races later);
+  mapping (sheet `enemies.voices`): Marauder / Badass Marauder = maraudkiller/maraudrip/marauddh/maraudscatshot, Nomad / Badass Nomad = nomad, Psycho = psycho1/psycho2, Bruiser = banditheavy (guess), Goliath = goliath; triggers: entering combat,
+  hurt, dying, taunts during the fight (+ gloat); Skyrim's bandit lines SILENCED. 0.46.0 (TestBuild-154, plugin 1.22.0 = "SkylandsNative 384"): `bl2/voice.py` (`VoiceSet`, moved out of badassprobe), `voices.py` (`extract` -> work\audio\voice WAVs by
+  speaker x group, `build`: SNDR `SkylandsVO_<speaker>_<group>` LAST in the second plugin (a test checks no older id moves), VTYP `SkylandsSilentVoice`, NPC overrides with VTCK replaced (records without VTCK = template voice, left), table
+  `Data\SKSE\Plugins\SkylandsVoices.txt` (NOT the ini: merge_ini would keep stale ids)); `native/skse/src/voices.h` (table read at data load with `TESDataHandler::LookupFormID(local, "SkylandsGunModels.esp")`, speaker by `GetName()` exact or
+  " <name>" suffix, Combat/Hit/Death sinks, 1 s taunt pump, `PlayAt` with `SetObjectToFollow`; ini Voices/VoiceGap/VoicePainGap/VoiceTauntMin/VoiceTauntMax/VoiceRange). UNCONFIRMED in game: all of it (that the silent voice type silences them, the
+  hit event's `source` for staff bullets (fire/shock deaths), sound volume/category of the copied template, that names match after the game localises them).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

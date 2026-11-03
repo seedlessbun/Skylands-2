@@ -223,6 +223,9 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   work\\bl2-shield-report.txt; send it so the shield feature can be planned.
   Check-BL2-Badass.bat looks at how Borderlands 2 makes its Badass / Super Badass / Ultimate Badass enemies (health and damage, loot pools, enemy voice and sound events
     checked against the sound banks; changes nothing, 15-30 minutes) and writes work\\bl2-badass-report.txt: send it, the Badass enemies are built from it.
+  PANDORA BANDIT VOICES (0.46.0, plugin 1.22.0): the bandits Skylands renames (Marauder, Nomad, Psycho, Bruiser, Goliath, Badass Marauder, Badass Nomad) speak Borderlands 2's lines
+    (entering a fight, getting hurt, dying, taunts, a gloat when you die) and no longer Skyrim's. The installer extracts them from your Borderlands 2 (setup log "voices:" lines); settings
+    Voices / VoiceGap / VoicePainGap / VoiceTauntMin / VoiceTauntMax / VoiceRange in SkylandsNative.ini; the plugin log says "voice: ... says ..." for the first lines.
   Check-BL2-Spawns.bat looks at how often Borderlands 2 spawns its Badass / Super Badass / Ultimate Badass enemies (changes nothing, 5-15 minutes) and writes work\\bl2-spawn-report.txt.
   Check-BL2-EnemyVoice.bat finds the human enemies' voice lines (taunts, pain, death...) in Borderlands 2's English voice packs, saves a few of every bandit-like voice as WAV files in work\\voice-samples to listen to (changes nothing, 5-15 minutes), and writes
     work\\bl2-enemy-voice-report.txt: send it, the enemy voices are extracted from what it finds.
@@ -275,7 +278,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-153.zip"
+    out = dist / "Skylands-TestBuild-154.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():

@@ -133,16 +133,17 @@ class EnemiesRow:
     bl2_read: str
     badass: str
     abilities: str
+    voices: str
 
 
 ENEMIES: dict[str, EnemiesRow] = {
-    'tier0': EnemiesRow(id='tier0', skyrim_edid_pattern='^EncBandit0[01](?!.*Boss)', bl2_read='b_enemy_marauder', badass='no', abilities='AbWeaknessFireConstant:15'),
-    'tier2': EnemiesRow(id='tier2', skyrim_edid_pattern='^EncBandit02(?!.*Boss)', bl2_read='b_enemy_nomad', badass='no', abilities='AbWeaknessFireConstant:15'),
-    'tier3': EnemiesRow(id='tier3', skyrim_edid_pattern='^EncBandit03(?!.*Boss)', bl2_read='b_enemy_psycho', badass='no', abilities='AbWeaknessFireConstant:15'),
-    'tier4': EnemiesRow(id='tier4', skyrim_edid_pattern='^EncBandit04(?!.*Boss)', bl2_read='b_enemy_bruiser', badass='no', abilities='AbWeaknessFireConstant:15'),
-    'tier5': EnemiesRow(id='tier5', skyrim_edid_pattern='^EncBandit05(?!.*Boss)', bl2_read='b_enemy_goliath', badass='no', abilities='AbWeaknessFireConstant:15'),
-    'tier6': EnemiesRow(id='tier6', skyrim_edid_pattern='^EncBandit06(?!.*Boss)', bl2_read='b_enemy_marauder_badass', badass='yes', abilities='AbFortifyHealth:100'),
-    'boss': EnemiesRow(id='boss', skyrim_edid_pattern='^EncBandit0\\dBoss', bl2_read='b_enemy_nomad_badass', badass='yes', abilities='AbFortifyHealth:150'),
+    'tier0': EnemiesRow(id='tier0', skyrim_edid_pattern='^EncBandit0[01](?!.*Boss)', bl2_read='b_enemy_marauder', badass='no', abilities='AbWeaknessFireConstant:15', voices='maraudkiller;maraudrip;marauddh;maraudscatshot'),
+    'tier2': EnemiesRow(id='tier2', skyrim_edid_pattern='^EncBandit02(?!.*Boss)', bl2_read='b_enemy_nomad', badass='no', abilities='AbWeaknessFireConstant:15', voices='nomad'),
+    'tier3': EnemiesRow(id='tier3', skyrim_edid_pattern='^EncBandit03(?!.*Boss)', bl2_read='b_enemy_psycho', badass='no', abilities='AbWeaknessFireConstant:15', voices='psycho1;psycho2'),
+    'tier4': EnemiesRow(id='tier4', skyrim_edid_pattern='^EncBandit04(?!.*Boss)', bl2_read='b_enemy_bruiser', badass='no', abilities='AbWeaknessFireConstant:15', voices='banditheavy'),
+    'tier5': EnemiesRow(id='tier5', skyrim_edid_pattern='^EncBandit05(?!.*Boss)', bl2_read='b_enemy_goliath', badass='no', abilities='AbWeaknessFireConstant:15', voices='goliath'),
+    'tier6': EnemiesRow(id='tier6', skyrim_edid_pattern='^EncBandit06(?!.*Boss)', bl2_read='b_enemy_marauder_badass', badass='yes', abilities='AbFortifyHealth:100', voices='maraudkiller;maraudrip;marauddh;maraudscatshot'),
+    'boss': EnemiesRow(id='boss', skyrim_edid_pattern='^EncBandit0\\dBoss', bl2_read='b_enemy_nomad_badass', badass='yes', abilities='AbFortifyHealth:150', voices='nomad'),
 }
 
 @dataclass(frozen=True)

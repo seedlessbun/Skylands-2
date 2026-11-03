@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.45.6"
+VERSION = "0.46.0"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 
@@ -277,6 +277,14 @@ def main(argv: list[str]) -> int:
                              if g["type"] in generate.STAFF_KINDS and g.get("manufacturer")})
             say(f"Looking for the Borderlands 2 shot sounds of {len(wanted)} gun type x manufacturer pairs ...")
             shot_sounds = audio.extract_shot_sounds(bl2, work, wanted, say)
+        voice_lines = None
+        if a.gun_shooting == "staff" and a.bl2_sounds == "auto":
+            from . import voices
+            from .sheet_data import ENEMIES
+
+            wanted_voices = {s for spk in voices.speakers_of(ENEMIES).values() for s in spk}
+            say(f"Looking for the Borderlands 2 voices of the Pandora bandits ({', '.join(sorted(wanted_voices))}) ...")
+            voice_lines = voices.extract(bl2, work, wanted_voices, say)
         shield_slot = 0
         relic_slot = 0
         if a.gun_shooting == "staff" and a.shields == "auto":
@@ -299,7 +307,7 @@ def main(argv: list[str]) -> int:
                 keptr = 0
             relic_slot, why = relics.choose_slot(sky / "Data", lambda msg: say(f"  {msg}"), keptr, taken=shield_slot)
             say(f"relics: the items are worn in {why}")
-        report = generate.generate(data, sky, stage, formids=ids, shot_sounds=shot_sounds, gun_models=a.gun_models, model_sources=sources, shield_slot=shield_slot, relic_slot=relic_slot,
+        report = generate.generate(data, sky, stage, formids=ids, shot_sounds=shot_sounds, gun_models=a.gun_models, model_sources=sources, shield_slot=shield_slot, relic_slot=relic_slot, voice_lines=voice_lines,
                                    model_spin=a.gun_spin, model_pitch=a.gun_pitch, model_calibrate=a.gun_calibrate, shooting=a.gun_shooting, model_scale=a.gun_scale, staff_turn=tuple(float(x) for x in a.staff_turn.split(",")))
         for src in sources.values():
             say(src.summary())

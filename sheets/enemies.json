@@ -7,6 +7,7 @@
     "bl2_read": "ref bl2_reads (enemy balance)",
     "badass": "yes | no",
     "abilities": "vanilla MGEF editor ids added as an ability, EDID:magnitude ';'-separated ('-' none)",
+    "voices": "Borderlands 2 battle-dialog speakers (Ak_Play_VOBD_<speaker>_...) this name speaks with, ';'-separated; a bandit keeps one for its life ('-' none). Bruiser = banditheavy is a guess (BL2's file names do not say)",
     "in_game": "yes once seen"
   },
   "rows": [
@@ -16,6 +17,7 @@
       "bl2_read": "b_enemy_marauder",
       "badass": "no",
       "abilities": "AbWeaknessFireConstant:15",
+      "voices": "maraudkiller;maraudrip;marauddh;maraudscatshot",
       "in_game": "no"
     },
     {
@@ -24,6 +26,7 @@
       "bl2_read": "b_enemy_nomad",
       "badass": "no",
       "abilities": "AbWeaknessFireConstant:15",
+      "voices": "nomad",
       "in_game": "no"
     },
     {
@@ -32,6 +35,7 @@
       "bl2_read": "b_enemy_psycho",
       "badass": "no",
       "abilities": "AbWeaknessFireConstant:15",
+      "voices": "psycho1;psycho2",
       "in_game": "no"
     },
     {
@@ -40,6 +44,7 @@
       "bl2_read": "b_enemy_bruiser",
       "badass": "no",
       "abilities": "AbWeaknessFireConstant:15",
+      "voices": "banditheavy",
       "in_game": "no"
     },
     {
@@ -48,6 +53,7 @@
       "bl2_read": "b_enemy_goliath",
       "badass": "no",
       "abilities": "AbWeaknessFireConstant:15",
+      "voices": "goliath",
       "in_game": "no"
     },
     {
@@ -56,6 +62,7 @@
       "bl2_read": "b_enemy_marauder_badass",
       "badass": "yes",
       "abilities": "AbFortifyHealth:100",
+      "voices": "maraudkiller;maraudrip;marauddh;maraudscatshot",
       "in_game": "no"
     },
     {
@@ -64,6 +71,7 @@
       "bl2_read": "b_enemy_nomad_badass",
       "badass": "yes",
       "abilities": "AbFortifyHealth:150",
+      "voices": "nomad",
       "in_game": "no"
     }
   ],

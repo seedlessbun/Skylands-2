@@ -1125,7 +1125,8 @@ def make_watcher(p: esp.Plugin, m: Masters, texts: Texts, props: list, report: d
 def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids: dict[str, int] | None = None,
              gun_models: str = "off", model_sources: dict | None = None, model_spin: float = 0.0, model_pitch: float = 0.0, model_calibrate: bool = False,
              model_scale: float = 1.0, shooting: str = "off",
-             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), shot_sounds: dict | None = None, shield_slot: int = 0, relic_slot: int = 0) -> dict:
+             staff_turn: tuple[float, float, float] = (0.0, 0.0, 0.0), shot_sounds: dict | None = None, shield_slot: int = 0, relic_slot: int = 0,
+             voice_lines: dict | None = None) -> dict:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
@@ -1394,6 +1395,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
 
     # ---- Pandora's bandits ------------------------------------------------------------------------
     abilities: dict[str, int] = {}
+    renamed: dict[str, list] = {}  # row id -> the NPC overrides made for it (the voices silence Skyrim's lines on copies of them)
+    pandora_names: dict[str, str] = {}
     for row in S.ENEMIES.values():
         name = bl2["enemies"].get(row.bl2_read)
         if not name:
@@ -1418,6 +1421,8 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
                     anchor = max((i + 1 for i, (s, _) in enumerate(o.subs) if s in ("ACBS", "SNAM", "INAM", "VTCK", "TPLT", "RNAM", "WNAM", "ANAM", "ATKR")), default=len(o.subs))
                 o.subs[anchor:anchor] = [("SPCT", esp.u32(len(spells)))] + [("SPLO", d) for d in spells]
             p.override(o)
+            renamed.setdefault(row.id, []).append(o)
+            pandora_names[row.id] = name
             report["renamed_enemies"] += 1
 
     # ---- shields (staff installs): armor items with Borderlands 2's parts, worn in a biped slot nothing else uses -----------------------------------------
@@ -1439,6 +1444,16 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         except Exception as e:  # noqa: BLE001 - the shields must never stop the install
             report["shields_error"] = f"{type(e).__name__}: {e}"
             report.setdefault("model_log", []).append(f"shields: not built ({type(e).__name__}: {e})")
+
+    # ---- voices of the Pandora bandits (LAST in the second plugin, so nothing before them moves) ---------------------------------------
+    if voice_lines:
+        try:
+            from . import voices
+
+            voices.build(view, m, out_data, voice_lines, renamed, pandora_names, voices.speakers_of(S.ENEMIES), report, report.setdefault("model_log", []).append)
+        except Exception as e:  # noqa: BLE001 - the voices must never stop the install
+            report["voices_error"] = f"{type(e).__name__}: {e}"
+            report.setdefault("model_log", []).append(f"voices: not built ({type(e).__name__}: {e})")
 
     # ---- files ------------------------------------------------------------------------------------
     (out_data / PLUGIN).write_bytes(p.encode())

@@ -687,3 +687,45 @@ def test_a_staff_gun_whose_native_model_cannot_be_built_gets_the_stylised_one_no
     assert meshes and all(m and "proxy_" in m for m in meshes.values()), meshes  # the real model could not be read: the proxy, never the donor staff (a None mesh)
     assert any("shotgun" in k.lower() for k in meshes)
     assert "by gun type" in " ".join(rep["model_log"]) and "'shotgun'" in " ".join(rep["model_log"])
+
+
+def test_pandora_bandits_get_borderlands_voices_and_lose_skyrims(tmp_path):
+    from skylands_setup import voices
+
+    bl2 = staff_bl2(tmp_path)
+    bl2["enemies"]["b_enemy_nomad"] = "Nomad"
+    bl2["enemies"]["b_enemy_nomad_badass"] = "Badass Nomad"
+    wavs = tmp_path / "wav"
+    wavs.mkdir()
+    lines = {}
+    for speaker, group in (("nomad", "aggro"), ("nomad", "death"), ("nomad", "pain"), ("psycho1", "taunt")):
+        f = wavs / f"{speaker}_{group}_0000000{len(lines)}.wav"
+        f.write_bytes(b"RIFF" + bytes(40))
+        lines[(speaker, group)] = [f]
+    plain = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky0"), tmp_path / "out0", shooting="staff")
+    rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", shooting="staff", voice_lines=lines)
+    data = tmp_path / "out" / "Data"
+    assert (data / "Skylands.esp").read_bytes() == (tmp_path / "out0" / "Data" / "Skylands.esp").read_bytes()  # Skylands.esp stays byte-identical
+    types = {"SNDR", "VTYP", "NPC_", "WEAP", "KYWD", "ENCH", "MGEF", "PROJ", "LVLI", "AMMO", "EXPL", "FLST", "ARMO"}
+    recs = [r for rs in read_plugin(data / generate.MODELS_PLUGIN, types)[1].values() for r in rs]
+    before = [r for rs in read_plugin(tmp_path / "out0" / "Data" / generate.MODELS_PLUGIN, types)[1].values() for r in rs]
+    sndr = {r.edid: r for r in recs if r.type == "SNDR" and (r.edid or "").startswith("SkylandsVO_")}
+    assert set(sndr) == {"SkylandsVO_nomad_aggro", "SkylandsVO_nomad_death", "SkylandsVO_nomad_pain", "SkylandsVO_psycho1_taunt"}
+    assert sndr["SkylandsVO_nomad_death"].first("ANAM").rstrip(b"\0").decode().endswith("FX\\Skylands\\VO\\nomad_death_00000001.wav")
+    assert (data / "Sound" / "FX" / "Skylands" / "VO" / "nomad_death_00000001.wav").is_file()
+    # the new records come last: everything that was already in the second plugin keeps its id
+    now = {(r.type, r.edid): r.form_id for r in recs}
+    assert all(now.get((r.type, r.edid)) == r.form_id for r in before if r.edid)
+    new_local = [r.form_id & 0xFFFFFF for r in sndr.values()]
+    assert min(new_local) > max(r.form_id & 0xFFFFFF for r in before if (r.form_id >> 24) == (min(r.form_id for r in sndr.values()) >> 24))
+    silent = next(r for r in recs if r.type == "VTYP")
+    assert silent.edid == voices.SILENT_VOICE
+    boss = next(r for r in recs if r.type == "NPC_" and r.edid == "EncBandit03Boss1HNordM")  # the bandit boss (Badass Nomad) had a voice type: now the silent one
+    assert struct.unpack("<I", boss.first("VTCK"))[0] == silent.form_id
+    table = (data / "SKSE" / "Plugins" / voices.TABLE).read_text(encoding="utf-8").splitlines()
+    nomad = next(x for x in table if x.startswith("speaker nomad "))
+    cols = nomad.split()[2:]
+    assert len(cols) == len(voices.GROUPS) and int(cols[list(voices.GROUPS).index("death")], 16) == sndr["SkylandsVO_nomad_death"].form_id & 0xFFFFFF
+    assert int(cols[list(voices.GROUPS).index("gloat")], 16) == 0  # a group with no lines
+    assert "name Badass Nomad|nomad" in table and "name Nomad|nomad" in table
+    assert rep["voices"]["silenced"] >= 1 and plain.get("voices") is None

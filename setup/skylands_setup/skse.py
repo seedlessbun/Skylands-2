@@ -69,6 +69,15 @@ Casings=1
 Rockets=1
 ; the aimed gun's sway (breathing, walking, a lag behind turns): 1 is the default, 0 none, 2 twice as much
 Sway=1.0
+; the Pandora bandits speak Borderlands 2's lines (1 on, 0 quiet; their Skyrim lines stay silenced either way). The lines are in SkylandsVoices.txt (the installer writes it).
+Voices=1
+; seconds between two lines of any bandits (a death may always speak), and between two pain lines of one bandit
+VoiceGap=2.5
+VoicePainGap=4
+; a bandit fighting you taunts once in this many seconds, if it is within this many units
+VoiceTauntMin=10
+VoiceTauntMax=20
+VoiceRange=4000
 """
 
 
