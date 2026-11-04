@@ -681,6 +681,13 @@ Other commands:
   `silent <id>`; the plugin logs the first 40 Pandora/"...andit" actors it looks at: "voice look: .. female/male base .. voice type .. (Skylands silent / a Skyrim voice)". UNCONFIRMED in game: all of it
   (that `ForEachReference` covers the loaded cells, that Disable+SetDelete on run-time refs is safe, the co-save, the voices fix). The boss row ("Badass Nomad") was missing from the 0.46.0 table: read the
   "sheet row boss" line in the next setup log.
+- 0.47.0 in game (user, setup log 5cc24693 "0.47.0", SkylandsNative.log 6e05aef9 "SkylandsNative 385"): one bandit said BOTH Skyrim's and Borderlands lines; the BL2 lines are noticeably quieter. READ: the installer renamed and
+  silenced only the 16 `EncBandit0xTemplate*` records (all "own voice 00013AE6"); the bandits that SPAWN are other Skyrim records that take their NAME from those templates (ACBS template flag 0x80, base data) and keep their OWN
+  voice (no traits flag): "voice look: FF0008F4 \"Killer Marauder\" female ... voice type 00013ADD (a Skyrim voice)", males 0009843B / 00013AEC / 00013AE6. Also "sheet row boss renamed no record" (`^EncBandit0\dBoss` matches nothing).
+  The SNDR template is `NPCCowDeath`. 0.48.0 (TestBuild-156, plugin 1.24.0 = "SkylandsNative 386"): (1) `voices.build` silences every master NPC with flag 0x80 whose TPLT chain (NPC or LVLN, 6 steps) reaches a renamed record ("..
+  takes a Pandora name from template .. : silenced", count `named`); for the boss row it logs the game's bandit-boss record names. (2) plugin `Diagnose` (called on the first look at an actor, now also from the 1 s `Taunts`
+  pass over every loaded actor, before combat) sets `base->voiceType` to the silent VTYP for a Pandora bandit that still has another ("still had a Skyrim voice type: given the silent one"). (3) `voices.GAIN` 1.35: the WAV
+  samples copied to `Data\Sound\FX\Skylands\VO` are scaled (`louder`, 16-bit PCM, clipped). UNCONFIRMED in game: all of it (that a run-time voiceType change on a leveled actor's base sticks, how loud 1.35 sounds).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
