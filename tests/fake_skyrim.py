@@ -206,6 +206,9 @@ def build_full(root: Path) -> Path:
             record("NPC_", 0x7003, [sub("EDID", z("EncBandit02Melee1HNordF")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 18 + struct.pack("<H", 1) + b"\0" * 4),
                                     sub("VTCK", struct.pack("<I", 0x13AD2)), sub("TPLT", struct.pack("<I", 0x7004))]),
             record("NPC_", 0x7004, [sub("EDID", z("BanditVoiceTemplateF")), sub("ACBS", b"\0" * 24), sub("VTCK", struct.pack("<I", 0x13AD3))]),
+            # a spawned bandit: its name comes from a renamed template (flag 0x80, base data), its voice is its own Skyrim one
+            record("NPC_", 0x7006, [sub("EDID", z("EncBandit02Missile1HNordF")), sub("ACBS", b"\0" * 18 + struct.pack("<H", 0x80) + b"\0" * 4),
+                                    sub("VTCK", struct.pack("<I", 0x13ADD)), sub("TPLT", struct.pack("<I", 0x7000))]),
             record("NPC_", 0x7005, [sub("EDID", z("EncBandit03Missile1HNordF")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24)])]
     extra.append(group("NPC_", npcs))
     lv = struct.pack("<HHIHH", 1, 0, 0x1234, 1, 0)

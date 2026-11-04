@@ -62,7 +62,7 @@ def test_the_plugin_reads_the_table_and_speaks_on_combat_hits_deaths_and_taunts(
                  "VoiceGap", "VoiceTauntMin", "kDeathFire", "kGloat", "SpeakerOfLocked"):
         assert text in voices_h, text
     assert "voices::Load();" in main and "voices::Start(holder);" in main and "voices::Config(" in main and "voices::g_elementOf" in main
-    assert "kVersion = 385" in main and "{ 1, 23, 0, 0 }" in main
+    assert "kVersion = 386" in main and "{ 1, 24, 0, 0 }" in main
     assert voices.TABLE in (root / "voices.h").read_text(encoding="utf-8")  # the installer and the plugin agree on the file name
     order = list(voices.GROUPS)
     header = (root / "voices.h").read_text(encoding="utf-8")
@@ -93,3 +93,20 @@ def test_the_voice_diagnostics_name_each_bandits_voice_type():
     assert "voice look:" in voices_h and "templateUseFlags" in voices_h and 'line.rfind("silent ", 0) == 0' in voices_h
     say = voices_h.split("inline bool Say(")[1]
     assert say.index("Diagnose(a_actor, looked);") < say.index("PlayAt(")
+
+
+def test_the_lines_are_made_louder_without_wrapping():
+    import struct as st
+    pcm = st.pack("<4h", 1000, -1000, 30000, -30000)
+    wav = b"RIFF" + st.pack("<I", 36 + len(pcm)) + b"WAVE" + b"fmt " + st.pack("<IHHIIHH", 16, 1, 1, 44100, 88200, 2, 16) + b"data" + st.pack("<I", len(pcm)) + pcm
+    out = voices.louder(wav, 1.35)
+    assert st.unpack_from("<4h", out, 44) == (1350, -1350, 32767, -32768) and out[:44] == wav[:44]
+    assert voices.louder(b"not a wav", 1.35) == b"not a wav" and voices.GAIN == 1.35
+
+
+def test_the_plugin_silences_a_pandora_bandit_that_kept_a_skyrim_voice():
+    voices_h = (HERE.parent / "native" / "skse" / "src" / "voices.h").read_text(encoding="utf-8")
+    diagnose = voices_h.split("inline void Diagnose(")[1].split("\n\t}\n")[0]
+    assert "base->voiceType = silent;" in diagnose and "LookupByID<RE::BGSVoiceType>(g_silent)" in diagnose
+    taunts = voices_h.split("inline void Taunts()")[1]
+    assert taunts.index("Diagnose(actor, looked);") < taunts.index("currentCombatTarget")  # looked at before it fights

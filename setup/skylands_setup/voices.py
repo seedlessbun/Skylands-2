@@ -33,6 +33,31 @@ TABLE = "SkylandsVoices.txt"
 SILENT_VOICE = "SkylandsSilentVoice"
 
 
+GAIN = 1.35  # the lines are this much louder than BL2's files (0.47.0: noticeably quieter than Skyrim's own voices)
+
+
+def louder(wav: bytes, gain: float) -> bytes:
+    """A 16-bit PCM WAV with every sample times gain (clipped); anything else is returned as it is."""
+    if len(wav) < 12 or wav[:4] != b"RIFF" or wav[8:12] != b"WAVE" or gain == 1.0:
+        return wav
+    out = bytearray(wav)
+    pos, bits = 12, 0
+    while pos + 8 <= len(out):
+        cid, size = bytes(out[pos:pos + 4]), struct.unpack_from("<I", out, pos + 4)[0]
+        body = pos + 8
+        if cid == b"fmt " and size >= 16:
+            fmt, bits = struct.unpack_from("<H", out, body)[0], struct.unpack_from("<H", out, body + 14)[0]
+            if fmt != 1:
+                return wav
+        elif cid == b"data" and bits == 16:
+            n = min(size, len(out) - body) // 2
+            samples = struct.unpack_from(f"<{n}h", out, body)
+            struct.pack_into(f"<{n}h", out, body, *(max(-32768, min(32767, int(round(v * gain)))) for v in samples))
+            return bytes(out)
+        pos = body + size + (size & 1)
+    return wav
+
+
 def speakers_of(sheet) -> dict[str, list[str]]:
     """{Pandora row id: [BL2 speakers]} from the enemies sheet."""
     return {row.id: [s for s in row.voices.split(";") if s] for row in sheet.values() if getattr(row, "voices", "-") not in ("", "-")}
@@ -128,7 +153,7 @@ def build(view: esp.Plugin, m, out_data: Path, lines: dict[tuple[str, str], list
     for (speaker, group), files in sorted(lines.items()):
         paths = []
         for f in files:
-            (sound_dir / Path(f).name).write_bytes(Path(f).read_bytes())
+            (sound_dir / Path(f).name).write_bytes(louder(Path(f).read_bytes(), GAIN))
             paths.append(f"{prefix}FX\\Skylands\\VO\\{Path(f).name}")
         edid = f"SkylandsVO_{speaker}_{group}"
         subs, placed = [], False
@@ -151,7 +176,7 @@ def build(view: esp.Plugin, m, out_data: Path, lines: dict[tuple[str, str], list
     silent = view.new("VTYP", SILENT_VOICE)
     silent.add("DNAM", b"\x00")
     done: set[int] = set()
-    count = {"own": 0, "race": 0, "template": 0}
+    count = {"own": 0, "race": 0, "template": 0, "named": 0}
 
     def silence(rec, why: str) -> None:
         if rec.form_id in done:
@@ -195,6 +220,9 @@ def build(view: esp.Plugin, m, out_data: Path, lines: dict[tuple[str, str], list
     for row_id in speakers:
         if row_id not in renamed:
             log(f"voices: sheet row {row_id} renamed no record (its Borderlands name was not read, or no NPC matched its editor id pattern): it has no voice")
+            if row_id == "boss":  # which bandit boss records the game has (to correct the pattern)
+                bosses = sorted(r.edid + ("" if r.first("FULL") is None else " (named)") for r in m.by_type.get("NPC_", {}).values() if re.search(r"(?i)bandit.*boss|boss.*bandit", r.edid))
+                log(f"voices:   bandit boss records in the game ({len(bosses)}): {', '.join(bosses[:30])}")
     mine = {o.form_id: o for recs in renamed.values() for o in recs}
     looked = 0
     for row_id, recs in renamed.items():
@@ -219,9 +247,49 @@ def build(view: esp.Plugin, m, out_data: Path, lines: dict[tuple[str, str], list
                 silence(o, "race")
             else:
                 silence(o, "own")
+    # 0.48.0: the bandits that spawn are mostly NOT the renamed records: Skyrim's EncBanditNN... people take their NAME from a renamed template
+    # (template flag "base data") through an NPC or a leveled list, but keep their OWN voice (no "traits" flag), so they showed a Pandora name and still
+    # spoke Skyrim's lines (0.47.0 log: "Killer Marauder" with voice types 00013ADD, 0009843B, ...). Every NPC whose template chain reaches a renamed record is silenced.
+    chains: dict[int, bool] = {}
+
+    def reaches(fid: int, depth: int) -> bool:
+        if fid in mine:
+            return True
+        if not fid or depth > 6:
+            return False
+        if fid in chains:
+            return chains[fid]
+        chains[fid] = False  # a loop reaches nothing
+        npc = m.by_type.get("NPC_", {}).get(fid)
+        got = False
+        if npc is not None:
+            tplt = npc.first("TPLT")
+            got = bool(tplt) and reaches(struct.unpack("<I", tplt[:4])[0], depth + 1)
+        else:
+            lvln = m.by_type.get("LVLN", {}).get(fid)
+            if lvln is not None:
+                got = any(len(d) >= 8 and reaches(struct.unpack_from("<I", d, 4)[0], depth + 1) for d in lvln.all("LVLO"))
+        chains[fid] = got
+        return got
+
+    shown = 0
+    for npc in list(m.by_type.get("NPC_", {}).values()):
+        if npc.form_id in mine or npc.form_id in done:
+            continue
+        tplt, acbs = npc.first("TPLT"), npc.first("ACBS")
+        if not tplt or not acbs or len(acbs) < 20 or not struct.unpack_from("<H", acbs, 18)[0] & 0x80:  # 0x80: name (base data) from the template
+            continue
+        if not reaches(struct.unpack("<I", tplt[:4])[0], 0):
+            continue
+        if shown < 40:
+            vt = npc.first("VTCK")
+            log(f"voices: {npc.edid} {npc.form_id:08X} takes a Pandora name from template {struct.unpack('<I', tplt[:4])[0]:08X} and spoke with "
+                + (f"its own voice {struct.unpack('<I', vt[:4])[0]:08X}" if vt else "its race's voice") + ": silenced")
+            shown += 1
+        silence(npc, "named")
     silenced = sum(count.values())
     log(f"voices: {silenced} records silenced (voice type {SILENT_VOICE}): {count['own']} with their own voice, {count['race']} that spoke with their race's voice, "
-        f"{count['template']} through a template")
+        f"{count['template']} through a template, {count['named']} that take a Pandora name from a template")
     # the plugin's table: one speaker per line (its sound descriptors by group, ids without the file), one Pandora name per line (its speakers)
     order = list(GROUPS)
     table = ["# Skylands voices (written by the installer; read by SkylandsNative.dll at data load). Ids are SkylandsGunModels.esp's, without the file.",

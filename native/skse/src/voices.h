@@ -83,6 +83,7 @@ namespace voices
 	// Game thread, at data load: the table the installer wrote.
 	inline RE::FormID      g_silent = 0;  // the silent voice type the installer gives the renamed bandits ("silent" line of the table)
 	inline std::atomic_int g_looked{ 0 };
+	inline std::atomic_int g_hushed{ 0 };
 
 	inline void Load()
 	{
@@ -168,8 +169,25 @@ namespace voices
 	// Skyrim voice (its record takes its traits from a template the installer did not silence, or it is not one of the renamed bandits at all).
 	inline void Diagnose(RE::Actor* a_actor, int a_speaker)
 	{
+		// 1.24.0: a Pandora bandit that still has a Skyrim voice type (a record the installer did not reach) gets the silent one here, so Skyrim's lines stop
+		bool silenced = false;
+		if (a_speaker >= 0 && g_silent) {
+			const auto base = a_actor->GetActorBase();
+			const auto silent = RE::TESForm::LookupByID<RE::BGSVoiceType>(g_silent);
+			if (base && silent && base->voiceType != silent) {
+				base->voiceType = silent;
+				silenced = true;
+				if (g_hushed.fetch_add(1) < 40) {
+					const char* who = a_actor->GetName();
+					SKSE::log::info("voice: {:08X} \"{}\" (base {:08X}) still had a Skyrim voice type: given the silent one", a_actor->GetFormID(), who ? who : "?", base->GetFormID());
+				}
+			}
+		}
 		const char*            raw = a_actor->GetName();
 		const std::string_view named = raw ? raw : "";
+		if (silenced) {
+			return;
+		}
 		if ((a_speaker < 0 && named.find("andit") == std::string_view::npos) || g_looked.fetch_add(1) >= 40) {
 			return;  // Pandora bandits and Skyrim's own "Bandit ..." people only
 		}
@@ -449,6 +467,19 @@ namespace voices
 			const auto actor = ptr.get();
 			if (!actor || actor->IsDead() || !actor->Is3DLoaded()) {
 				continue;
+			}
+			// first look at a loaded person: a Pandora bandit is given the silent voice before it can say a Skyrim line (Diagnose)
+			int looked = -3;
+			{
+				const std::lock_guard guard(g_lock);
+				auto&                 st = g_state[actor->GetFormID()];
+				if (st.speaker == -1) {
+					st.speaker = SpeakerOfLocked(actor);
+					looked = st.speaker;
+				}
+			}
+			if (looked != -3) {
+				Diagnose(actor, looked);
 			}
 			const auto target = actor->GetActorRuntimeData().currentCombatTarget.get();
 			if (!target || target.get() != static_cast<RE::Actor*>(player)) {

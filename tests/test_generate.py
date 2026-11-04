@@ -724,7 +724,7 @@ def test_pandora_bandits_get_borderlands_voices_and_lose_skyrims(tmp_path):
     assert struct.unpack("<I", boss.first("VTCK"))[0] == silent.form_id
     # 0.47.0: a female bandit speaking Skyrim's lines: its voice comes from its traits template (silenced with it), or from its race (it gets a voice type)
     npcs = {r.edid: r for r in recs if r.type == "NPC_"}
-    for edid in ("BanditVoiceTemplateF", "EncBandit03Missile1HNordF", "EncBandit02Melee1HNordF"):
+    for edid in ("BanditVoiceTemplateF", "EncBandit03Missile1HNordF", "EncBandit02Melee1HNordF", "EncBandit02Missile1HNordF"):
         assert struct.unpack("<I", npcs[edid].first("VTCK"))[0] == silent.form_id, edid
     assert npcs["EncBandit03Missile1HNordF"].first("FULL") is not None  # the renamed copy, not the master's
     assert npcs["BanditVoiceTemplateF"].first("FULL") is None
