@@ -217,8 +217,9 @@ namespace voices
 		return -2;
 	}
 
-	inline void PlayAt(RE::FormID a_sound, RE::Actor* a_actor)
+	inline void PlayAt(RE::FormID a_sound, RE::Actor* a_actor, bool a_follow)
 	{
+		shield::g_stage = "voices: play";
 		const auto form = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(a_sound);
 		const auto manager = RE::BSAudioManager::GetSingleton();
 		if (!form || !manager) {
@@ -229,10 +230,15 @@ namespace voices
 		auto at = a_actor->GetPosition();
 		at.z += 100.0f;
 		handle.SetPosition(at);
-		if (const auto node = a_actor->Get3D()) {
-			handle.SetObjectToFollow(node);
+		// 1.24.1: a dying bandit's line stays where it was said: the body's 3D is swapped for the ragdoll (and may be unloaded) while the sound
+		// would still follow the old node (a possible cause of the crash after kills; unproven)
+		if (a_follow && !a_actor->IsDead()) {
+			if (const auto node = a_actor->Get3D()) {
+				handle.SetObjectToFollow(node);
+			}
 		}
 		handle.Play();
+		shield::g_stage = "voices: played";
 	}
 
 	// One line of a bandit; false when it is not a Pandora bandit, has no such line, or it is too soon.
@@ -283,7 +289,7 @@ namespace voices
 			st.lastLine = now;
 			speaker = s.name;
 		}
-		PlayAt(sound, a_actor);
+		PlayAt(sound, a_actor, used != kDeath && used != kDeathFire && used != kDeathShock);
 		if (g_said.fetch_add(1) < 40) {
 			const char* name = a_actor->GetName();
 			SKSE::log::info("voice: {:08X} \"{}\" says {} ({} as {}, sound {:08X})", a_actor->GetFormID(), name ? name : "?", kLineNames[used], speaker, kLineNames[a_line], sound);
@@ -340,6 +346,7 @@ namespace voices
 
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESHitEvent* a_event, RE::BSTEventSource<RE::TESHitEvent>*) override
 		{
+			shield::g_stage = "voices: hit event";
 			if (!g_ready || !a_event || !a_event->target) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
@@ -418,6 +425,7 @@ namespace voices
 
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override
 		{
+			shield::g_stage = "voices: death event";
 			if (!g_ready || !a_event || !a_event->actorDying) {
 				return RE::BSEventNotifyControl::kContinue;
 			}

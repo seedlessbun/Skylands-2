@@ -309,7 +309,7 @@ def test_native_stub_declares_the_plugins_functions(tmp_path):
         assert text in hud_h, text
     assert "a_player->IsInCombat()" not in hud_h
     aura_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "shieldaura.h").read_text(encoding="utf-8")
-    assert "kVersion = 386" in main and "{ 1, 24, 0, 0 }" in main and "RE::ActorValue::kVariable09" in main and "RE::ActorValue::kVariable04" in main and "RE::ActorValue::kVariable01" in shield_h and "data.power = g_damageMult" in main
+    assert "kVersion = 387" in main and "{ 1, 24, 1, 0 }" in main and "RE::ActorValue::kVariable09" in main and "RE::ActorValue::kVariable04" in main and "RE::ActorValue::kVariable01" in shield_h and "data.power = g_damageMult" in main
     relic_h = (Path(__file__).resolve().parent.parent / "native" / "skse" / "src" / "relic.h").read_text(encoding="utf-8")
     for text in ("SkylandsRelic_", "kVariable09", "kVariable01", "kResistFire", "kPoisonResist", "RelicSlot", "EnemyRelicPercent", "kDropping", "Revert()"):
         assert text in relic_h, text

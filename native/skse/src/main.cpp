@@ -19,7 +19,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 386;  // 1.24.0
+	constexpr std::int32_t kVersion = 387;  // 1.24.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -2622,7 +2622,11 @@ namespace
 
 	void OnMessage(SKSE::MessagingInterface::Message* a_message)
 	{
+		if (a_message->type == SKSE::MessagingInterface::kPostLoadGame || a_message->type == SKSE::MessagingInterface::kNewGame) {
+			ClaimCrashFilter("after a game load");
+		}
 		if (a_message->type == SKSE::MessagingInterface::kDataLoaded) {
+			ClaimCrashFilter("after data load");
 			AttackHook::Install();
 			ReadyHook::Install();
 			StartPump();
@@ -2700,6 +2704,85 @@ namespace
 		return g_previousFilter ? g_previousFilter(a_info) : EXCEPTION_CONTINUE_SEARCH;
 	}
 
+	// 1.24.1: the 0.48.0 crash left no CRASH line: another handler (a crash logger, or the game resetting the filter) came before ours. A vectored
+	// handler is asked FIRST about every exception: the first fatal-looking ones are logged with the module and offset, the plugin's stages and
+	// the addresses on the stack that point into code (the likely callers). It only logs (the exception goes on as before). "first chance": the
+	// game may still handle it itself; a crash right after one is the one that matters.
+	std::atomic_int g_firstChance{ 0 };
+
+	std::string WhereIs(const void* a_at)
+	{
+		HMODULE module = nullptr;
+		char    name[MAX_PATH]{};
+		if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, static_cast<LPCSTR>(a_at), &module) || !module) {
+			return {};
+		}
+		GetModuleFileNameA(module, name, MAX_PATH);
+		std::string_view file = name;
+		if (const auto slash = file.find_last_of("\\/"); slash != std::string_view::npos) {
+			file = file.substr(slash + 1);
+		}
+		return fmt::format("{}+{:X}", file, reinterpret_cast<std::uintptr_t>(a_at) - reinterpret_cast<std::uintptr_t>(module));
+	}
+
+	LONG WINAPI FirstChance(EXCEPTION_POINTERS* a_info)
+	{
+		if (!a_info || !a_info->ExceptionRecord) {
+			return EXCEPTION_CONTINUE_SEARCH;
+		}
+		const auto code = a_info->ExceptionRecord->ExceptionCode;
+		const bool fatal = code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_ILLEGAL_INSTRUCTION || code == EXCEPTION_STACK_OVERFLOW ||
+		                   code == EXCEPTION_INT_DIVIDE_BY_ZERO || code == EXCEPTION_PRIV_INSTRUCTION || code == 0xC0000409;  // stack buffer overrun
+		if (!fatal || g_firstChance.fetch_add(1) >= 4) {
+			return EXCEPTION_CONTINUE_SEARCH;
+		}
+		const void* at = a_info->ExceptionRecord->ExceptionAddress;
+		std::string what;
+		if (code == EXCEPTION_ACCESS_VIOLATION && a_info->ExceptionRecord->NumberParameters >= 2) {
+			const auto kind = a_info->ExceptionRecord->ExceptionInformation[0];
+			what = fmt::format(" ({} address {:X})", kind == 0 ? "reading" : kind == 1 ? "writing" : "running", a_info->ExceptionRecord->ExceptionInformation[1]);
+		}
+		std::string callers;
+		if (a_info->ContextRecord && code != EXCEPTION_STACK_OVERFLOW) {
+			const auto* sp = reinterpret_cast<const std::uintptr_t*>(a_info->ContextRecord->Rsp);
+			MEMORY_BASIC_INFORMATION mbi{};
+			std::size_t              words = 0;
+			if (VirtualQuery(sp, &mbi, sizeof(mbi)) && mbi.State == MEM_COMMIT) {
+				words = std::min<std::size_t>(256, (reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize - reinterpret_cast<std::uintptr_t>(sp)) / sizeof(std::uintptr_t));
+			}
+			int found = 0;
+			for (std::size_t i = 0; i < words && found < 14; ++i) {
+				const auto value = sp[i];
+				MEMORY_BASIC_INFORMATION code_mbi{};
+				if (value < 0x10000 || !VirtualQuery(reinterpret_cast<const void*>(value), &code_mbi, sizeof(code_mbi)) || code_mbi.Type != MEM_IMAGE ||
+					!(code_mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) {
+					continue;
+				}
+				const auto where = WhereIs(reinterpret_cast<const void*>(value));
+				if (!where.empty()) {
+					callers += (callers.empty() ? "" : ", ") + where;
+					++found;
+				}
+			}
+		}
+		SKSE::log::critical("first chance exception {:08X} at {}{}; the plugin's last stage: {} (shields: {}); on the stack: {}", static_cast<unsigned>(code), WhereIs(at), what,
+			g_stage.load(), shield::g_stage.load(), callers.empty() ? "-" : callers);
+		if (const auto logger = spdlog::default_logger()) {
+			logger->flush();
+		}
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	// the unhandled filter again (after data load and after each game load): a filter set later by someone else is kept as the previous one
+	void ClaimCrashFilter(const char* a_when)
+	{
+		const auto before = SetUnhandledExceptionFilter(CrashFilter);
+		if (before != CrashFilter) {
+			g_previousFilter = before;
+			SKSE::log::info("crash handler: set again {} (the filter before was {})", a_when, before ? WhereIs(reinterpret_cast<const void*>(before)) : std::string("none"));
+		}
+	}
+
 	void StartLog()
 	{
 		auto path = SKSE::log::log_directory();
@@ -2716,7 +2799,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 24, 0, 0 },
+	.Version = { 1, 24, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
@@ -2729,6 +2812,7 @@ SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* a_skse)
 		REL::Module::IsVR() ? "VR" : REL::Module::IsAE() ? "Anniversary Edition lineage" : "Special Edition");
 	LoadConfig();
 	g_previousFilter = SetUnhandledExceptionFilter(CrashFilter);
+	AddVectoredExceptionHandler(1, FirstChance);
 	SKSE::GetPapyrusInterface()->Register(RegisterPapyrus);
 	shield::RegisterSerialization();
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);

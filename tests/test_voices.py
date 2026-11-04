@@ -62,7 +62,7 @@ def test_the_plugin_reads_the_table_and_speaks_on_combat_hits_deaths_and_taunts(
                  "VoiceGap", "VoiceTauntMin", "kDeathFire", "kGloat", "SpeakerOfLocked"):
         assert text in voices_h, text
     assert "voices::Load();" in main and "voices::Start(holder);" in main and "voices::Config(" in main and "voices::g_elementOf" in main
-    assert "kVersion = 386" in main and "{ 1, 24, 0, 0 }" in main
+    assert "kVersion = 387" in main and "{ 1, 24, 1, 0 }" in main
     assert voices.TABLE in (root / "voices.h").read_text(encoding="utf-8")  # the installer and the plugin agree on the file name
     order = list(voices.GROUPS)
     header = (root / "voices.h").read_text(encoding="utf-8")
@@ -110,3 +110,22 @@ def test_the_plugin_silences_a_pandora_bandit_that_kept_a_skyrim_voice():
     assert "base->voiceType = silent;" in diagnose and "LookupByID<RE::BGSVoiceType>(g_silent)" in diagnose
     taunts = voices_h.split("inline void Taunts()")[1]
     assert taunts.index("Diagnose(actor, looked);") < taunts.index("currentCombatTarget")  # looked at before it fights
+
+
+def test_crashes_are_caught_first_and_death_lines_do_not_follow_the_body():
+    root = HERE.parent / "native" / "skse" / "src"
+    main = (root / "main.cpp").read_text(encoding="utf-8")
+    # 0.48.0 crashed with no CRASH line: a vectored handler logs the first fatal exceptions before anyone else, and the unhandled filter is claimed again later
+    assert "AddVectoredExceptionHandler(1, FirstChance);" in main and 'ClaimCrashFilter("after data load");' in main and 'ClaimCrashFilter("after a game load");' in main
+    first = main.split("LONG WINAPI FirstChance(")[1].split("\n\t}\n")[0]
+    assert "return EXCEPTION_CONTINUE_SEARCH;" in first and "EXCEPTION_ACCESS_VIOLATION" in first and "g_firstChance.fetch_add(1) >= 4" in first
+    voices_h = (root / "voices.h").read_text(encoding="utf-8")
+    assert "PlayAt(sound, a_actor, used != kDeath && used != kDeathFire && used != kDeathShock);" in voices_h and "a_follow && !a_actor->IsDead()" in voices_h
+
+
+def test_respawn_range_check_never_asks_an_unloaded_cell_if_it_is_inside():
+    from skylands_setup.skyrim import scripts
+    import inspect
+    src = inspect.getsource(scripts)
+    in_range = src.split('"InRange",')[1].split("remove = Function(")[0]
+    assert in_range.count('"IsInterior"') == 1 and '("id", "IsInterior"), ("id", "cell")' in in_range  # only the player's own (loaded) cell

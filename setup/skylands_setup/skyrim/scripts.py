@@ -371,11 +371,8 @@ def class_choice_quest(bolts: bool = True) -> Script:
             ("cmp_eq", ("id", "::temp0"), ("id", "stored"), ("id", "cell")),
             ("return", ("id", "::temp0")),
             ("label", "outside"),
-            ("cast", ("id", "::temp0"), ("id", "stored")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "near")),
-            ("callmethod", ("id", "IsInterior"), ("id", "stored"), ("id", "::temp0")),
-            ("jmpf", ("id", "::temp0"), ("lbl", "near")),
-            ("return", ("bool", False)),
+            # 0.48.1: no IsInterior on the stored cell: a cell that is not loaded has no native object ("Unable to call IsInterior", 97 times in one
+            # respawn in the 0.48.0 Papyrus log); outside, the stored place is judged by its distance alone
             ("label", "near"),
             ("callmethod", ("id", "GetPositionX"), ("id", "player"), ("id", "px")),
             ("callmethod", ("id", "GetPositionY"), ("id", "player"), ("id", "py")),
