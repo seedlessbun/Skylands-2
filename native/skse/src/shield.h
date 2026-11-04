@@ -721,6 +721,11 @@ namespace shield
 	constexpr std::uint32_t kRecord = 0x444C4853;    // 'SHLD'
 	constexpr std::uint32_t kStarter = 0x54525453;   // 'STRT': the player has been given a starter shield
 
+	// other parts of the plugin keep records in the same co-save (one set of callbacks per plugin): they hook in here
+	inline void (*g_extraSave)(SKSE::SerializationInterface*) = nullptr;
+	inline bool (*g_extraLoad)(SKSE::SerializationInterface*, std::uint32_t a_type, std::uint32_t a_version) = nullptr;  // true: the record was theirs
+	inline void (*g_extraRevert)() = nullptr;
+
 	inline void OnSave(SKSE::SerializationInterface* a_intfc)
 	{
 		struct Entry
@@ -758,6 +763,9 @@ namespace shield
 			a_intfc->WriteRecordData(std::uint8_t{ 1 });
 		}
 		SKSE::log::info("shield: save - {} shield bonuses recorded in the co-save{}", entries.size(), g_starterGiven ? ", the starter shield is marked as given" : "");
+		if (g_extraSave) {
+			g_extraSave(a_intfc);
+		}
 	}
 
 	inline void OnRevert(SKSE::SerializationInterface*)
@@ -765,6 +773,9 @@ namespace shield
 		// the game is being replaced (a load, a new game): what the plugin knew belongs to the old one
 		if (g_relicRevert) {
 			g_relicRevert();
+		}
+		if (g_extraRevert) {
+			g_extraRevert();
 		}
 		const std::lock_guard guard(g_lock);
 		g_states.clear();
@@ -780,6 +791,9 @@ namespace shield
 				std::uint8_t flag = 0;
 				a_intfc->ReadRecordData(flag);
 				g_starterGiven = flag != 0;
+				continue;
+			}
+			if (g_extraLoad && type != kRecord && g_extraLoad(a_intfc, type, version)) {
 				continue;
 			}
 			if (type != kRecord || (version != 1 && version != 2)) {

@@ -114,7 +114,7 @@ def test_generate_from_both_games(tmp_path):
     assert struct.unpack("<I", npcs["EncBandit02TemplateMelee"].first("SPCT"))[0] == 2
     assert npcs["EncBandit03Boss1HNordM"].first("FULL") == b"Badass Nomad\0"
     assert "EncBandit02Melee1HNordM" not in npcs  # unnamed records keep inheriting from their template
-    assert rep["renamed_enemies"] == 2 and rep["missing_classes"] == ["psycho"]
+    assert rep["renamed_enemies"] == 4 and rep["missing_classes"] == ["psycho"]
 
 
 def test_build_installs_and_enables(tmp_path, monkeypatch):
@@ -722,10 +722,17 @@ def test_pandora_bandits_get_borderlands_voices_and_lose_skyrims(tmp_path):
     assert silent.edid == voices.SILENT_VOICE
     boss = next(r for r in recs if r.type == "NPC_" and r.edid == "EncBandit03Boss1HNordM")  # the bandit boss (Badass Nomad) had a voice type: now the silent one
     assert struct.unpack("<I", boss.first("VTCK"))[0] == silent.form_id
+    # 0.47.0: a female bandit speaking Skyrim's lines: its voice comes from its traits template (silenced with it), or from its race (it gets a voice type)
+    npcs = {r.edid: r for r in recs if r.type == "NPC_"}
+    for edid in ("BanditVoiceTemplateF", "EncBandit03Missile1HNordF", "EncBandit02Melee1HNordF"):
+        assert struct.unpack("<I", npcs[edid].first("VTCK"))[0] == silent.form_id, edid
+    assert npcs["EncBandit03Missile1HNordF"].first("FULL") is not None  # the renamed copy, not the master's
+    assert npcs["BanditVoiceTemplateF"].first("FULL") is None
     table = (data / "SKSE" / "Plugins" / voices.TABLE).read_text(encoding="utf-8").splitlines()
     nomad = next(x for x in table if x.startswith("speaker nomad "))
     cols = nomad.split()[2:]
     assert len(cols) == len(voices.GROUPS) and int(cols[list(voices.GROUPS).index("death")], 16) == sndr["SkylandsVO_nomad_death"].form_id & 0xFFFFFF
     assert int(cols[list(voices.GROUPS).index("gloat")], 16) == 0  # a group with no lines
     assert "name Badass Nomad|nomad" in table and "name Nomad|nomad" in table
+    assert f"silent {silent.form_id & 0xFFFFFF:06X}" in table
     assert rep["voices"]["silenced"] >= 1 and plain.get("voices") is None

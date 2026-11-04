@@ -121,6 +121,8 @@ namespace voices
 				speakers.push_back(std::move(s));
 			} else if (line.rfind("name ", 0) == 0) {
 				pending.push_back(line.substr(5));
+			} else if (line.rfind("silent ", 0) == 0 && handler) {
+				g_silent = handler->LookupFormID(static_cast<std::uint32_t>(std::strtoul(line.c_str() + 7, nullptr, 16)), "SkylandsGunModels.esp");
 			}
 		}
 		for (const auto& entry : pending) {
@@ -156,6 +158,29 @@ namespace voices
 		}
 		g_ready = nSpeakers > 0 && nNames > 0;
 		SKSE::log::info("voices: {} speakers, {} lines resolved ({} not found in SkylandsGunModels.esp), names: {}", nSpeakers, resolved, missing, listed);
+	}
+
+	inline RE::FormID      g_silent = 0;  // the silent voice type the installer gives the renamed bandits ("silent" line of the table)
+	inline std::atomic_int g_looked{ 0 };
+
+	// 1.23.0: some female bandits still spoke Skyrim's lines. The first people looked at are logged with their voice type, so the log says whether a bandit kept a
+	// Skyrim voice (its record takes its traits from a template the installer did not silence, or it is not one of the renamed bandits at all).
+	inline void Diagnose(RE::Actor* a_actor, int a_speaker)
+	{
+		const char*            raw = a_actor->GetName();
+		const std::string_view named = raw ? raw : "";
+		if ((a_speaker < 0 && named.find("andit") == std::string_view::npos) || g_looked.fetch_add(1) >= 40) {
+			return;  // Pandora bandits and Skyrim's own "Bandit ..." people only
+		}
+		const auto  base = a_actor->GetActorBase();
+		const auto  voice = base ? base->voiceType : nullptr;
+		const char* name = a_actor->GetName();
+		const bool  female = base && base->GetSex() == RE::SEX::kFemale;
+		const bool  traits = base && base->UsesTemplate() && base->actorData.templateUseFlags.all(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits);
+		SKSE::log::info("voice look: {:08X} \"{}\" {} base {:08X}{}, voice type {:08X} ({}){}", a_actor->GetFormID(), name ? name : "?", female ? "female" : "male",
+			base ? base->GetFormID() : 0, traits ? " (traits from a template)" : "", voice ? voice->GetFormID() : 0,
+			!voice ? "none" : voice->GetFormID() == g_silent ? "Skylands silent: Skyrim's lines are gone" : "a Skyrim voice: Skyrim's lines can still play",
+			a_speaker >= 0 ? " - a Pandora bandit" : " - not a Pandora name");
 	}
 
 	// with g_lock held: the speaker of an actor by its name in game, -2 when it is not a Pandora bandit (calls nothing that locks)
@@ -200,6 +225,7 @@ namespace voices
 		RE::FormID  sound = 0;
 		Line        used = a_line;
 		std::string speaker;
+		int         looked = -3;  // the speaker found on the first look at this actor (-3: not the first look)
 		{
 			const std::lock_guard guard(g_lock);
 			if (g_state.size() > 3000) {
@@ -208,7 +234,15 @@ namespace voices
 			auto& st = g_state[a_actor->GetFormID()];
 			if (st.speaker == -1) {
 				st.speaker = SpeakerOfLocked(a_actor);
+				looked = st.speaker;
 			}
+		}
+		if (looked != -3) {
+			Diagnose(a_actor, looked);  // outside the lock
+		}
+		{
+			const std::lock_guard guard(g_lock);
+			auto& st = g_state[a_actor->GetFormID()];
 			if (st.speaker < 0 || st.speaker >= static_cast<int>(g_speakers.size())) {
 				return false;
 			}

@@ -201,7 +201,12 @@ def build_full(root: Path) -> Path:
     npcs = [record("NPC_", 0x7000, [sub("EDID", z("EncBandit02TemplateMelee")), sub("FULL", sid(3)), sub("SHRT", sid(3)),
                                     sub("ACBS", b"\0" * 24), sub("SPCT", struct.pack("<I", 1)), sub("SPLO", struct.pack("<I", 0x5001))]),
             record("NPC_", 0x7001, [sub("EDID", z("EncBandit02Melee1HNordM")), sub("ACBS", b"\0" * 24)]),
-            record("NPC_", 0x7002, [sub("EDID", z("EncBandit03Boss1HNordM")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24), sub("VTCK", struct.pack("<I", 0x13AD2))])]
+            record("NPC_", 0x7002, [sub("EDID", z("EncBandit03Boss1HNordM")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24), sub("VTCK", struct.pack("<I", 0x13AD2))]),
+            # a female bandit that takes its traits (and so its voice) from a template, and one with no voice of its own (the race's default)
+            record("NPC_", 0x7003, [sub("EDID", z("EncBandit02Melee1HNordF")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 18 + struct.pack("<H", 1) + b"\0" * 4),
+                                    sub("VTCK", struct.pack("<I", 0x13AD2)), sub("TPLT", struct.pack("<I", 0x7004))]),
+            record("NPC_", 0x7004, [sub("EDID", z("BanditVoiceTemplateF")), sub("ACBS", b"\0" * 24), sub("VTCK", struct.pack("<I", 0x13AD3))]),
+            record("NPC_", 0x7005, [sub("EDID", z("EncBandit03Missile1HNordF")), sub("FULL", sid(3)), sub("ACBS", b"\0" * 24)])]
     extra.append(group("NPC_", npcs))
     lv = struct.pack("<HHIHH", 1, 0, 0x1234, 1, 0)
     def sndr(form_id, edid):

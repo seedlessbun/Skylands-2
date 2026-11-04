@@ -78,6 +78,17 @@ VoicePainGap=4
 VoiceTauntMin=10
 VoiceTauntMax=20
 VoiceRange=4000
+; Skylands drops lying on the ground (guns, shields, relics) go away once you are this many units from them (0 = never; about 4000 units is a
+; cell's width). Commoner items go sooner. What you dropped yourself stays.
+Despawn=1
+DespawnCommon=3000
+DespawnUncommon=4500
+DespawnRare=7000
+DespawnEpic=10000
+DespawnLegendary=16000
+DespawnEtech=16000
+; rarity beams shown at once; past this the lowest rarity loses its beam first
+BeamCap=24
 """
 
 

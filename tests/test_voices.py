@@ -8,7 +8,7 @@ sys.path.insert(0, str(HERE))
 
 import fake_wwise as fw  # noqa: E402
 
-from skylands_setup import voices  # noqa: E402
+from skylands_setup import skse, voices  # noqa: E402
 from skylands_setup.bl2 import wwise  # noqa: E402
 from skylands_setup.sheet_data import ENEMIES  # noqa: E402
 
@@ -62,9 +62,34 @@ def test_the_plugin_reads_the_table_and_speaks_on_combat_hits_deaths_and_taunts(
                  "VoiceGap", "VoiceTauntMin", "kDeathFire", "kGloat", "SpeakerOfLocked"):
         assert text in voices_h, text
     assert "voices::Load();" in main and "voices::Start(holder);" in main and "voices::Config(" in main and "voices::g_elementOf" in main
-    assert "kVersion = 384" in main and "{ 1, 22, 0, 0 }" in main
+    assert "kVersion = 385" in main and "{ 1, 23, 0, 0 }" in main
     assert voices.TABLE in (root / "voices.h").read_text(encoding="utf-8")  # the installer and the plugin agree on the file name
     order = list(voices.GROUPS)
     header = (root / "voices.h").read_text(encoding="utf-8")
     assert all(f'"{g}"' in header for g in order)
     assert header.index('"aggro", "taunt", "pain", "crit", "death", "death_fire", "death_shock", "gloat"') > 0 and order == ["aggro", "taunt", "pain", "crit", "death", "death_fire", "death_shock", "gloat"]
+
+
+def test_despawn_by_distance_and_rarity_and_the_beam_cap():
+    root = HERE.parent / "native" / "skse" / "src"
+    main = (root / "main.cpp").read_text(encoding="utf-8")
+    despawn = (root / "despawn.h").read_text(encoding="utf-8")
+    shield = (root / "shield.h").read_text(encoding="utf-8")
+    # 1.23.0: loose Skylands items go by distance, commoner ones sooner; the player's own drops stay; the marks survive a save in the co-save
+    for text in ("ForEachReference", "SkylandsRarity_", "DespawnCommon", "DespawnLegendary", "oldContainer == 0x14", "0x4E505344", "SetDelete(true)", "BeamCap"):
+        assert text in despawn, text
+    assert "g_extraLoad(a_intfc, type, version)" in shield and "g_extraSave(a_intfc)" in shield and "g_extraRevert()" in shield
+    assert '#include "despawn.h"' in main and "despawn::Start(holder);" in main and "despawn::g_onRemoved = &DropBeamOf;" in main and "despawn::Config(" in main
+    # the beam cap: rarity read before the beam lock is taken (RarityOf takes despawn's own lock), the lowest rarity loses its beam
+    track = main.split("bool TrackBeam(")[1].split("\n\t}\n")[0]
+    assert track.index("despawn::RarityOf") < track.index("std::lock_guard guard(g_beamLock)") and "it->rarity < lowest->rarity" in track
+    ini = skse.default_ini()
+    for key in ("Despawn=1", "DespawnCommon=3000", "DespawnLegendary=16000", "BeamCap=24"):
+        assert key in ini, key
+
+
+def test_the_voice_diagnostics_name_each_bandits_voice_type():
+    voices_h = (HERE.parent / "native" / "skse" / "src" / "voices.h").read_text(encoding="utf-8")
+    assert "voice look:" in voices_h and "templateUseFlags" in voices_h and 'line.rfind("silent ", 0) == 0' in voices_h
+    say = voices_h.split("inline bool Say(")[1]
+    assert say.index("Diagnose(a_actor, looked);") < say.index("PlayAt(")

@@ -15,10 +15,11 @@
 #include "shieldhud.h"
 #include "shielditems.h"
 #include "voices.h"
+#include "despawn.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 384;  // 1.22.0
+	constexpr std::int32_t kVersion = 385;  // 1.23.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -141,7 +142,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -2304,6 +2305,7 @@ namespace
 	struct BeamEntry
 	{
 		RE::ObjectRefHandle gun, beam, light;
+		int                 rarity = 0;  // despawn::RarityOf the gun's base: the beam cap takes the lowest first
 	};
 	std::mutex             g_beamLock;
 	std::vector<BeamEntry> g_beams;
@@ -2357,23 +2359,92 @@ namespace
 		if (!a_gun) {
 			return false;
 		}
-		const std::lock_guard guard(g_beamLock);
-		const BeamEntry       entry{ a_gun->GetHandle(), a_beam ? a_beam->GetHandle() : RE::ObjectRefHandle{}, a_light ? a_light->GetHandle() : RE::ObjectRefHandle{} };
-		for (auto& e : g_beams) {
-			if (e.gun == entry.gun) {
-				e = entry;
-				return true;
+		const int       rarity = despawn::RarityOf(a_gun->GetBaseObject());  // takes despawn's lock: before g_beamLock, never inside it
+		const BeamEntry entry{ a_gun->GetHandle(), a_beam ? a_beam->GetHandle() : RE::ObjectRefHandle{}, a_light ? a_light->GetHandle() : RE::ObjectRefHandle{}, rarity };
+		RE::ObjectRefHandle hide;  // the beam that loses its place to the cap
+		RE::FormID          hiddenGun = 0;
+		int                 hiddenRarity = 0;
+		std::size_t         count = 0;
+		{
+			const std::lock_guard guard(g_beamLock);
+			bool                  known = false;
+			for (auto& e : g_beams) {
+				if (e.gun == entry.gun) {
+					e = entry;
+					known = true;
+					break;
+				}
+			}
+			if (!known) {
+				const auto cap = static_cast<std::size_t>(std::max(1, despawn::g_beamCap));
+				if (g_beams.size() >= cap) {
+					// the lowest rarity goes first, the oldest of that rarity (the list is in the order the beams came)
+					auto lowest = g_beams.begin();
+					for (auto it = g_beams.begin(); it != g_beams.end(); ++it) {
+						if (it->rarity < lowest->rarity) {
+							lowest = it;
+						}
+					}
+					if (lowest->rarity <= rarity) {
+						hide = lowest->beam;
+						hiddenGun = lowest->gun.get() ? lowest->gun.get()->GetFormID() : 0;
+						hiddenRarity = lowest->rarity;
+						g_beams.erase(lowest);
+						g_beams.push_back(entry);
+					} else {
+						hide = entry.beam;  // the new gun is rarer than none of them: it goes without a beam
+						hiddenGun = a_gun->GetFormID();
+						hiddenRarity = rarity;
+					}
+				} else {
+					g_beams.push_back(entry);
+				}
+			}
+			count = g_beams.size();
+		}
+		if (hide) {
+			RunOnGameThread([hide]() {
+				if (const auto ref = hide.get()) {
+					ref->Disable();
+				}
+			});
+			static std::atomic_int capped{ 0 };
+			if (capped.fetch_add(1) < 20) {
+				SKSE::log::info("beam: {} beams is the cap; the beam of {:08X} ({}) is hidden", despawn::g_beamCap, hiddenGun, despawn::kRarityNames[std::clamp(hiddenRarity, 0, 6)]);
 			}
 		}
-		if (g_beams.size() >= 96) {
-			g_beams.erase(g_beams.begin());
-		}
-		g_beams.push_back(entry);
 		static std::atomic_int told{ 0 };
 		if (told.fetch_add(1) < 6) {
-			SKSE::log::info("beam: following gun {:08X} ({} tracked)", a_gun->GetFormID(), g_beams.size());
+			SKSE::log::info("beam: following gun {:08X} ({}, {} tracked)", a_gun->GetFormID(), despawn::kRarityNames[std::clamp(rarity, 0, 6)], count);
 		}
 		return true;
+	}
+
+	// despawn.h took a loose item away: its beam (and a light of an older build) go with it. Game thread.
+	void DropBeamOf(RE::TESObjectREFR* a_item)
+	{
+		if (!a_item) {
+			return;
+		}
+		const auto          handle = a_item->GetHandle();
+		std::vector<BeamEntry> gone;
+		{
+			const std::lock_guard guard(g_beamLock);
+			for (const auto& e : g_beams) {
+				if (e.gun == handle) {
+					gone.push_back(e);
+				}
+			}
+			std::erase_if(g_beams, [&](const BeamEntry& e) { return e.gun == handle; });
+		}
+		for (const auto& e : gone) {
+			for (const auto& h : { e.beam, e.light }) {
+				if (const auto ref = h.get()) {
+					ref->Disable();
+					ref->SetDelete(true);
+				}
+			}
+		}
 	}
 
 	bool UntrackBeam(RE::StaticFunctionTag*, RE::TESObjectREFR* a_gun)
@@ -2592,6 +2663,9 @@ namespace
 				};
 				voices::Load();
 				voices::Start(holder);
+				// loose drops go when the player is far from them (despawn.h); their beams with them
+				despawn::g_onRemoved = &DropBeamOf;
+				despawn::Start(holder);
 			}
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
@@ -2642,7 +2716,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 22, 0, 0 },
+	.Version = { 1, 23, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

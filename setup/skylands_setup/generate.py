@@ -1130,7 +1130,7 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
     """formids: the form ids of earlier builds (updated in place with any new ones); see esp.Plugin.
     gun_models: how the guns get their own meshes (models.METHODS); model_sources: readers of Borderlands 2 meshes by method."""
     data_dir = Path(skyrim_dir) / "Data"
-    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE", "PROJ", "EXPL", "SNDR", "KYWD", "CONT"})
+    m = Masters.load(data_dir, {"WEAP", "AMMO", "NPC_", "LVLI", "MGEF", "ENCH", "EQUP", "SHOU", "WOOP", "SPEL", "LIGH", "RACE", "PROJ", "EXPL", "SNDR", "KYWD", "CONT", "LVLN"})
     for key in [k for k in (formids or {}) if k.startswith("STAT:SkylandsGunView_")]:
         del formids[key]  # left by builds that kept these in Skylands.esp, which made it too big to stay light
     p = esp.Plugin(PLUGIN, MASTERS, ids=formids)

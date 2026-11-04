@@ -145,25 +145,88 @@ def build(view: esp.Plugin, m, out_data: Path, lines: dict[tuple[str, str], list
         view.override(rec)
         ids[(speaker, group)] = rec.form_id
     log(f"voices: {len(ids)} sound descriptors (copied from {template.edid}, files like {prefix}FX\\Skylands\\VO\\...)")
-    # Skyrim's own lines: the renamed bandits get a voice type that no dialogue uses
+    # Skyrim's own lines: the renamed bandits get a voice type that no dialogue uses. A record with no voice of its own speaks with its race's default voice
+    # (it gets the silent one too); a record that takes its traits from a template (ACBS template flag "traits") speaks with the template's voice, so the
+    # template is silenced as well (an NPC, or every NPC of a leveled list, followed a few steps)
     silent = view.new("VTYP", SILENT_VOICE)
     silent.add("DNAM", b"\x00")
-    silenced = without = 0
+    done: set[int] = set()
+    count = {"own": 0, "race": 0, "template": 0}
+
+    def silence(rec, why: str) -> None:
+        if rec.form_id in done:
+            return
+        done.add(rec.form_id)
+        subs = list(rec.subs if hasattr(rec, "subs") else rec.subrecords)
+        if any(sg == "VTCK" for sg, _d in subs):
+            subs = [(sg, esp.u32(silent.form_id) if sg == "VTCK" else d) for sg, d in subs]
+        else:  # after the fields that come before it in an NPC record
+            at = max((i + 1 for i, (sg, _d) in enumerate(subs) if sg in ("EDID", "VMAD", "OBND", "ACBS", "SNAM", "INAM")), default=len(subs))
+            subs.insert(at, ("VTCK", esp.u32(silent.form_id)))
+        view.override(esp.Rec(rec.type, rec.form_id, subs, rec.flags & esp.REC_COMPRESSED))
+        count[why] += 1
+
+    def traits_template(rec) -> int:
+        """The form id the record takes its traits (and voice) from, else 0."""
+        acbs = rec.get("ACBS") if hasattr(rec, "get") else rec.first("ACBS")
+        tplt = rec.get("TPLT") if hasattr(rec, "get") else rec.first("TPLT")
+        if not acbs or len(acbs) < 20 or not tplt:
+            return 0
+        flags = struct.unpack_from("<H", acbs, 18)[0]
+        return struct.unpack("<I", tplt[:4])[0] if flags & 1 else 0
+
+    def follow(fid: int, depth: int, seen: set[int]) -> list:
+        """The NPC records whose voice a template id stands for."""
+        if not fid or depth > 4 or fid in seen:
+            return []
+        seen.add(fid)
+        npc = mine.get(fid) or m.by_type.get("NPC_", {}).get(fid)  # a renamed one as Skylands.esp has it (its name and ability kept)
+        if npc is not None:
+            inner = traits_template(npc)
+            return follow(inner, depth + 1, seen) if inner else [npc]
+        lvln = m.by_type.get("LVLN", {}).get(fid)
+        out = []
+        if lvln is not None:
+            for d in lvln.all("LVLO"):
+                if len(d) >= 8:
+                    out += follow(struct.unpack_from("<I", d, 4)[0], depth + 1, seen)
+        return out
+
+    for row_id in speakers:
+        if row_id not in renamed:
+            log(f"voices: sheet row {row_id} renamed no record (its Borderlands name was not read, or no NPC matched its editor id pattern): it has no voice")
+    mine = {o.form_id: o for recs in renamed.values() for o in recs}
+    looked = 0
     for row_id, recs in renamed.items():
         if row_id not in speakers:
             continue
         for o in recs:
-            if o.get("VTCK") is None:
-                without += 1  # takes its voice from a template: left alone (the log of the game shows whether it still speaks Skyrim's lines)
-                continue
-            q = esp.Rec(o.type, o.form_id, [(s, esp.u32(silent.form_id) if s == "VTCK" else d) for s, d in o.subs], o.flags)
-            view.override(q)
-            silenced += 1
-    log(f"voices: {silenced} bandit records silenced (voice type {SILENT_VOICE}); {without} take their voice from a template and keep it")
+            vtck = o.get("VTCK")
+            tid = traits_template(o)
+            if looked < 60:
+                edid = (o.get("EDID") or b"").rstrip(b"\0").decode("cp1252", "replace")
+                own = f"its own voice {struct.unpack('<I', vtck[:4])[0]:08X}" if vtck else "no voice of its own (the race's default)"
+                log(f"voices: {edid} {o.form_id:08X}: {own}" + (f", traits from template {tid:08X}" if tid else ""))
+                looked += 1
+            if tid:
+                targets = follow(tid, 0, set())
+                if looked <= 60:
+                    log(f"voices:   template {tid:08X} -> {len(targets)} record(s) silenced with it")
+                for t in targets:
+                    silence(t, "template")
+                silence(o, "template")  # its own voice does not count, but a mod may turn the flag off
+            elif vtck is None:
+                silence(o, "race")
+            else:
+                silence(o, "own")
+    silenced = sum(count.values())
+    log(f"voices: {silenced} records silenced (voice type {SILENT_VOICE}): {count['own']} with their own voice, {count['race']} that spoke with their race's voice, "
+        f"{count['template']} through a template")
     # the plugin's table: one speaker per line (its sound descriptors by group, ids without the file), one Pandora name per line (its speakers)
     order = list(GROUPS)
     table = ["# Skylands voices (written by the installer; read by SkylandsNative.dll at data load). Ids are SkylandsGunModels.esp's, without the file.",
-             "# speaker <name> " + " ".join(order)]
+             "# speaker <name> " + " ".join(order),
+             f"silent {silent.form_id & 0xFFFFFF:06X}"]
     used = sorted({s for (s, _g) in ids})
     for s in used:
         table.append(f"speaker {s} " + " ".join(f"{ids.get((s, g), 0) & 0xFFFFFF:06X}" for g in order))
