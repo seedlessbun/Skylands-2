@@ -19,7 +19,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 387;  // 1.24.1
+	constexpr std::int32_t kVersion = 388;  // 1.24.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -2101,6 +2101,70 @@ namespace
 
 	void TickGun();
 
+	// 1.24.2: the 0.48.1 crash (log 4afc1b57) was inside the game's Scaleform code while the plugin drew its HUD ("first chance exception C0000005 at
+	// SkyrimSE.exe+11A615A (reading address 37); stage tick: hud (shields: shield display: enemy)"). Both displays wrote into the HUD movie from an ordinary
+	// task; they now run as UI tasks (SKSE's place for work on menus), one waiting at a time, and each frame runs inside a guard: a fault in the HUD
+	// switches that display off for the session (logged) instead of taking the game down.
+	using GuardedFn = void (*)();
+	int Guarded(GuardedFn a_fn)  // no C++ objects here: SEH needs a plain function
+	{
+		__try {
+			a_fn();
+			return 0;
+		} __except (EXCEPTION_EXECUTE_HANDLER) {
+			return 1;
+		}
+	}
+
+	std::atomic_bool g_hudQueued{ false }, g_shieldHudQueued{ false }, g_hudFault{ false };
+
+	void HudFrameNow() { HudFrame(Clock::now()); }
+	void ShieldHudNow() { shieldhud::Frame(); }
+
+	void QueueHud()
+	{
+		if (g_hudFault.load() || g_hudQueued.exchange(true)) {
+			return;
+		}
+		const auto task = SKSE::GetTaskInterface();
+		if (!task) {
+			g_hudQueued = false;
+			return;
+		}
+		task->AddUITask([]() {
+			g_stage = "ui: ammo hud";
+			if (Guarded(&HudFrameNow) != 0) {
+				g_hudFault = true;
+				g_hudLive = false;  // the plain ammo messages come back
+				SKSE::log::critical("hud: a fault inside the game's HUD movie while the ammo display was drawn; the display is off for this session (the plain messages stay)");
+			}
+			g_stage = "ui: ammo hud done";
+			g_hudQueued = false;
+		});
+	}
+
+	void QueueShieldHud()
+	{
+		if (!shieldhud::g_on || g_shieldHudQueued.exchange(true)) {
+			return;
+		}
+		const auto task = SKSE::GetTaskInterface();
+		if (!task) {
+			g_shieldHudQueued = false;
+			return;
+		}
+		task->AddUITask([]() {
+			g_stage = "ui: shield hud";
+			if (Guarded(&ShieldHudNow) != 0) {
+				shieldhud::g_on = false;
+				shield::g_displayLive = false;
+				SKSE::log::critical("shield hud: a fault inside the game's HUD movie while the shield bars were drawn (last step: {}); the bars are off for this session", shield::g_stage.load());
+			}
+			g_stage = "ui: shield hud done";
+			g_shieldHudQueued = false;
+		});
+	}
+
 	void Tick()
 	{
 		g_stage = "tick: gun";
@@ -2108,7 +2172,7 @@ namespace
 		g_stage = "tick: effects";
 		FxFrame(RE::PlayerCharacter::GetSingleton(), Clock::now());
 		g_stage = "tick: hud";
-		HudFrame(Clock::now());
+		QueueHud();
 		g_stage = "tick: done";
 	}
 
@@ -2633,7 +2697,7 @@ namespace
 			ReadyHook::Install();
 			StartPump();
 			shield::g_afterUpdate = []() {
-				shieldhud::Frame();
+				QueueShieldHud();  // a UI task (see QueueHud)
 				shieldaura::Frame();
 			};
 			shielditems::Catalog();
@@ -2801,7 +2865,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 24, 1, 0 },
+	.Version = { 1, 24, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

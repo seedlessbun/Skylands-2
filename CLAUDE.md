@@ -697,6 +697,12 @@ Other commands:
   death lines and lines of dead actors no longer `SetObjectToFollow` the body's 3D (a suspected use-after-free when the ragdoll swaps the 3D; UNPROVEN); breadcrumbs "voices: hit event / death event / play / played".
   (3) `InRange` no longer calls `IsInterior` on the stored cell (outside, distance only). READ FIRST next time: "first chance exception" lines. If the user has a crash logger (Crash Logger SSE AE / Trainwreck), its
   `crash-*.log` names the call stack.
+- 0.48.1 in game (user, SkylandsNative.log 4afc1b57 "SkylandsNative 387"): crash on firing at an enemy, CAUGHT: "first chance exception C0000005 at SkyrimSE.exe+11A615A (reading address 37); the plugin's last stage: tick: hud (shields:
+  shield display: enemy); on the stack: SkyrimSE.exe+1193B21, +D1462E, +CFD4E4, +D9D736 ..." (all game code, the Scaleform/HUD region) and then "CRASH: ..." (our unhandled filter now runs; the filter found at data load was
+  SkyrimSE.exe+65F900). Reading: the crash is inside the HUD movie while the plugin's HUD code (ammo display `HudFrame`, called from the game-thread `Tick` task; the shield bars `shieldhud::Frame`, called from `shield::Update`) wrote into it from
+  ordinary `AddTask` tasks. 0.48.2 (TestBuild-158, plugin 1.24.2 = "SkylandsNative 388"): both displays run as `AddUITask` tasks (`QueueHud`, `QueueShieldHud`, one waiting at a time) inside `Guarded` (SEH `__try/__except`): a fault
+  turns that display off for the session ("hud: a fault inside the game's HUD movie ..." / "shield hud: a fault ...") instead of crashing. UNCONFIRMED in game: that the UI task removes the crash (if a "fault" line shows up, the display code itself
+  touches something bad, e.g. the enemy bar's clips after a death); that a recovered fault leaves the game usable.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

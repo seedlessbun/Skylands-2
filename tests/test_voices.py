@@ -62,7 +62,7 @@ def test_the_plugin_reads_the_table_and_speaks_on_combat_hits_deaths_and_taunts(
                  "VoiceGap", "VoiceTauntMin", "kDeathFire", "kGloat", "SpeakerOfLocked"):
         assert text in voices_h, text
     assert "voices::Load();" in main and "voices::Start(holder);" in main and "voices::Config(" in main and "voices::g_elementOf" in main
-    assert "kVersion = 387" in main and "{ 1, 24, 1, 0 }" in main
+    assert "kVersion = 388" in main and "{ 1, 24, 2, 0 }" in main
     assert voices.TABLE in (root / "voices.h").read_text(encoding="utf-8")  # the installer and the plugin agree on the file name
     order = list(voices.GROUPS)
     header = (root / "voices.h").read_text(encoding="utf-8")
@@ -129,3 +129,14 @@ def test_respawn_range_check_never_asks_an_unloaded_cell_if_it_is_inside():
     src = inspect.getsource(scripts)
     in_range = src.split('"InRange",')[1].split("remove = Function(")[0]
     assert in_range.count('"IsInterior"') == 1 and '("id", "IsInterior"), ("id", "cell")' in in_range  # only the player's own (loaded) cell
+
+
+def test_both_hud_displays_draw_from_ui_tasks_inside_a_guard():
+    main = (HERE.parent / "native" / "skse" / "src" / "main.cpp").read_text(encoding="utf-8")
+    # 0.48.1 log: the crash was inside Scaleform while the plugin drew its HUD from an ordinary task
+    tick = main.split("\tvoid Tick()")[1].split("\n\t}\n")[0]
+    assert "QueueHud();" in tick and "HudFrame(" not in tick
+    assert main.count("task->AddUITask(") == 2 and "Guarded(&HudFrameNow)" in main and "Guarded(&ShieldHudNow)" in main
+    assert "QueueShieldHud();" in main and "shieldhud::Frame();" not in main.split("shield::g_afterUpdate = []() {")[1].split("};")[0]
+    guarded = main.split("int Guarded(GuardedFn a_fn)")[1].split("\n\t}\n")[0]
+    assert "__try" in guarded and "__except (EXCEPTION_EXECUTE_HANDLER)" in guarded
