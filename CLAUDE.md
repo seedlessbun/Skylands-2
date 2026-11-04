@@ -668,6 +668,19 @@ Other commands:
   `Data\SKSE\Plugins\SkylandsVoices.txt` (NOT the ini: merge_ini would keep stale ids)); `native/skse/src/voices.h` (table read at data load with `TESDataHandler::LookupFormID(local, "SkylandsGunModels.esp")`, speaker by `GetName()` exact or
   " <name>" suffix, Combat/Hit/Death sinks, 1 s taunt pump, `PlayAt` with `SetObjectToFollow`; ini Voices/VoiceGap/VoicePainGap/VoiceTauntMin/VoiceTauntMax/VoiceRange). UNCONFIRMED in game: all of it (that the silent voice type silences them, the
   hit event's `source` for staff bullets (fire/shock deaths), sound volume/category of the copied template, that names match after the game localises them).
+- 0.46.0 in game (user): the voices work; one or two FEMALE bandits still spoke Skyrim lines; many drops on the ground cost performance; the beam LIGHTS never appeared ("light FAILED" in every
+  verbose line). 0.47.0 (TestBuild-155, plugin 1.23.0 = "SkylandsNative 385"), the user's choices: despawn by DISTANCE only, commoner sooner: `native/skse/src/despawn.h` (every 3 s on the game thread
+  `TES::ForEachReference` over run-time (FF) references whose base has a `SkylandsRarity_` keyword; gone (Disable + SetDelete, and its beam via `g_onRemoved` = main.cpp `DropBeamOf`) when the player is
+  farther than `DespawnCommon` 3000 / `Uncommon` 4500 / `Rare` 7000 / `Epic` 10000 / `Legendary` 16000 / `Etech` 16000 units, or in another space; an unloaded item the player went far from is marked and goes
+  when next loaded (a mark only counts at the same place and rarity: run-time ids are reused); the player's own drops (container event 0x14 -> 0) never go; co-save record 'DSPN' through the new
+  `shield::g_extraSave/Load/Revert` hooks). Beam cap `BeamCap` 24 in `TrackBeam` (rarity read BEFORE `g_beamLock`; past the cap the lowest rarity, oldest first, has its beam ref disabled; a new gun
+  rarer than none keeps none). The quest's `Place` no longer places a light (pex-only, properties unchanged; Report says "Skylands beam ok: name"); Champollion could not be built in that session
+  (sandbox refused the clone): the decompile test was skipped. Voices: the installer now silences records with NO VTCK (they spoke with the RACE's default voice: likeliest cause of the female
+  lines) by adding one, and for records whose ACBS template flags have "traits" (bit 0 at offset 18) also the TPLT template (NPC, or a leveled list's NPCs, 4 steps; a renamed record is taken as
+  Skylands.esp has it); `LVLN` is now loaded by `Masters`; setup log "voices: <edid> <id>: its own voice / no voice of its own ..., traits from template ..", "sheet row .. renamed no record"; table line
+  `silent <id>`; the plugin logs the first 40 Pandora/"...andit" actors it looks at: "voice look: .. female/male base .. voice type .. (Skylands silent / a Skyrim voice)". UNCONFIRMED in game: all of it
+  (that `ForEachReference` covers the loaded cells, that Disable+SetDelete on run-time refs is safe, the co-save, the voices fix). The boss row ("Badass Nomad") was missing from the 0.46.0 table: read the
+  "sheet row boss" line in the next setup log.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
