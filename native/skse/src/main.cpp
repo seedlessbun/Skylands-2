@@ -2620,6 +2620,8 @@ namespace
 		return true;
 	}
 
+	void ClaimCrashFilter(const char* a_when);  // below, next to the crash handlers
+
 	void OnMessage(SKSE::MessagingInterface::Message* a_message)
 	{
 		if (a_message->type == SKSE::MessagingInterface::kPostLoadGame || a_message->type == SKSE::MessagingInterface::kNewGame) {
