@@ -81,6 +81,9 @@ namespace voices
 	inline Clock::duration Seconds(float a_s) { return std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(a_s)); }
 
 	// Game thread, at data load: the table the installer wrote.
+	inline RE::FormID      g_silent = 0;  // the silent voice type the installer gives the renamed bandits ("silent" line of the table)
+	inline std::atomic_int g_looked{ 0 };
+
 	inline void Load()
 	{
 		std::ifstream f("Data/SKSE/Plugins/SkylandsVoices.txt");
@@ -160,8 +163,6 @@ namespace voices
 		SKSE::log::info("voices: {} speakers, {} lines resolved ({} not found in SkylandsGunModels.esp), names: {}", nSpeakers, resolved, missing, listed);
 	}
 
-	inline RE::FormID      g_silent = 0;  // the silent voice type the installer gives the renamed bandits ("silent" line of the table)
-	inline std::atomic_int g_looked{ 0 };
 
 	// 1.23.0: some female bandits still spoke Skyrim's lines. The first people looked at are logged with their voice type, so the log says whether a bandit kept a
 	// Skyrim voice (its record takes its traits from a template the installer did not silence, or it is not one of the renamed bandits at all).
