@@ -688,6 +688,15 @@ Other commands:
   takes a Pandora name from template .. : silenced", count `named`); for the boss row it logs the game's bandit-boss record names. (2) plugin `Diagnose` (called on the first look at an actor, now also from the 1 s `Taunts`
   pass over every loaded actor, before combat) sets `base->voiceType` to the silent VTYP for a Pandora bandit that still has another ("still had a Skyrim voice type: given the silent one"). (3) `voices.GAIN` 1.35: the WAV
   samples copied to `Data\Sound\FX\Skylands\VO` are scaled (`louder`, 16-bit PCM, clipped). UNCONFIRMED in game: all of it (that a run-time voiceType change on a leveled actor's base sticks, how loud 1.35 sounds).
+- 0.48.0 in game (user, SkylandsNative.log 80d6c7d3 "SkylandsNative 386", Papyrus.0.log 699a8092): only Borderlands voices heard (every "voice look:" line says "Skylands silent", the installer fix worked; no
+  "still had a Skyrim voice type" line). The game CRASHED on a player shot while aiming during a fight (log ends at "button down ... 'Right Attack/Block'", aim started 2 s before, a bandit had died 3 s before with a
+  following death line); NO "CRASH:" line (the unhandled filter set at plugin load was not called: something else handled it first). Same picture as the 0.23.3 crash. Papyrus: 97 x "Unable to call IsInterior" on
+  `<nullptr form>` cells in `SkylandsHunterQuest.InRange` (Respawn from the Hunter power: stored roster cells not loaded). 0.48.1 (TestBuild-157, plugin 1.24.1 = "SkylandsNative 387"): (1) `FirstChance` = a VECTORED
+  exception handler (added first at plugin load) logs the first 4 fatal-looking exceptions ("first chance exception <code> at <module+offset> (reading address ..); the plugin's last stage ..; on the stack: <module+offset
+  of up to 14 code addresses found on the stack>") and passes them on; `ClaimCrashFilter` sets the unhandled filter again after data load and every game load (logs the filter it found). (2) voices: `PlayAt(.., a_follow)`:
+  death lines and lines of dead actors no longer `SetObjectToFollow` the body's 3D (a suspected use-after-free when the ragdoll swaps the 3D; UNPROVEN); breadcrumbs "voices: hit event / death event / play / played".
+  (3) `InRange` no longer calls `IsInterior` on the stored cell (outside, distance only). READ FIRST next time: "first chance exception" lines. If the user has a crash logger (Crash Logger SSE AE / Trainwreck), its
+  `crash-*.log` names the call stack.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
