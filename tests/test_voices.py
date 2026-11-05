@@ -62,7 +62,7 @@ def test_the_plugin_reads_the_table_and_speaks_on_combat_hits_deaths_and_taunts(
                  "VoiceGap", "VoiceTauntMin", "kDeathFire", "kGloat", "SpeakerOfLocked"):
         assert text in voices_h, text
     assert "voices::Load();" in main and "voices::Start(holder);" in main and "voices::Config(" in main and "voices::g_elementOf" in main
-    assert "kVersion = 389" in main and "{ 1, 25, 0, 0 }" in main
+    assert "kVersion = 390" in main and "{ 1, 26, 0, 0 }" in main
     assert voices.TABLE in (root / "voices.h").read_text(encoding="utf-8")  # the installer and the plugin agree on the file name
     order = list(voices.GROUPS)
     header = (root / "voices.h").read_text(encoding="utf-8")

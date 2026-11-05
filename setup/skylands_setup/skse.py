@@ -284,6 +284,7 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0, relic_slot: int = 
 def badass_ini() -> str:
     """The Badass block (docs/badass-roadmap.md 3.1, 3.2): numbers from sheets/badass_tiers.json."""
     from .sheet_data import BADASS_TIERS as T
+    from .sheet_data import ENEMY_DROPS as D
 
     b, s, u = T["badass"], T["super"], T["ultimate"]
     def num(v: float) -> str:
@@ -308,6 +309,15 @@ def badass_ini() -> str:
         *(f"BadassMelee{i}={num(r.melee_damage_mult)}" for i, r in ((1, b), (2, s), (3, u))),
         *(f"BadassSpeed{i}={num(r.speed_mult)}" for i, r in ((1, b), (2, s), (3, u))),
         f"BadassGun={num(b.gun_damage_mult)}",
+        "; the tier's name before the enemy's own (\"Badass Forsworn\") and a bigger body (BadassSize1..3 = scale)",
+        "BadassNames=1",
+        "BadassSize=1",
+        *(f"BadassSize{i}={num(r.size_mult)}" for i, r in ((1, b), (2, s), (3, u))),
+        "; guaranteed drops when a Badass dies (BL2: 1 / 2 / 3 items, at least uncommon / rare / epic, rarities shifted up by the tier); what each item is, by weight",
+        "BadassDrops=1",
+        f"BadassDropGun={num(D['gun_weight'].value)}",
+        f"BadassDropShield={num(D['shield_weight'].value)}",
+        f"BadassDropRelic={num(D['relic_weight'].value)}",
     ]) + "\n"
 
 

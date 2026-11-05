@@ -36,5 +36,19 @@ def test_the_plugin_rolls_tiers_and_applies_the_stats():
     assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start();" in main and "data.power = badass::GunPower(a_shooter);" in main
     assert "g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID())" in shield and "shield::g_extraMaxOf = &HealthBonusOf;" in h
     assert "shield::g_extraSave.push_back(&Save);" in h and "shield::g_extraSave.push_back(&Save);" in (SRC / "despawn.h").read_text(encoding="utf-8")
-    assert "kVersion = 389" in main and "{ 1, 25, 0, 0 }" in main
+    assert "kVersion = 390" in main and "{ 1, 26, 0, 0 }" in main
 
+
+
+def test_badasses_are_named_bigger_and_drop_their_guaranteed_items():
+    h = (SRC / "badass.h").read_text(encoding="utf-8")
+    ini = skse.default_ini().splitlines()
+    for line in ("BadassNames=1", "BadassSize=1", "BadassSize1=1.15", "BadassSize3=1.45", "BadassDrops=1", "BadassDropGun=44.44", "BadassDropShield=20", "BadassDropRelic=8.89"):
+        assert line in ini, line
+    # the name prefix once (the installer's "Badass ..." bandits keep theirs), the size, the drops 1 / 2 / 3 with BL2's floors
+    present = h.split("inline void Present(")[1].split("\n\t}\n")[0]
+    assert 'name.find("Badass") == std::string_view::npos' in present and "SetDisplayName(" in present and "SetScale(g_scale[t])" in present
+    assert "kFloors[4][3] = { { 0, 0, 0 }, { 2, 0, 0 }, { 3, 2, 0 }, { 4, 3, 2 } }" in h
+    pick = h.split("inline RE::TESBoundObject* PickDrop(")[1].split("\n\t}\n")[0]
+    assert "const int below = r - a_tier;" in pick and "shielditems::kWeight[below]" in pick  # "up n": rarity r takes the weight of r - n
+    assert "PlaceObjectAtMe(item, false)" in h and "std::chrono::milliseconds(1600)" in h

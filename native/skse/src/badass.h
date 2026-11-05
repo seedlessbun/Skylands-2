@@ -1,4 +1,4 @@
-// Badass enemies, stage 1 (1.25.0): tiers and stats only (docs/badass-roadmap.md sections 3.1, 3.2, 3.6). No names, no size, no drops yet.
+// Badass enemies (docs/badass-roadmap.md): stage 1 (1.25.0) tiers and stats; 1.26.0 adds the name prefix and size (stage 4, moved up) and the guaranteed drops (stage 2).
 //
 // Every living actor near the player that is hostile to the player (people and creatures; not children, followers, summons, essential or protected actors) is rolled ONCE, at
 // first sight, with the player's level at that moment: p = BadassPercent + BadassPerLevel x (level - 1), at most BadassMax percent (x BadassBossOdds for a boss or dragon).
@@ -13,6 +13,8 @@
 #pragma once
 
 #include "PCH.h"
+#include "despawn.h"
+#include "relic.h"
 #include "shield.h"
 #include "shielditems.h"
 
@@ -31,6 +33,12 @@ namespace badass
 	inline float g_gun[4] = { 1.0f, 1.14f, 1.14f, 1.14f };
 	inline float g_speed[4] = { 1.0f, 1.0f, 1.05f, 1.10f };
 	inline float g_reach = 6000.0f;
+	// 1.26.0: presentation (stage 4, moved up at the user's request) and the guaranteed drops (stage 2)
+	inline bool  g_names = true, g_size = true, g_drops = true;
+	inline float g_scale[4] = { 1.0f, 1.15f, 1.30f, 1.45f };
+	inline float g_dropWeight[3] = { 44.44f, 20.0f, 8.89f };  // gun, shield, relic (sheets/enemy_drops.json: BL2's enemy gear pool)
+	inline constexpr int kGateLevel[4] = { 0, 8, 15, 30 };    // the rarity gates of a tier's drops use at least this level
+	inline constexpr int kFloors[4][3] = { { 0, 0, 0 }, { 2, 0, 0 }, { 3, 2, 0 }, { 4, 3, 2 } };  // BL2's 1 / 2 / 3 guaranteed drops and their lowest rarities
 	inline constexpr const char* kTierNames[4] = { "none", "Badass", "Super Badass", "Ultimate Badass" };
 
 	struct Entry
@@ -180,6 +188,143 @@ namespace badass
 		return a_entry.health <= 0.0f || maxNow >= a_entry.maxBefore + 0.5f * a_entry.health - 0.5f;
 	}
 
+	// ---- presentation: the tier's name before the actor's own, and a bigger body (game thread) ----
+	inline void Present(RE::Actor* a_actor, int a_tier)
+	{
+		const int t = std::clamp(a_tier, 1, 3);
+		if (g_names) {
+			const char*            raw = a_actor->GetDisplayFullName();
+			const std::string_view name = raw ? raw : "";
+			if (!name.empty() && name.find("Badass") == std::string_view::npos) {  // the installer's renamed "Badass ..." bandits keep their name
+				const std::string full = fmt::format("{} {}", kTierNames[t], name);
+				a_actor->SetDisplayName(RE::BSFixedString(full.c_str()), true);
+				static std::atomic_int told{ 0 };
+				if (told.fetch_add(1) < 40) {
+					SKSE::log::info("badass: {:08X} is now called \"{}\"", a_actor->GetFormID(), full);
+				}
+			}
+		}
+		if (g_size && a_actor->GetScale() < g_scale[t] - 0.01f) {
+			const float before = a_actor->GetScale();
+			a_actor->SetScale(g_scale[t]);
+			static std::atomic_int told{ 0 };
+			if (told.fetch_add(1) < 40) {
+				SKSE::log::info("badass: {:08X} size {:.2f} -> {:.2f}", a_actor->GetFormID(), before, a_actor->GetScale());
+			}
+		}
+	}
+
+	// ---- guaranteed drops (stage 2): a Badass 1 item (at least uncommon), a Super 2 (rare, uncommon), an Ultimate 3 (epic, rare, uncommon) ----
+	inline std::vector<RE::FormID> g_guns[7];
+	inline bool                    g_gunsRead = false;
+
+	inline void ReadGuns()  // game thread, once: every Skylands gun by rarity
+	{
+		if (g_gunsRead) {
+			return;
+		}
+		g_gunsRead = true;
+		const auto handler = RE::TESDataHandler::GetSingleton();
+		if (!handler) {
+			return;
+		}
+		for (const auto weapon : handler->GetFormArray<RE::TESObjectWEAP>()) {
+			if (weapon && weapon->HasKeywordString("SkylandsGun")) {
+				if (const int r = despawn::RarityOf(weapon); r >= 1 && r <= 6) {
+					g_guns[r].push_back(weapon->GetFormID());
+				}
+			}
+		}
+		SKSE::log::info("badass: drop lists - guns by rarity {} {} {} {} {} {}, shields {} {} {} {} {} {}, relics {} {} {} {} {} {}", g_guns[1].size(), g_guns[2].size(), g_guns[3].size(), g_guns[4].size(),
+			g_guns[5].size(), g_guns[6].size(), shielditems::g_catalog[1].size(), shielditems::g_catalog[2].size(), shielditems::g_catalog[3].size(), shielditems::g_catalog[4].size(),
+			shielditems::g_catalog[5].size(), shielditems::g_catalog[6].size(), relic::g_catalog[1].size(), relic::g_catalog[2].size(), relic::g_catalog[3].size(), relic::g_catalog[4].size(),
+			relic::g_catalog[5].size(), relic::g_catalog[6].size());
+	}
+
+	inline const std::vector<RE::FormID>& ListOf(int a_type, int a_rarity)
+	{
+		return a_type == 0 ? g_guns[a_rarity] : a_type == 1 ? shielditems::g_catalog[a_rarity] : relic::g_catalog[a_rarity];
+	}
+
+	// one item: the type by BL2's enemy gear weights, the rarity by the guns' weights shifted up by the tier ("up n": rarity r takes the weight of r - n), at least a_floor,
+	// the level gates at a_level (if they leave nothing, the floor alone)
+	inline RE::TESBoundObject* PickDrop(std::uint64_t a_seed, int a_tier, int a_floor, int a_level, int& a_rarityOut, int& a_typeOut)
+	{
+		const float total = g_dropWeight[0] + g_dropWeight[1] + g_dropWeight[2];
+		float       roll = total > 0.0f ? static_cast<float>(shielditems::Mix(a_seed ^ 0x7779) % 100000ULL) / 100000.0f * total : 0.0f;
+		int         first = 0;
+		for (; first < 2 && roll >= g_dropWeight[first]; ++first) {
+			roll -= g_dropWeight[first];
+		}
+		for (int k = 0; k < 3; ++k) {
+			const int type = (first + k) % 3;
+			for (int gated = 1; gated >= 0; --gated) {
+				int weights[7]{}, sum = 0;
+				for (int r = std::max(1, a_floor); r <= 6; ++r) {
+					const int below = r - a_tier;
+					if (below < 1 || ListOf(type, r).empty() || (gated && a_level < shielditems::kLevelFor[r])) {
+						continue;
+					}
+					weights[r] = shielditems::kWeight[below];
+					sum += weights[r];
+				}
+				if (sum <= 0) {
+					continue;
+				}
+				int pick = static_cast<int>(shielditems::Mix(a_seed ^ 0x4242) % static_cast<std::uint64_t>(sum));
+				for (int r = 1; r <= 6; ++r) {
+					if (pick < weights[r]) {
+						const auto& list = ListOf(type, r);
+						a_rarityOut = r;
+						a_typeOut = type;
+						const auto form = RE::TESForm::LookupByID(list[shielditems::Mix(a_seed ^ 0x9999) % list.size()]);
+						return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
+					}
+					pick -= weights[r];
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	struct Pending
+	{
+		RE::FormID        id;
+		int               tier;
+		Clock::time_point due;
+	};
+	inline std::vector<Pending> g_pending;  // game thread only
+	inline std::atomic_uint64_t g_dropSerial{ 1 };
+
+	inline void Drop(const Pending& a_p, int a_playerLevel)
+	{
+		const auto body = RE::TESForm::LookupByID<RE::Actor>(a_p.id);
+		if (!body || !body->GetParentCell()) {
+			return;
+		}
+		ReadGuns();
+		const int   t = std::clamp(a_p.tier, 1, 3);
+		const int   level = std::max(a_playerLevel, kGateLevel[t]);
+		std::string said;
+		for (int i = 0; i < t; ++i) {
+			int        rarity = 0, type = 0;
+			const auto seed = shielditems::Mix(a_p.id ^ (g_dropSerial.fetch_add(1) * 0x9E3779B97F4A7C15ULL));
+			const auto item = PickDrop(seed, t, kFloors[t][i], level, rarity, type);
+			if (!item) {
+				said += (said.empty() ? "" : ", ") + std::string("nothing to pick");
+				continue;
+			}
+			const auto placed = body->PlaceObjectAtMe(item, false);
+			const char* name = item->GetName();
+			said += fmt::format("{}\"{}\" ({} {}){}", said.empty() ? "" : ", ", name ? name : "?", despawn::kRarityNames[std::clamp(rarity, 0, 6)], type == 0 ? "gun" : type == 1 ? "shield" : "relic",
+				placed ? "" : " NOT PLACED");
+		}
+		static std::atomic_int told{ 0 };
+		if (told.fetch_add(1) < 60) {
+			SKSE::log::info("badass: {:08X} ({}) dropped {}: {} (rarity gates at level {})", a_p.id, kTierNames[t], t, said, level);
+		}
+	}
+
 	// ---- the pass (game thread, every 500 ms) ----
 	inline void Scan()
 	{
@@ -199,6 +344,7 @@ namespace badass
 		std::vector<Seen>    fresh;  // not rolled yet
 		std::vector<Seen>    todo;   // rolled, bonuses to put on (or to check after a load)
 		std::vector<Seen>    dead;   // tiered and dead: bonuses off
+		std::vector<Seen>    shown;  // tiered and alive: name and size kept
 		int                  nearBy[4]{};
 		for (auto& handle : lists->highActorHandles) {
 			const auto ptr = handle.get();
@@ -241,6 +387,7 @@ namespace badass
 			if (!e.applied || e.check) {
 				todo.push_back({ actor, id, base });
 			}
+			shown.push_back({ actor, id, base });
 		}
 		for (const auto& s : dead) {
 			Entry e;
@@ -250,6 +397,20 @@ namespace badass
 				g_entries[s.id].applied = false;
 			}
 			Strip(s.actor, e, "died");
+			if (g_drops && e.tier > 0) {
+				g_pending.push_back({ s.id, e.tier, Clock::now() + std::chrono::milliseconds(1600) });  // after the shield and relic drops of the body (0.9 and 1.1 s)
+			}
+		}
+		for (auto it = g_pending.begin(); it != g_pending.end();) {
+			if (Clock::now() >= it->due) {
+				Drop(*it, level);
+				it = g_pending.erase(it);
+			} else {
+				++it;
+			}
+		}
+		for (const auto& s : shown) {
+			Present(s.actor, TierOf(s.id));
 		}
 		for (const auto& s : todo) {
 			Entry e;
@@ -297,6 +458,7 @@ namespace badass
 				++nearBy[0];
 				++nearBy[tier];
 				e = Apply(s.actor, e, boss ? "rolled, boss odds" : "rolled");
+				Present(s.actor, tier);
 			}
 			const std::lock_guard guard(g_lock);
 			if (g_entries.size() > 4000) {
@@ -434,6 +596,18 @@ namespace badass
 		};
 		if (k.empty()) {
 			g_on = v != 0.0f;
+		} else if (k == "Names") {
+			g_names = v != 0.0f;
+		} else if (k == "Size") {
+			g_size = v != 0.0f;
+		} else if (k == "Drops") {
+			g_drops = v != 0.0f;
+		} else if (k == "DropGun") {
+			g_dropWeight[0] = std::max(0.0f, v);
+		} else if (k == "DropShield") {
+			g_dropWeight[1] = std::max(0.0f, v);
+		} else if (k == "DropRelic") {
+			g_dropWeight[2] = std::max(0.0f, v);
 		} else if (k == "Percent") {
 			g_percent = std::clamp(v, 0.0f, 100.0f);
 		} else if (k == "PerLevel") {
@@ -464,6 +638,8 @@ namespace badass
 			g_melee[t2] = std::clamp(v, 0.1f, 20.0f);
 		} else if (const int t3 = tierOf("Speed")) {
 			g_speed[t3] = std::clamp(v, 0.5f, 3.0f);
+		} else if (const int t4 = tierOf("Size")) {
+			g_scale[t4] = std::clamp(v, 0.5f, 3.0f);
 		}
 		return true;
 	}
