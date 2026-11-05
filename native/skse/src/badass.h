@@ -51,6 +51,7 @@ namespace badass
 		float      melee = 0.0f;     // added to AttackDamageMult
 		float      speed = 0.0f;     // added to SpeedMult
 		float      maxBefore = 0.0f;  // maximum Health before the bonus
+		bool       tempHealth = false;  // the health bonus is a TEMPORARY modifier (a 0.49.0/0.50.0 save): taken off and given again as a permanent one
 	};
 
 	inline std::mutex                             g_lock;
@@ -122,11 +123,19 @@ namespace badass
 	}
 
 	// ---- the bonuses (game thread, no lock held) ----
-	inline void Mod(RE::Actor* a_actor, RE::ActorValue a_av, float a_value)
+	// 1.26.1: the HEALTH bonus is a PERMANENT modifier: the game's enemy health bar measures current health against the permanent maximum (base + permanent modifiers),
+	// so a temporary bonus left the bar full until the health fell below the old maximum (user report on 0.50.0). Damage and speed stay temporary.
+	inline void Mod(RE::Actor* a_actor, RE::ActorValue a_av, float a_value, RE::ACTOR_VALUE_MODIFIER a_mod = RE::ACTOR_VALUE_MODIFIER::kTemporary)
 	{
 		if (const auto ao = a_actor->AsActorValueOwner(); ao && a_value != 0.0f) {
-			ao->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kTemporary, a_av, a_value);
+			ao->ModActorValue(a_mod, a_av, a_value);
 		}
+	}
+
+	inline float Permanent(RE::Actor* a_actor)
+	{
+		const auto ao = a_actor->AsActorValueOwner();
+		return ao ? ao->GetPermanentActorValue(RE::ActorValue::kHealth) : 0.0f;
 	}
 
 	inline float Value(RE::Actor* a_actor, RE::ActorValue a_av)
@@ -148,7 +157,9 @@ namespace badass
 		a_entry.health = std::max(0.0f, (g_health[t] - 1.0f) * own);
 		a_entry.melee = g_melee[t] - 1.0f;
 		a_entry.speed = (g_speed[t] - 1.0f) * 100.0f;
-		Mod(a_actor, RE::ActorValue::kHealth, a_entry.health);
+		const float permBefore = Permanent(a_actor);
+		Mod(a_actor, RE::ActorValue::kHealth, a_entry.health, RE::ACTOR_VALUE_MODIFIER::kPermanent);
+		a_entry.tempHealth = false;
 		Mod(a_actor, RE::ActorValue::kAttackDamageMult, a_entry.melee);
 		Mod(a_actor, RE::ActorValue::kSpeedMult, a_entry.speed);
 		a_entry.applied = true;
@@ -156,10 +167,10 @@ namespace badass
 		a_entry.maxBefore = maxBefore;
 		if (g_given.fetch_add(1) < 80) {
 			const char* name = a_actor->GetName();
-			SKSE::log::info("badass: {:08X} \"{}\" (level {}, {}{}) is {} {} [{}]: health max {:.0f} -> {:.0f} (current {:.0f} -> {:.0f}; own {:.0f} x{:.2f}{}), melee damage x{:.2f} "
+			SKSE::log::info("badass: {:08X} \"{}\" (level {}, {}{}) is {} {} [{}]: health max {:.0f} -> {:.0f} (current {:.0f} -> {:.0f}; the bar's maximum {:.0f} -> {:.0f}; own {:.0f} x{:.2f}{}), melee damage x{:.2f} "
 			                "(AttackDamageMult {:.2f} -> {:.2f}), speed x{:.2f} (SpeedMult {:.0f} -> {:.0f}), plugin-launched gun bullets x{:.2f}",
 				a_actor->GetFormID(), name ? name : "?", a_actor->GetLevel(), shielditems::IsPerson(a_actor) ? "person" : "creature", IsDragon(a_actor) ? ", dragon" : shielditems::IsBoss(a_actor) ? ", boss" : "",
-				t == 3 ? "an" : "a", kTierNames[t], a_why, maxBefore, a_actor->GetActorValueMax(RE::ActorValue::kHealth), hpBefore, Value(a_actor, RE::ActorValue::kHealth), own, g_health[t],
+				t == 3 ? "an" : "a", kTierNames[t], a_why, maxBefore, a_actor->GetActorValueMax(RE::ActorValue::kHealth), hpBefore, Value(a_actor, RE::ActorValue::kHealth), permBefore, Permanent(a_actor), own, g_health[t],
 				shieldCap > 0.0f ? fmt::format(", its shield {:.0f} not counted", shieldCap) : std::string(), g_melee[t], dmgBefore, Value(a_actor, RE::ActorValue::kAttackDamageMult), g_speed[t],
 				speedBefore, Value(a_actor, RE::ActorValue::kSpeedMult), g_gun[t]);
 		}
@@ -171,7 +182,7 @@ namespace badass
 		if (!a_entry.applied) {
 			return;
 		}
-		Mod(a_actor, RE::ActorValue::kHealth, -a_entry.health);
+		Mod(a_actor, RE::ActorValue::kHealth, -a_entry.health, a_entry.tempHealth ? RE::ACTOR_VALUE_MODIFIER::kTemporary : RE::ACTOR_VALUE_MODIFIER::kPermanent);
 		Mod(a_actor, RE::ActorValue::kAttackDamageMult, -a_entry.melee);
 		Mod(a_actor, RE::ActorValue::kSpeedMult, -a_entry.speed);
 		static std::atomic_int told{ 0 };
@@ -418,7 +429,11 @@ namespace badass
 				const std::lock_guard guard(g_lock);
 				e = g_entries[s.id];
 			}
-			if (e.applied && e.check) {
+			if (e.applied && e.check && e.tempHealth && StillOn(s.actor, e)) {  // a temporary bonus from 0.49.0/0.50.0 is still on: given again as a permanent one
+				Strip(s.actor, e, "had a temporary health bonus");
+				e.applied = false;
+				e = Apply(s.actor, e, "health bonus made permanent");
+			} else if (e.applied && e.check) {
 				if (StillOn(s.actor, e)) {
 					e.check = false;
 					static std::atomic_int kept{ 0 };
@@ -482,7 +497,7 @@ namespace badass
 	inline void Save(SKSE::SerializationInterface* a_intfc)
 	{
 		const std::lock_guard guard(g_lock);
-		if (!a_intfc->OpenRecord(kRecord, 1)) {
+		if (!a_intfc->OpenRecord(kRecord, 2)) {
 			return;
 		}
 		a_intfc->WriteRecordData(static_cast<std::uint32_t>(g_entries.size()));
@@ -496,6 +511,7 @@ namespace badass
 			a_intfc->WriteRecordData(e.melee);
 			a_intfc->WriteRecordData(e.speed);
 			a_intfc->WriteRecordData(e.maxBefore);
+			a_intfc->WriteRecordData(static_cast<std::uint8_t>(e.tempHealth ? 1 : 0));
 			tiered += e.tier > 0 ? 1 : 0;
 		}
 		SKSE::log::info("badass: save - {} actors rolled, {} of them with a tier", g_entries.size(), tiered);
@@ -506,7 +522,7 @@ namespace badass
 		if (a_type != kRecord) {
 			return false;
 		}
-		if (a_version != 1) {
+		if (a_version != 1 && a_version != 2) {
 			return true;
 		}
 		const std::lock_guard guard(g_lock);
@@ -526,6 +542,11 @@ namespace badass
 			a_intfc->ReadRecordData(e.melee);
 			a_intfc->ReadRecordData(e.speed);
 			a_intfc->ReadRecordData(e.maxBefore);
+			std::uint8_t temp = 1;  // version 1 = 0.49.0/0.50.0: the health bonus was temporary
+			if (a_version >= 2) {
+				a_intfc->ReadRecordData(temp);
+			}
+			e.tempHealth = temp != 0;
 			if (!a_intfc->ResolveFormID(id, newId)) {
 				continue;
 			}

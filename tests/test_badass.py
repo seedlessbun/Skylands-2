@@ -36,7 +36,7 @@ def test_the_plugin_rolls_tiers_and_applies_the_stats():
     assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start();" in main and "data.power = badass::GunPower(a_shooter);" in main
     assert "g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID())" in shield and "shield::g_extraMaxOf = &HealthBonusOf;" in h
     assert "shield::g_extraSave.push_back(&Save);" in h and "shield::g_extraSave.push_back(&Save);" in (SRC / "despawn.h").read_text(encoding="utf-8")
-    assert "kVersion = 390" in main and "{ 1, 26, 0, 0 }" in main
+    assert "kVersion = 391" in main and "{ 1, 26, 1, 0 }" in main
 
 
 
@@ -52,3 +52,12 @@ def test_badasses_are_named_bigger_and_drop_their_guaranteed_items():
     pick = h.split("inline RE::TESBoundObject* PickDrop(")[1].split("\n\t}\n")[0]
     assert "const int below = r - a_tier;" in pick and "shielditems::kWeight[below]" in pick  # "up n": rarity r takes the weight of r - n
     assert "PlaceObjectAtMe(item, false)" in h and "std::chrono::milliseconds(1600)" in h
+
+
+def test_the_health_bonus_is_permanent_so_the_enemy_bar_shows_it():
+    h = (SRC / "badass.h").read_text(encoding="utf-8")
+    apply = h.split("inline Entry Apply(")[1].split("\n\t}\n")[0]
+    assert "Mod(a_actor, RE::ActorValue::kHealth, a_entry.health, RE::ACTOR_VALUE_MODIFIER::kPermanent);" in apply
+    strip = h.split("inline void Strip(")[1].split("\n\t}\n")[0]
+    assert "a_entry.tempHealth ? RE::ACTOR_VALUE_MODIFIER::kTemporary : RE::ACTOR_VALUE_MODIFIER::kPermanent" in strip
+    assert "OpenRecord(kRecord, 2)" in h and "health bonus made permanent" in h  # older saves: the temporary bonus is swapped for a permanent one
