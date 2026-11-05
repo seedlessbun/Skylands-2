@@ -199,7 +199,7 @@ namespace badass
 		std::vector<Seen>    fresh;  // not rolled yet
 		std::vector<Seen>    todo;   // rolled, bonuses to put on (or to check after a load)
 		std::vector<Seen>    dead;   // tiered and dead: bonuses off
-		int                  near[4]{};
+		int                  nearBy[4]{};
 		for (auto& handle : lists->highActorHandles) {
 			const auto ptr = handle.get();
 			const auto actor = ptr.get();
@@ -236,8 +236,8 @@ namespace badass
 				}
 				continue;
 			}
-			++near[0];
-			++near[e.tier];
+			++nearBy[0];
+			++nearBy[e.tier];
 			if (!e.applied || e.check) {
 				todo.push_back({ actor, id, base });
 			}
@@ -284,7 +284,7 @@ namespace badass
 			}
 			const bool boss = shielditems::IsBoss(s.actor) || IsDragon(s.actor);
 			const int  tier = Roll(s.id, level, boss);
-			if (tier > 0 && (near[0] >= g_maxNear || (tier == 2 && near[2] >= g_maxSuper) || (tier == 3 && near[3] >= g_maxUltimate))) {
+			if (tier > 0 && (nearBy[0] >= g_maxNear || (tier == 2 && nearBy[2] >= g_maxSuper) || (tier == 3 && nearBy[3] >= g_maxUltimate))) {
 				continue;  // the area is full: rolled again later
 			}
 			++rolledNow;
@@ -294,8 +294,8 @@ namespace badass
 			e.tier = tier;
 			e.base = s.base;
 			if (tier > 0) {
-				++near[0];
-				++near[tier];
+				++nearBy[0];
+				++nearBy[tier];
 				e = Apply(s.actor, e, boss ? "rolled, boss odds" : "rolled");
 			}
 			const std::lock_guard guard(g_lock);
@@ -310,7 +310,7 @@ namespace badass
 			lastLine = Clock::now();
 			++lines;
 			SKSE::log::info("badass: player level {}, chance {:.1f}% ({}); rolled so far {} (none {}, Badass {}, Super {}, Ultimate {}); near now: {} Badass, {} Super, {} Ultimate", level,
-				Chance(level, false) * 100.0f, g_test > 0.0f ? "BadassTest" : "the sheet's rule", g_rolled.load(), g_count[0].load(), g_count[1].load(), g_count[2].load(), g_count[3].load(), near[1], near[2], near[3]);
+				Chance(level, false) * 100.0f, g_test > 0.0f ? "BadassTest" : "the sheet's rule", g_rolled.load(), g_count[0].load(), g_count[1].load(), g_count[2].load(), g_count[3].load(), nearBy[1], nearBy[2], nearBy[3]);
 		}
 	}
 
