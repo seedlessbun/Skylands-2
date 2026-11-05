@@ -57,8 +57,14 @@ jobs:
           git config user.name "skylands-ci"
           git config user.email "skylands-ci@users.noreply.github.com"
           git add setup/skylands_setup/bin/SkylandsNative.dll
-          if (git diff --cached --quiet) { Write-Host "DLL unchanged" } else {
-            git commit -m "SkylandsNative.dll built by CI from ${{ github.sha }}"
-            git pull --rebase origin ${{ github.ref_name }}
-            git push origin HEAD:${{ github.ref_name }}
-          }
+          if (git diff --cached --quiet) { Write-Host "DLL unchanged"; exit 0 }
+          # a newer push of the plugin source has its own run: this older DLL must not land on top of it
+          git fetch origin ${{ github.ref_name }}
+          $newer = git log --format=%h "${{ github.sha }}..origin/${{ github.ref_name }}" -- native/skse .github/workflows/skse-plugin.yml
+          if ($newer) { Write-Host "newer plugin source on the branch ($newer): its own run commits the DLL"; exit 0 }
+          git commit -m "SkylandsNative.dll built by CI from ${{ github.sha }}"
+          # the DLL is binary: when another run's DLL commit got in first, this run's DLL (built from the newest source) wins
+          git pull --rebase -X theirs origin ${{ github.ref_name }}
+          if ($LASTEXITCODE -ne 0) { Write-Error "rebase failed"; exit 1 }
+          git push origin HEAD:${{ github.ref_name }}
+          if ($LASTEXITCODE -ne 0) { Write-Error "push failed"; exit 1 }
