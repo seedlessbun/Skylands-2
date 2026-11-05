@@ -16,10 +16,11 @@
 #include "shielditems.h"
 #include "voices.h"
 #include "despawn.h"
+#include "badass.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 388;  // 1.24.2
+	constexpr std::int32_t kVersion = 389;  // 1.25.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -142,7 +143,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -621,6 +622,8 @@ namespace
 			data.castingSource = RE::MagicSystem::CastingSource::kRightHand;
 			if (!npc) {
 				data.power = g_damageMult.load();  // a relic's damage bonus (UNCONFIRMED that a spell projectile's damage follows the launch power: the shield log's "took .. damage" shows it)
+			} else {
+				data.power = badass::GunPower(a_shooter);  // a Badass's guns (badass.h; the game's own first bullet of a burst is not launched here)
 			}
 			RE::ProjectileHandle handle{};
 			if (tell && pellet == 0) {
@@ -2736,6 +2739,7 @@ namespace
 				// loose drops go when the player is far from them (despawn.h); their beams with them
 				despawn::g_onRemoved = &DropBeamOf;
 				despawn::Start(holder);
+				badass::Start();  // Badass enemies, stage 1: tiers and stats
 			}
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
@@ -2865,7 +2869,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 24, 2, 0 },
+	.Version = { 1, 25, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

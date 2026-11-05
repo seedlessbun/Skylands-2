@@ -85,6 +85,7 @@ namespace shield
 
 	// called at the end of every update on the game thread (the display hangs on it: shieldhud.h)
 	inline void (*g_afterUpdate)() = nullptr;
+	inline float (*g_extraMaxOf)(RE::FormID a_actor) = nullptr;  // health added to an actor's maximum by someone else (badass.h): left out of its shield's size
 	// called every 400 ms on the game thread in place of the test shields when shield items are in use (shielditems.h): it gives and takes away shields by what is worn
 	inline bool (*g_itemPump)(RE::PlayerCharacter*, RE::ProcessLists*) = nullptr;
 	// the same for relics (relic.h): the player's worn relic and the people who may carry one; called every 400 ms; and what to do when the game is replaced (a load, a new game)
@@ -232,7 +233,7 @@ namespace shield
 		if (!(before > 1.0f) || !std::isfinite(before)) {
 			return;
 		}
-		const float capacity = s.frac * before;
+		const float capacity = s.frac * (before - (g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID()) : 0.0f));  // a Badass's health bonus does not count (badass.h)
 		const float hpBefore = a_actor->AsActorValueOwner() ? a_actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth) : 0.0f;
 		Write(a_actor, RE::ACTOR_VALUE_MODIFIER::kTemporary, capacity);
 		const float after = a_actor->GetActorValueMax(RE::ActorValue::kHealth);
@@ -722,9 +723,10 @@ namespace shield
 	constexpr std::uint32_t kStarter = 0x54525453;   // 'STRT': the player has been given a starter shield
 
 	// other parts of the plugin keep records in the same co-save (one set of callbacks per plugin): they hook in here
-	inline void (*g_extraSave)(SKSE::SerializationInterface*) = nullptr;
-	inline bool (*g_extraLoad)(SKSE::SerializationInterface*, std::uint32_t a_type, std::uint32_t a_version) = nullptr;  // true: the record was theirs
-	inline void (*g_extraRevert)() = nullptr;
+	// other parts of the plugin that keep records in the same co-save (despawn.h, badass.h): each adds its three functions
+	inline std::vector<void (*)(SKSE::SerializationInterface*)>                                              g_extraSave;
+	inline std::vector<bool (*)(SKSE::SerializationInterface*, std::uint32_t a_type, std::uint32_t a_version)> g_extraLoad;  // true: the record was theirs
+	inline std::vector<void (*)()>                                                                            g_extraRevert;
 
 	inline void OnSave(SKSE::SerializationInterface* a_intfc)
 	{
@@ -763,8 +765,8 @@ namespace shield
 			a_intfc->WriteRecordData(std::uint8_t{ 1 });
 		}
 		SKSE::log::info("shield: save - {} shield bonuses recorded in the co-save{}", entries.size(), g_starterGiven ? ", the starter shield is marked as given" : "");
-		if (g_extraSave) {
-			g_extraSave(a_intfc);
+		for (const auto fn : g_extraSave) {
+			fn(a_intfc);
 		}
 	}
 
@@ -774,8 +776,8 @@ namespace shield
 		if (g_relicRevert) {
 			g_relicRevert();
 		}
-		if (g_extraRevert) {
-			g_extraRevert();
+		for (const auto fn : g_extraRevert) {
+			fn();
 		}
 		const std::lock_guard guard(g_lock);
 		g_states.clear();
@@ -793,7 +795,7 @@ namespace shield
 				g_starterGiven = flag != 0;
 				continue;
 			}
-			if (g_extraLoad && type != kRecord && g_extraLoad(a_intfc, type, version)) {
+			if (type != kRecord && std::any_of(g_extraLoad.begin(), g_extraLoad.end(), [&](auto fn) { return fn(a_intfc, type, version); })) {
 				continue;
 			}
 			if (type != kRecord || (version != 1 && version != 2)) {

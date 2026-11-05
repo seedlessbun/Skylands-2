@@ -62,7 +62,7 @@ def test_the_plugin_reads_the_table_and_speaks_on_combat_hits_deaths_and_taunts(
                  "VoiceGap", "VoiceTauntMin", "kDeathFire", "kGloat", "SpeakerOfLocked"):
         assert text in voices_h, text
     assert "voices::Load();" in main and "voices::Start(holder);" in main and "voices::Config(" in main and "voices::g_elementOf" in main
-    assert "kVersion = 388" in main and "{ 1, 24, 2, 0 }" in main
+    assert "kVersion = 389" in main and "{ 1, 25, 0, 0 }" in main
     assert voices.TABLE in (root / "voices.h").read_text(encoding="utf-8")  # the installer and the plugin agree on the file name
     order = list(voices.GROUPS)
     header = (root / "voices.h").read_text(encoding="utf-8")
@@ -78,7 +78,7 @@ def test_despawn_by_distance_and_rarity_and_the_beam_cap():
     # 1.23.0: loose Skylands items go by distance, commoner ones sooner; the player's own drops stay; the marks survive a save in the co-save
     for text in ("ForEachReference", "SkylandsRarity_", "DespawnCommon", "DespawnLegendary", "oldContainer == 0x14", "0x4E505344", "SetDelete(true)", "BeamCap"):
         assert text in despawn, text
-    assert "g_extraLoad(a_intfc, type, version)" in shield and "g_extraSave(a_intfc)" in shield and "g_extraRevert()" in shield
+    assert "fn(a_intfc, type, version)" in shield and "for (const auto fn : g_extraSave)" in shield and "for (const auto fn : g_extraRevert)" in shield
     assert '#include "despawn.h"' in main and "despawn::Start(holder);" in main and "despawn::g_onRemoved = &DropBeamOf;" in main and "despawn::Config(" in main
     # the beam cap: rarity read before the beam lock is taken (RarityOf takes despawn's own lock), the lowest rarity loses its beam
     track = main.split("bool TrackBeam(")[1].split("\n\t}\n")[0]

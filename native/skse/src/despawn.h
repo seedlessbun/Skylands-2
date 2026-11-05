@@ -307,9 +307,9 @@ namespace despawn
 
 	inline void Start(RE::ScriptEventSourceHolder* a_holder)
 	{
-		shield::g_extraSave = &Save;
-		shield::g_extraLoad = &Load;
-		shield::g_extraRevert = &Revert;
+		shield::g_extraSave.push_back(&Save);
+		shield::g_extraLoad.push_back(&Load);
+		shield::g_extraRevert.push_back(&Revert);
 		if (a_holder) {
 			a_holder->AddEventSink(DropSink::Get());
 		}

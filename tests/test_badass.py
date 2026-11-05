@@ -1,0 +1,40 @@
+"""Badass enemies, stage 1 (plugin 1.25.0): tiers and stats (docs/badass-roadmap.md 3.1, 3.2, 3.6)."""
+
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "setup"))
+
+from skylands_setup import skse  # noqa: E402
+from skylands_setup.sheet_data import BADASS_TIERS  # noqa: E402
+
+SRC = HERE.parent / "native" / "skse" / "src"
+
+
+def test_the_settings_carry_the_sheets_numbers():
+    ini = skse.default_ini()
+    b, s, u = BADASS_TIERS["badass"], BADASS_TIERS["super"], BADASS_TIERS["ultimate"]
+    for line in ("Badass=1", "BadassPercent=3", "BadassPerLevel=0.5", "BadassMax=25", "BadassSuperGate=12", "BadassUltimateGate=25", "BadassTest=0",
+                 "BadassHealth1=3", "BadassHealth2=5.8", "BadassHealth3=15", "BadassMelee1=2.28", "BadassMelee3=2.6", "BadassGun=1.14", "BadassMaxNear=4"):
+        assert line in ini.splitlines(), line
+    assert (b.health_mult, s.health_mult, u.health_mult) == (3.0, 5.8, 15.0)
+
+
+def test_the_plugin_rolls_tiers_and_applies_the_stats():
+    h = (SRC / "badass.h").read_text(encoding="utf-8")
+    main = (SRC / "main.cpp").read_text(encoding="utf-8")
+    shield = (SRC / "shield.h").read_text(encoding="utf-8")
+    # the roll: p, then a reroll of p for Super from the gate, then again for Ultimate; stable per form id
+    roll = h.split("inline int Roll(")[1].split("\n\t}\n")[0]
+    assert roll.count("draw(") == 3 and "g_gate[2]" in roll and "g_gate[3]" in roll and "shielditems::Mix(a_id" in roll
+    for av in ("kHealth", "kAttackDamageMult", "kSpeedMult"):
+        assert f"RE::ActorValue::{av}, a_entry." in h, av
+    assert "ACTOR_VALUE_MODIFIER::kTemporary" in h and "0x53414442" in h  # tracked temporary modifiers, co-save 'BDAS'
+    assert "IsPlayerTeammate()" in h and "IsCommandedActor()" in h and "IsHostileToActor(a_player)" in h and "IsChild()" in h
+    # wiring: settings, start, the guns of a Badass, the shield sized without the bonus, co-save hooks shared with despawn
+    assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start();" in main and "data.power = badass::GunPower(a_shooter);" in main
+    assert "g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID())" in shield and "shield::g_extraMaxOf = &HealthBonusOf;" in h
+    assert "shield::g_extraSave.push_back(&Save);" in h and "shield::g_extraSave.push_back(&Save);" in (SRC / "despawn.h").read_text(encoding="utf-8")
+    assert "kVersion = 389" in main and "{ 1, 25, 0, 0 }" in main
+

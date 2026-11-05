@@ -281,8 +281,38 @@ def shield_ini(bl2_values: dict | None = None, slot: int = 0, relic_slot: int = 
     return "\n".join(lines) + "\n"
 
 
+def badass_ini() -> str:
+    """The Badass block (docs/badass-roadmap.md 3.1, 3.2): numbers from sheets/badass_tiers.json."""
+    from .sheet_data import BADASS_TIERS as T
+
+    b, s, u = T["badass"], T["super"], T["ultimate"]
+    def num(v: float) -> str:
+        return f"{v:g}"
+    return "\n".join([
+        "; Badass enemies (stage 1: tiers and stats; names, size and drops come later). Every hostile actor near you is rolled once: p = BadassPercent + BadassPerLevel",
+        "; per player level above 1, at most BadassMax percent (bosses and dragons x BadassBossOdds). A hit makes a Badass; from player level BadassSuperGate a second hit",
+        "; of p makes it a Super Badass, from BadassUltimateGate a third an Ultimate Badass. BadassTest=N (percent) replaces p for every roll and ignores the gates: for testing.",
+        "Badass=1",
+        f"BadassPercent={num(b.percent)}",
+        f"BadassPerLevel={num(b.per_level)}",
+        f"BadassMax={num(b.max_percent)}",
+        f"BadassBossOdds={num(b.boss_odds)}",
+        f"BadassSuperGate={s.player_level_gate}",
+        f"BadassUltimateGate={u.player_level_gate}",
+        "BadassTest=0",
+        f"BadassMaxNear={b.max_near}",
+        f"BadassMaxSuper={s.max_near}",
+        f"BadassMaxUltimate={u.max_near}",
+        "; stats by tier (1 Badass, 2 Super, 3 Ultimate): maximum health, melee/creature damage, speed; BadassGun = the bullets the plugin launches for them",
+        *(f"BadassHealth{i}={num(r.health_mult)}" for i, r in ((1, b), (2, s), (3, u))),
+        *(f"BadassMelee{i}={num(r.melee_damage_mult)}" for i, r in ((1, b), (2, s), (3, u))),
+        *(f"BadassSpeed{i}={num(r.speed_mult)}" for i, r in ((1, b), (2, s), (3, u))),
+        f"BadassGun={num(b.gun_damage_mult)}",
+    ]) + "\n"
+
+
 def default_ini(bl2_values: dict | None = None, slot: int = 0, relic_slot: int = 0) -> str:
-    return DEFAULT_INI.rstrip("\n") + "\n" + shield_ini(bl2_values, slot, relic_slot)
+    return DEFAULT_INI.rstrip("\n") + "\n" + badass_ini() + shield_ini(bl2_values, slot, relic_slot)
 
 
 def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, bl2_shields: dict | None = None, shield_slot: int = 0, relic_slot: int = 0) -> str | None:
