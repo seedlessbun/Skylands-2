@@ -320,7 +320,8 @@ namespace badass
 		for (int i = 0; i < t; ++i) {
 			int        rarity = 0, type = 0;
 			const auto seed = shielditems::Mix(a_p.id ^ (g_dropSerial.fetch_add(1) * 0x9E3779B97F4A7C15ULL));
-			const auto item = PickDrop(seed, t, kFloors[t][i], level, rarity, type);
+			// each guaranteed item is shifted up to its own floor (BL2: an Ultimate drops a very rare, a rare and an uncommon; 0.50.0 shifted all three by the tier: three epics)
+			const auto item = PickDrop(seed, kFloors[t][i] - 1, kFloors[t][i], level, rarity, type);
 			if (!item) {
 				said += (said.empty() ? "" : ", ") + std::string("nothing to pick");
 				continue;

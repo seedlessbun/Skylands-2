@@ -61,3 +61,8 @@ def test_the_health_bonus_is_permanent_so_the_enemy_bar_shows_it():
     strip = h.split("inline void Strip(")[1].split("\n\t}\n")[0]
     assert "a_entry.tempHealth ? RE::ACTOR_VALUE_MODIFIER::kTemporary : RE::ACTOR_VALUE_MODIFIER::kPermanent" in strip
     assert "OpenRecord(kRecord, 2)" in h and "health bonus made permanent" in h  # older saves: the temporary bonus is swapped for a permanent one
+
+
+def test_each_guaranteed_item_is_shifted_to_its_own_floor():
+    h = (SRC / "badass.h").read_text(encoding="utf-8")
+    assert "PickDrop(seed, kFloors[t][i] - 1, kFloors[t][i], level, rarity, type)" in h
