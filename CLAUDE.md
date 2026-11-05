@@ -712,6 +712,15 @@ Other commands:
   (`g_extraSave/Load/Revert`, despawn and badass both push). Ini block `skse.badass_ini()` from `sheets/badass_tiers.json`. Log: "badass: <id> \"name\" (level, person/creature, boss/dragon) is a <tier> [rolled]: health max a -> b (current ..),
   melee damage xM (AttackDamageMult a -> b), speed .., guns ..", "came off", "kept its bonuses across the load", a 30 s summary line. Names, size, drops: later stages. UNCONFIRMED in game: all of it (that a temporary Health modifier raises
   an NPC's current health too, that AttackDamageMult scales NPC melee and creature attacks, that SpeedMult changes apply without a carry-weight nudge, that power scales enemy bullets).
+- 0.49.0 in game (user, SkylandsNative.log 23ae3051 "SkylandsNative 389", `BadassTest=50`): the rolls WORK (10 rolled: 5 Badass, 2 Super, 3 none; every bonus read back right: "health max 50 -> 290 (current 50 -> 290), AttackDamageMult
+  1.00 -> 2.60, SpeedMult 100 -> 105"; bonuses came off at death; a hurt actor kept its damage: "current 36 -> 136"); the user saw none because stage 1 has no name/size. A crash: "first chance exception C0000005 at SkyrimSE.exe+86AD98
+  (reading address 88); last stage: tick: done (shields: shield display)" = no plugin code running; stack all game code (+172DA3, +82D84E, +8768AC, +BCB617, ...); 2 s after a Badass died and its bonus was taken off the corpse,
+  while aiming. Cause UNKNOWN; the user installed a crash logger (Crash Logger SSE AE VR): READ its `crash-*.log` next. 0.50.0 (TestBuild-160, plugin 1.26.0 = "SkylandsNative 390"), the user moved names up: `badass.h` `Present` = tier name
+  before the display name (`SetDisplayName`, not when the name already holds "Badass") and `SetScale` 1.15 / 1.30 / 1.45 (`BadassNames`, `BadassSize`, `BadassSize1..3`), done at the roll and every pass for tiered living actors near; and
+  stage 2's guaranteed drops: 1.6 s after a tiered actor is found dead (after the shield/relic sinks) `PlaceObjectAtMe` of 1 / 2 / 3 items with floors uncommon / rare+uncommon / epic+rare+uncommon (`kFloors`), the type by BL2's gear
+  weights (`BadassDropGun/Shield/Relic` 44.44/20/8.89), rarity by the guns' weights shifted up by the tier (rarity r takes `kWeight[r - tier]`), level gates at max(player level, 8/15/30) (relaxed if they leave nothing); guns from every WEAP with
+  `SkylandsGun` + rarity keyword (`ReadGuns`), shields/relics from their catalogs. Log "badass: <id> is now called ..", "size a -> b", "drop lists - guns by rarity ..", "badass: <id> (tier) dropped N: \"name\" (rarity type), ...".
+  The carried gear keeps its own drop rules (not counted in the 1/2/3). UNCONFIRMED in game: all of it.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
