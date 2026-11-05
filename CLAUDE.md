@@ -703,6 +703,15 @@ Other commands:
   ordinary `AddTask` tasks. 0.48.2 (TestBuild-158, plugin 1.24.2 = "SkylandsNative 388"): both displays run as `AddUITask` tasks (`QueueHud`, `QueueShieldHud`, one waiting at a time) inside `Guarded` (SEH `__try/__except`): a fault
   turns that display off for the session ("hud: a fault inside the game's HUD movie ..." / "shield hud: a fault ...") instead of crashing. UNCONFIRMED in game: that the UI task removes the crash (if a "fault" line shows up, the display code itself
   touches something bad, e.g. the enemy bar's clips after a death); that a recovered fault leaves the game usable.
+- 0.48.2 in game (user): "the crash is no longer occurring". BADASS STAGE 1 = 0.49.0 (TestBuild-159, plugin 1.25.0 = "SkylandsNative 389"): `native/skse/src/badass.h`: a 500 ms game-thread pass over `highActorHandles` within 6000 units rolls
+  every eligible actor ONCE (hostile to the player; not child/teammate/commanded/summoned/essential/protected; people and creatures) from `shielditems::Mix(formId ^ salt)`: p = `BadassPercent` 3 + `BadassPerLevel` 0.5 x (player level - 1),
+  max `BadassMax` 25 (x `BadassBossOdds` 2 for `IsBoss` or dragons); reroll p for Super from `BadassSuperGate` 12, again for Ultimate from `BadassUltimateGate` 25; `BadassTest`=N percent replaces p and ignores the gates (testing);
+  caps `BadassMaxNear` 4 / `MaxSuper` 1 / `MaxUltimate` 1 (a capped actor is rolled later). Stats as tracked TEMPORARY modifiers: Health +(mult-1) x own max (without its shield), `AttackDamageMult` +(mult-1), `SpeedMult` +100 x (mult-1);
+  plugin-launched enemy bullets `LaunchData.power` = `BadassGun` 1.14 (the game's own first bullet of a burst stays unscaled). Bonuses come off at death; co-save record 'BDAS' v1 (id, base, tier, applied, amounts, max before); after a
+  load each tiered actor is checked (`StillOn`: max >= max before + half the bonus) and the bonuses put back if gone. The shield is sized without the Badass bonus (`shield::g_extraMaxOf`). The co-save hooks of shield.h are now LISTS
+  (`g_extraSave/Load/Revert`, despawn and badass both push). Ini block `skse.badass_ini()` from `sheets/badass_tiers.json`. Log: "badass: <id> \"name\" (level, person/creature, boss/dragon) is a <tier> [rolled]: health max a -> b (current ..),
+  melee damage xM (AttackDamageMult a -> b), speed .., guns ..", "came off", "kept its bonuses across the load", a 30 s summary line. Names, size, drops: later stages. UNCONFIRMED in game: all of it (that a temporary Health modifier raises
+  an NPC's current health too, that AttackDamageMult scales NPC melee and creature attacks, that SpeedMult changes apply without a carry-weight nudge, that power scales enemy bullets).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
