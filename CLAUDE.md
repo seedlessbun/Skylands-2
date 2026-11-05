@@ -721,6 +721,13 @@ Other commands:
   weights (`BadassDropGun/Shield/Relic` 44.44/20/8.89), rarity by the guns' weights shifted up by the tier (rarity r takes `kWeight[r - tier]`), level gates at max(player level, 8/15/30) (relaxed if they leave nothing); guns from every WEAP with
   `SkylandsGun` + rarity keyword (`ReadGuns`), shields/relics from their catalogs. Log "badass: <id> is now called ..", "size a -> b", "drop lists - guns by rarity ..", "badass: <id> (tier) dropped N: \"name\" (rarity type), ...".
   The carried gear keeps its own drop rules (not counted in the 1/2/3). UNCONFIRMED in game: all of it.
+- 0.50.0 in game (user, SkylandsNative.log d9a7ec42 "SkylandsNative 390"): no crash; Badasses were bigger, correctly named and dropped several items (log: "drop lists - guns by rarity 99 99 132 132 66 75, shields 90 90 90 93 9 0, relics 10x5";
+  "(Ultimate Badass) dropped 3: ... (epic shield), ... (epic relic), ... (epic shield)"). WRONG: the enemy health bar ignored the bonus (it stayed full until the health fell below the old maximum): the game's enemy bar measures against the
+  PERMANENT maximum (base + permanent modifiers), and the bonus was a TEMPORARY modifier. Also: every guaranteed item was shifted by the tier, so an Ultimate's "rare" and "uncommon" items could only be epic+. 0.50.1 (TestBuild-161, plugin
+  1.26.1 = "SkylandsNative 391"): the Health bonus is a `kPermanent` modifier (melee and speed stay temporary); co-save 'BDAS' v2 adds `tempHealth` (v1 entries = temporary: when the old bonus is still on after a load it is stripped as temporary
+  and given again as permanent, log "health bonus made permanent"); the roll line also logs "the bar's maximum a -> b" (`GetPermanentActorValue`); each guaranteed item is shifted to ITS OWN floor (`PickDrop(seed, floor - 1, floor, ..)`:
+  Ultimate = epic + rare + uncommon as BL2). CI fix: the "Commit the DLL" step lost DLL commits silently when two runs overlapped (binary rebase conflict, job still green); now an older run skips when newer plugin source is on the
+  branch, the rebase uses `-X theirs`, and a failed rebase/push fails the job. UNCONFIRMED in game: that a permanent modifier moves the enemy bar.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
