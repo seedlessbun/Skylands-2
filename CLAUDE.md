@@ -728,6 +728,13 @@ Other commands:
   and given again as permanent, log "health bonus made permanent"); the roll line also logs "the bar's maximum a -> b" (`GetPermanentActorValue`); each guaranteed item is shifted to ITS OWN floor (`PickDrop(seed, floor - 1, floor, ..)`:
   Ultimate = epic + rare + uncommon as BL2). CI fix: the "Commit the DLL" step lost DLL commits silently when two runs overlapped (binary rebase conflict, job still green); now an older run skips when newer plugin source is on the
   branch, the rebase uses `-X theirs`, and a failed rebase/push fails the job. UNCONFIRMED in game: that a permanent modifier moves the enemy bar.
+- 0.50.1 in game (user): "health bars work now, badass drops look good". 0.51.0 (TestBuild-162, plugin 1.27.0 = "SkylandsNative 392"), BADASS STAGE 3 (creature drops): the installer writes `Data\SKSE\Plugins\SkylandsEnemies.txt`
+  (`generate.write_enemy_classes`, every row of `sheets/enemy_stats.json`, tab separated, `(?i)` stripped; the plugin compiles each pattern with `std::regex::icase` and matches the race editor id, first match wins, cached per race:
+  `badass::ClassOf`). `CreatureDeathSink` (TESDeathEvent): a non-person (class kind creature/dragon, or no class and not `IsPerson`), not critter/child/teammate/commanded/summoned, hostile to the player at death, not a Badass (a Badass keeps its
+  tier drop): dragon (`DragonBoss`) = 2 items floor rare (shift 2) gates max(level,15); other `IsBoss` creature = 1 item floor rare; else chance = class `drop_scale` (or `CreatureDropScale` 0.5) x `PersonChance(level)` (`CreatureGunPercent` 25 +
+  shield carry x ShieldDropPercent + relic carry x RelicDropPercent) capped at `CreatureDropCap` 60, one item, floor = class `min_rarity`, no shift, gates at the creature's level. A Badass dragon's tier drops are floored at rare. The class
+  `badass` column now also keeps mammoths and critters from being rolled. Pending drops are a generic queue (`Pending{n, floor[3], shift[3], level, what}`, `g_pendLock`). Log: "N enemy classes from SkylandsEnemies.txt", "race X is class Y",
+  "<id> (creature, class .., level ..) died: drop chance ..% (a person's ..% x ..), rolled ..: drops an item / nothing", "(dragon) dropped 2: ...". UNCONFIRMED in game: all of it (that dying creatures still read as hostile, regex on race ids).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
