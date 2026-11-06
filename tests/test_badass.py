@@ -36,7 +36,7 @@ def test_the_plugin_rolls_tiers_and_applies_the_stats():
     assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start(holder);" in main and "data.power = badass::GunPower(a_shooter);" in main
     assert "g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID())" in shield and "shield::g_extraMaxOf = &HealthBonusOf;" in h
     assert "shield::g_extraSave.push_back(&Save);" in h and "shield::g_extraSave.push_back(&Save);" in (SRC / "despawn.h").read_text(encoding="utf-8")
-    assert "kVersion = 392" in main and "{ 1, 27, 0, 0 }" in main
+    assert "kVersion = 393" in main and "{ 1, 28, 0, 0 }" in main
 
 
 
@@ -47,7 +47,7 @@ def test_badasses_are_named_bigger_and_drop_their_guaranteed_items():
         assert line in ini, line
     # the name prefix once (the installer's "Badass ..." bandits keep theirs), the size, the drops 1 / 2 / 3 with BL2's floors
     present = h.split("inline void Present(")[1].split("\n\t}\n")[0]
-    assert 'name.find("Badass") == std::string_view::npos' in present and "SetDisplayName(" in present and "SetScale(g_scale[t])" in present
+    assert 'name.find("Badass") == std::string_view::npos' in present and "SetDisplayName(" in present and "SetScale(want)" in present and "own * (g_scale[t]" in present
     assert "kFloors[4][3] = { { 0, 0, 0 }, { 2, 0, 0 }, { 3, 2, 0 }, { 4, 3, 2 } }" in h
     pick = h.split("inline RE::TESBoundObject* PickDrop(")[1].split("\n\t}\n")[0]
     assert "const int below = r - a_tier;" in pick and "shielditems::kWeight[below]" in pick  # "up n": rarity r takes the weight of r - n
@@ -60,7 +60,7 @@ def test_the_health_bonus_is_permanent_so_the_enemy_bar_shows_it():
     assert "Mod(a_actor, RE::ActorValue::kHealth, a_entry.health, RE::ACTOR_VALUE_MODIFIER::kPermanent);" in apply
     strip = h.split("inline void Strip(")[1].split("\n\t}\n")[0]
     assert "a_entry.tempHealth ? RE::ACTOR_VALUE_MODIFIER::kTemporary : RE::ACTOR_VALUE_MODIFIER::kPermanent" in strip
-    assert "OpenRecord(kRecord, 2)" in h and "health bonus made permanent" in h  # older saves: the temporary bonus is swapped for a permanent one
+    assert "OpenRecord(kRecord, 3)" in h and "health bonus made permanent" in h  # older saves: the temporary bonus is swapped for a permanent one
 
 
 def test_each_guaranteed_item_is_shifted_to_its_own_floor():
@@ -85,3 +85,18 @@ def test_creatures_drop_by_their_class_and_dragons_always_drop(tmp_path):
     assert "TierOf(actor->GetFormID()) > 0" in sink and 'kind == "critter"' in sink and "IsHostileToActor(player)" in sink
     assert 'kind == "dragon" && g_dragonBoss' in sink and "p.n = 2;" in sink and "PersonChance(level) * scale" in sink
     assert "a_holder->AddEventSink(CreatureDeathSink::Get());" in h and "std::regex::icase" in h and "badass::Start(holder);" in (SRC / "main.cpp").read_text(encoding="utf-8")
+
+
+def test_creatures_grow_more_and_low_level_ones_get_a_stat_floor():
+    ini = skse.default_ini().splitlines()
+    for line in ("BadassCreatureSize=0.15", "BadassCreatureHealth=20", "BadassCreatureHealthPerLevel=5", "BadassCreatureGap=0.05", "BadassCreatureGapMax=3"):
+        assert line in ini, line
+    h = (SRC / "badass.h").read_text(encoding="utf-8")
+    present = h.split("inline void Present(")[1].split("\n\t}\n")[0]
+    # the reference's own scale is grown from what it was (GetScale includes the race's height: a mudcrab read 0.86 at 1.15 and was set again every pass)
+    assert "GetReferenceRuntimeData().refScale" in present and "g_creatureSize * static_cast<float>(t)" in present and "GetScale() <" not in present
+    apply = h.split("inline Entry Apply(")[1].split("\n\t}\n")[0]
+    assert "g_health[t] * counted - own" in apply and "g_melee[t] * gap - 1.0f" in apply
+    assert "a_intfc->ReadRecordData(e.scaleBefore);" in h and "e.scaleBefore = 100;" in h  # older saves set the scale from 100
+    sink = h.split("class CreatureDeathSink")[1].split("\n\t};\n")[0]
+    assert "one roll per body" in sink

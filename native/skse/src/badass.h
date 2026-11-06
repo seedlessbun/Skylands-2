@@ -37,6 +37,11 @@ namespace badass
 	// 1.26.0: presentation (stage 4, moved up at the user's request) and the guaranteed drops (stage 2)
 	inline bool  g_names = true, g_size = true, g_drops = true;
 	inline float g_scale[4] = { 1.0f, 1.15f, 1.30f, 1.45f };
+	// 1.28.0 (user: "a super badass mudcrab was pretty small", "low level creatures should still pose a threat"): creatures grow g_creatureSize more per tier,
+	// count their own health as at least g_creatureHealth + g_creatureHealthPerLevel x the player's level, and hit harder by g_creatureGap per level they are below the player
+	inline float g_creatureSize = 0.15f;
+	inline float g_creatureHealth = 20.0f, g_creatureHealthPerLevel = 5.0f;
+	inline float g_creatureGap = 0.05f, g_creatureGapMax = 3.0f;
 	inline float g_dropWeight[3] = { 44.44f, 20.0f, 8.89f };  // gun, shield, relic (sheets/enemy_drops.json: BL2's enemy gear pool)
 	inline constexpr int kGateLevel[4] = { 0, 8, 15, 30 };    // the rarity gates of a tier's drops use at least this level
 	inline constexpr int kFloors[4][3] = { { 0, 0, 0 }, { 2, 0, 0 }, { 3, 2, 0 }, { 4, 3, 2 } };  // BL2's 1 / 2 / 3 guaranteed drops and their lowest rarities
@@ -53,6 +58,7 @@ namespace badass
 		float      speed = 0.0f;     // added to SpeedMult
 		float      maxBefore = 0.0f;  // maximum Health before the bonus
 		bool       tempHealth = false;  // the health bonus is a TEMPORARY modifier (a 0.49.0/0.50.0 save): taken off and given again as a permanent one
+		std::uint16_t scaleBefore = 0;  // 1.28.0: the reference's own scale (refScale, percent) before Present grew it; 0 = not seen yet (an older save: 100)
 	};
 
 	inline std::mutex                             g_lock;
@@ -172,6 +178,12 @@ namespace badass
 		return found;
 	}
 
+	inline bool IsCreature(RE::Actor* a_actor)
+	{
+		const int c = ClassOf(a_actor);
+		return c >= 0 ? g_classes[c].kind != "person" : !shielditems::IsPerson(a_actor);
+	}
+
 	inline bool Eligible(RE::Actor* a_actor, RE::PlayerCharacter* a_player)
 	{
 		if (const int c = ClassOf(a_actor); c >= 0 && !g_classes[c].badass) {
@@ -235,11 +247,18 @@ namespace badass
 		const float shieldCap = shield::ViewOf(a_actor->GetFormID()).capacity;
 		const float maxBefore = a_actor->GetActorValueMax(RE::ActorValue::kHealth);
 		const float own = std::max(1.0f, maxBefore - shieldCap);  // the actor's own maximum, without a shield
+		const bool  creature = IsCreature(a_actor);
+		const auto  player = RE::PlayerCharacter::GetSingleton();
+		const int   playerLevel = player ? player->GetLevel() : 1;
+		// a creature counts its own health as at least the floor (a 5-point mudcrab would otherwise be a 15-point Badass)
+		const float counted = creature ? std::max(own, g_creatureHealth + g_creatureHealthPerLevel * static_cast<float>(playerLevel)) : own;
+		// and hits harder per level it is below the player
+		const float gap = creature ? std::clamp(1.0f + g_creatureGap * static_cast<float>(std::max(0, playerLevel - static_cast<int>(a_actor->GetLevel()))), 1.0f, std::max(1.0f, g_creatureGapMax)) : 1.0f;
 		const float hpBefore = Value(a_actor, RE::ActorValue::kHealth);
 		const float dmgBefore = Value(a_actor, RE::ActorValue::kAttackDamageMult);
 		const float speedBefore = Value(a_actor, RE::ActorValue::kSpeedMult);
-		a_entry.health = std::max(0.0f, (g_health[t] - 1.0f) * own);
-		a_entry.melee = g_melee[t] - 1.0f;
+		a_entry.health = std::max(0.0f, g_health[t] * counted - own);
+		a_entry.melee = g_melee[t] * gap - 1.0f;
 		a_entry.speed = (g_speed[t] - 1.0f) * 100.0f;
 		const float permBefore = Permanent(a_actor);
 		Mod(a_actor, RE::ActorValue::kHealth, a_entry.health, RE::ACTOR_VALUE_MODIFIER::kPermanent);
@@ -255,7 +274,10 @@ namespace badass
 			                "(AttackDamageMult {:.2f} -> {:.2f}), speed x{:.2f} (SpeedMult {:.0f} -> {:.0f}), plugin-launched gun bullets x{:.2f}",
 				a_actor->GetFormID(), name ? name : "?", a_actor->GetLevel(), shielditems::IsPerson(a_actor) ? "person" : "creature", IsDragon(a_actor) ? ", dragon" : shielditems::IsBoss(a_actor) ? ", boss" : "",
 				t == 3 ? "an" : "a", kTierNames[t], a_why, maxBefore, a_actor->GetActorValueMax(RE::ActorValue::kHealth), hpBefore, Value(a_actor, RE::ActorValue::kHealth), permBefore, Permanent(a_actor), own, g_health[t],
-				shieldCap > 0.0f ? fmt::format(", its shield {:.0f} not counted", shieldCap) : std::string(), g_melee[t], dmgBefore, Value(a_actor, RE::ActorValue::kAttackDamageMult), g_speed[t],
+				(shieldCap > 0.0f ? fmt::format(", its shield {:.0f} not counted", shieldCap) : std::string()) +
+					(counted > own ? fmt::format(", counted as {:.0f}: the creature floor at player level {}", counted, playerLevel) : std::string()) +
+					(gap > 1.0f ? fmt::format(", melee x{:.2f} for {} levels below the player", gap, playerLevel - static_cast<int>(a_actor->GetLevel())) : std::string()),
+				g_melee[t] * gap, dmgBefore, Value(a_actor, RE::ActorValue::kAttackDamageMult), g_speed[t],
 				speedBefore, Value(a_actor, RE::ActorValue::kSpeedMult), g_gun[t]);
 		}
 		return a_entry;
@@ -299,9 +321,23 @@ namespace badass
 				}
 			}
 		}
-		if (g_size && a_actor->GetScale() < g_scale[t] - 0.01f) {
+		// 1.28.0: GetScale is the reference's scale times the race/base height (a mudcrab is 0.75), so the old test "GetScale < tier scale" never held for small
+		// creatures (they were set to 1.15, read back 0.86, and set again every pass). The reference's own scale (refScale, percent) is grown from what it was.
+		const std::uint16_t ref = a_actor->GetReferenceRuntimeData().refScale;
+		std::uint16_t       first = 0;
+		{
+			const std::lock_guard guard(g_lock);
+			auto&                 e = g_entries[a_actor->GetFormID()];
+			if (e.scaleBefore == 0) {
+				e.scaleBefore = ref > 0 ? ref : 100;
+			}
+			first = e.scaleBefore;
+		}
+		const float own = static_cast<float>(first) / 100.0f;
+		const float want = own * (g_scale[t] + (IsCreature(a_actor) ? g_creatureSize * static_cast<float>(t) : 0.0f));
+		if (g_size && static_cast<float>(ref) / 100.0f < want - 0.01f) {
 			const float before = a_actor->GetScale();
-			a_actor->SetScale(g_scale[t]);
+			a_actor->SetScale(want);
 			static std::atomic_int told{ 0 };
 			if (told.fetch_add(1) < 40) {
 				SKSE::log::info("badass: {:08X} size {:.2f} -> {:.2f}", a_actor->GetFormID(), before, a_actor->GetScale());
@@ -455,6 +491,20 @@ namespace badass
 			const auto actor = a_event->actorDying->As<RE::Actor>();
 			if (!actor || actor->IsPlayerRef() || TierOf(actor->GetFormID()) > 0) {
 				return RE::BSEventNotifyControl::kContinue;  // a Badass has its own drop
+			}
+			{
+				// 1.28.0: the log showed one mudcrab's death rolled twice (the event came twice): one roll per body
+				static std::mutex                         seenLock;
+				static std::unordered_map<RE::FormID, Clock::time_point> seen;
+				const std::lock_guard                     guard(seenLock);
+				const auto                                now = Clock::now();
+				if (const auto it = seen.find(actor->GetFormID()); it != seen.end() && now - it->second < std::chrono::seconds(60)) {
+					return RE::BSEventNotifyControl::kContinue;
+				}
+				if (seen.size() > 512) {
+					seen.clear();
+				}
+				seen[actor->GetFormID()] = now;
 			}
 			const int         c = ClassOf(actor);
 			const std::string kind = c >= 0 ? g_classes[c].kind : (shielditems::IsPerson(actor) ? "person" : "creature");
@@ -673,6 +723,11 @@ namespace badass
 				++nearBy[0];
 				++nearBy[tier];
 				e = Apply(s.actor, e, boss ? "rolled, boss odds" : "rolled");
+				e.scaleBefore = s.actor->GetReferenceRuntimeData().refScale > 0 ? s.actor->GetReferenceRuntimeData().refScale : 100;
+				{
+					const std::lock_guard guard(g_lock);
+					g_entries[s.id] = e;  // before Present, which reads the scale from the entry
+				}
 				Present(s.actor, tier);
 			}
 			const std::lock_guard guard(g_lock);
@@ -697,7 +752,7 @@ namespace badass
 	inline void Save(SKSE::SerializationInterface* a_intfc)
 	{
 		const std::lock_guard guard(g_lock);
-		if (!a_intfc->OpenRecord(kRecord, 2)) {
+		if (!a_intfc->OpenRecord(kRecord, 3)) {
 			return;
 		}
 		a_intfc->WriteRecordData(static_cast<std::uint32_t>(g_entries.size()));
@@ -712,6 +767,7 @@ namespace badass
 			a_intfc->WriteRecordData(e.speed);
 			a_intfc->WriteRecordData(e.maxBefore);
 			a_intfc->WriteRecordData(static_cast<std::uint8_t>(e.tempHealth ? 1 : 0));
+			a_intfc->WriteRecordData(e.scaleBefore);
 			tiered += e.tier > 0 ? 1 : 0;
 		}
 		SKSE::log::info("badass: save - {} actors rolled, {} of them with a tier", g_entries.size(), tiered);
@@ -722,7 +778,7 @@ namespace badass
 		if (a_type != kRecord) {
 			return false;
 		}
-		if (a_version != 1 && a_version != 2) {
+		if (a_version < 1 || a_version > 3) {
 			return true;
 		}
 		const std::lock_guard guard(g_lock);
@@ -747,6 +803,10 @@ namespace badass
 				a_intfc->ReadRecordData(temp);
 			}
 			e.tempHealth = temp != 0;
+			e.scaleBefore = 100;  // versions 1-2 set the scale absolutely (from 100)
+			if (a_version >= 3) {
+				a_intfc->ReadRecordData(e.scaleBefore);
+			}
 			if (!a_intfc->ResolveFormID(id, newId)) {
 				continue;
 			}
@@ -843,6 +903,16 @@ namespace badass
 			g_names = v != 0.0f;
 		} else if (k == "Size") {
 			g_size = v != 0.0f;
+		} else if (k == "CreatureSize") {
+			g_creatureSize = std::clamp(v, 0.0f, 1.0f);
+		} else if (k == "CreatureHealth") {
+			g_creatureHealth = std::clamp(v, 0.0f, 10000.0f);
+		} else if (k == "CreatureHealthPerLevel") {
+			g_creatureHealthPerLevel = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "CreatureGap") {
+			g_creatureGap = std::clamp(v, 0.0f, 1.0f);
+		} else if (k == "CreatureGapMax") {
+			g_creatureGapMax = std::clamp(v, 1.0f, 20.0f);
 		} else if (k == "Drops") {
 			g_drops = v != 0.0f;
 		} else if (k == "DropGun") {
