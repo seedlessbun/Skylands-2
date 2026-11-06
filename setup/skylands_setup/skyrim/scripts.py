@@ -1683,6 +1683,7 @@ def watcher(bolts: bool = True, everyone: bool = False, arm_percent: int | None 
         code=[
             ("cast", ("id", "::temp0"), ("id", "drop")),
             ("jmpf", ("id", "::temp0"), ("lbl", "nothing")),
+            ("callstatic", ("id", "SkylandsNative"), ("id", "TossDrop"), ("id", "::temp0"), ("id", "drop")),  # a small kick up and out (the plugin)
             call("Announce", ("id", "drop")),
             ("jmp", ("lbl", "end")),
             ("label", "nothing"),
@@ -2759,6 +2760,7 @@ def native_stub() -> Script:
             Function("Version", return_type="Int", flags=both),
             Function("TrackBeam", return_type="Bool", flags=both, params=[("akGun", "ObjectReference"), ("akBeam", "ObjectReference"), ("akLight", "ObjectReference")]),
             Function("UntrackBeam", return_type="Bool", flags=both, params=[("akGun", "ObjectReference")]),
+            Function("TossDrop", return_type="Bool", flags=both, params=[("akItem", "ObjectReference")]),
             Function("SetGunMode", return_type="Bool", flags=both, params=[("abOn", "Bool")]),
             Function("TriggerHeld", return_type="Bool", flags=both),
             Function("TriggerPressed", return_type="Bool", flags=both),

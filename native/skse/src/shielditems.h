@@ -13,6 +13,7 @@
 
 #include "PCH.h"
 #include "shield.h"
+#include "toss.h"
 
 #include <charconv>
 #include <mutex>
@@ -27,6 +28,8 @@ namespace shielditems
 
 	inline int  g_slot = 0;           // ShieldSlot: the biped slot (30-61) shield items are worn in; 0 = no shield items in this install
 	inline int   g_enemyPercent = 10;   // EnemyShieldPercent: the chance (percent) that a person of level 1 carries a shield
+	// 1.29.0 (user: melee enemies should be tankier): a person with no Skylands gun has at least this chance (plus EnemyShieldPerLevel a level)
+	inline int   g_unarmedPercent = 60;  // EnemyShieldUnarmedPercent
 	inline float g_perLevel = 2.0f;     // EnemyShieldPerLevel: this many percent more for every level above 1 (the user chose "tougher = more likely"); 100 is the most
 	inline float g_capScale = 1.0f;     // ShieldCapacityScale: every item's capacity is multiplied by this (for testing: 2 doubles every shield)
 	inline int   g_bossLevel = 35;      // ShieldBossLevel: a person this level or higher, or a named one (the base record is "unique"), counts as a boss: always a shield, rare or better, always left on the body
@@ -45,6 +48,7 @@ namespace shielditems
 	inline std::unordered_map<RE::FormID, RE::FormID> g_equipped;    // actor -> the shield item the equip events last said it put on (0: took off)
 	inline std::atomic_bool                          g_ready{ false };
 	inline std::unordered_set<RE::FormID>            g_decided;  // people already rolled this session
+	inline std::unordered_map<RE::FormID, std::chrono::steady_clock::time_point> g_firstSeen;  // 1.29.0: the roll waits until the Hunter script has armed the person
 
 	inline Info Parse(RE::TESObjectARMO* a_armor)
 	{
@@ -130,6 +134,25 @@ namespace shielditems
 	inline RE::BGSBipedObjectForm::BipedObjectSlot Mask()
 	{
 		return static_cast<RE::BGSBipedObjectForm::BipedObjectSlot>(1u << (g_slot - 30));
+	}
+
+	// 1.29.0: does a person hold or carry a Skylands gun?
+	inline bool HasGun(RE::Actor* a_actor)
+	{
+		for (const bool left : { false, true }) {
+			if (const auto f = a_actor->GetEquippedObject(left); f && f->IsWeapon() && static_cast<RE::TESObjectWEAP*>(f)->HasKeywordString("SkylandsGun")) {
+				return true;
+			}
+		}
+		const auto items = a_actor->GetInventory([](RE::TESBoundObject& a_object) {
+			return a_object.IsWeapon() && static_cast<RE::TESObjectWEAP&>(a_object).HasKeywordString("SkylandsGun");
+		});
+		for (const auto& [object, entry] : items) {
+			if (entry.first > 0) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	inline bool InPack(RE::Actor* a_actor, RE::TESObjectARMO* a_armor)
@@ -400,15 +423,30 @@ namespace shielditems
 				continue;
 			}
 			{
+				// 1.29.0: the Hunter script hands out guns when a person appears; wait 3 s so the roll knows whether this one has a gun
 				const std::lock_guard guard(g_lock);
-				if (!g_decided.insert(id).second) {
+				if (g_decided.contains(id)) {
 					continue;
 				}
+				const auto now = std::chrono::steady_clock::now();
+				const auto first = g_firstSeen.try_emplace(id, now).first->second;
+				if (now - first < std::chrono::seconds(3)) {
+					++pending;
+					continue;
+				}
+				g_decided.insert(id);
+				g_firstSeen.erase(id);
 			}
 			// the chance grows with the level (the user's choice); a boss always has one, rare or better, whatever its level
 			const bool boss = IsBoss(actor) && actor->IsHostileToActor(a_player);
 			const int  level = actor->GetLevel();
-			const int  chance = boss ? 100 : static_cast<int>(std::clamp(g_enemyPercent + g_perLevel * (std::max)(0, level - 1), 0.0f, 100.0f));
+			const bool armed = HasGun(actor);
+			const int  base = armed ? g_enemyPercent : (std::max)(g_enemyPercent, g_unarmedPercent);
+			const int  chance = boss ? 100 : static_cast<int>(std::clamp(base + g_perLevel * (std::max)(0, level - 1), 0.0f, 100.0f));
+			static std::atomic_int toldRoll{ 0 };
+			if (toldRoll.fetch_add(1) < 40) {
+				SKSE::log::info("shield items: {:08X} (level {}) {}: shield chance {} percent", id, level, armed ? "carries a gun" : "has no gun", chance);
+			}
 			if (Mix(id) % 100 >= static_cast<std::uint64_t>(chance)) {
 				continue;
 			}
@@ -492,7 +530,7 @@ namespace shielditems
 						return;
 					}
 					if (drop) {
-						actor->RemoveItem(armor, 1, RE::ITEM_REMOVE_REASON::kDropping, nullptr, nullptr);
+						toss::Toss(actor->RemoveItem(armor, 1, RE::ITEM_REMOVE_REASON::kDropping, nullptr, nullptr));
 						SKSE::log::info("shield items: {:08X} died; its shield \"{}\" was dropped on the ground", body, armor->GetName());
 					} else {
 						actor->RemoveItem(armor, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
@@ -517,6 +555,8 @@ namespace shielditems
 			number(0, 61, g_slot);
 		} else if (a_key == "EnemyShieldPercent") {
 			number(0, 100, g_enemyPercent);
+		} else if (a_key == "EnemyShieldUnarmedPercent") {
+			number(0, 100, g_unarmedPercent);
 		} else if (a_key == "EnemyShieldPerLevel") {
 			try {
 				g_perLevel = std::clamp(std::stof(a_value), 0.0f, 20.0f);

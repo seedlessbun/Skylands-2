@@ -36,7 +36,7 @@ def test_the_plugin_rolls_tiers_and_applies_the_stats():
     assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start(holder);" in main and "data.power = badass::GunPower(a_shooter);" in main
     assert "g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID())" in shield and "shield::g_extraMaxOf = &HealthBonusOf;" in h
     assert "shield::g_extraSave.push_back(&Save);" in h and "shield::g_extraSave.push_back(&Save);" in (SRC / "despawn.h").read_text(encoding="utf-8")
-    assert "kVersion = 393" in main and "{ 1, 28, 0, 0 }" in main
+    assert "kVersion = 394" in main and "{ 1, 29, 0, 0 }" in main
 
 
 
@@ -100,3 +100,20 @@ def test_creatures_grow_more_and_low_level_ones_get_a_stat_floor():
     assert "a_intfc->ReadRecordData(e.scaleBefore);" in h and "e.scaleBefore = 100;" in h  # older saves set the scale from 100
     sink = h.split("class CreatureDeathSink")[1].split("\n\t};\n")[0]
     assert "one roll per body" in sink
+
+
+def test_gunless_people_are_likelier_to_carry_a_shield_and_drops_are_tossed():
+    ini = skse.default_ini(slot=59, relic_slot=58).splitlines()
+    for line in ("EnemyShieldUnarmedPercent=60", "DropToss=1", "DropTossUp=260", "DropTossOut=90"):
+        assert line in ini, line
+    items = (SRC / "shielditems.h").read_text(encoding="utf-8")
+    assert "const bool armed = HasGun(actor);" in items and "(std::max)(g_enemyPercent, g_unarmedPercent)" in items
+    assert "now - first < std::chrono::seconds(3)" in items  # the roll waits for the Hunter script to arm the person
+    toss = (SRC / "toss.h").read_text(encoding="utf-8")
+    assert "RE::BSWriteLockGuard guard(world->worldLock);" in toss and "SetLinearVelocity" in toss and "GetWorldScale()" in toss
+    assert "toss::Toss(actor->RemoveItem(" in items and "toss::Toss(dropped);" in (SRC / "relic.h").read_text(encoding="utf-8")
+    assert "toss::Toss(placed.get());" in (SRC / "badass.h").read_text(encoding="utf-8")
+    main = (SRC / "main.cpp").read_text(encoding="utf-8")
+    assert 'RegisterFunction("TossDrop"sv, "SkylandsNative"sv, TossDrop)' in main and "toss::Config(" in main
+    from skylands_setup.skyrim import scripts
+    assert "TossDrop" in [f.name for f in scripts.native_stub().functions]

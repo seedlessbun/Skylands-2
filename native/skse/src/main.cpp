@@ -20,7 +20,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 393;  // 1.28.0
+	constexpr std::int32_t kVersion = 394;  // 1.29.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -143,7 +143,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1)) || toss::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -2421,6 +2421,13 @@ namespace
 		}
 	}
 
+	// 1.29.0: the Hunter script's gun drops get the same small kick as the plugin's own drops
+	bool TossDrop(RE::StaticFunctionTag*, RE::TESObjectREFR* a_item)
+	{
+		toss::Toss(a_item);
+		return a_item != nullptr;
+	}
+
 	bool TrackBeam(RE::StaticFunctionTag*, RE::TESObjectREFR* a_gun, RE::TESObjectREFR* a_beam, RE::TESObjectREFR* a_light)
 	{
 		if (!a_gun) {
@@ -2665,6 +2672,7 @@ namespace
 	{
 		a_vm->RegisterFunction("Version"sv, "SkylandsNative"sv, Version);
 		a_vm->RegisterFunction("TrackBeam"sv, "SkylandsNative"sv, TrackBeam);
+		a_vm->RegisterFunction("TossDrop"sv, "SkylandsNative"sv, TossDrop);
 		a_vm->RegisterFunction("UntrackBeam"sv, "SkylandsNative"sv, UntrackBeam);
 		a_vm->RegisterFunction("SetGunMode"sv, "SkylandsNative"sv, SetGunMode);
 		a_vm->RegisterFunction("TriggerHeld"sv, "SkylandsNative"sv, TriggerHeld);
@@ -2869,7 +2877,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 28, 0, 0 },
+	.Version = { 1, 29, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

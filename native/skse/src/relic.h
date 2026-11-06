@@ -12,6 +12,7 @@
 #include "PCH.h"
 #include "shield.h"
 #include "shielditems.h"
+#include "toss.h"
 
 #include <charconv>
 
@@ -359,7 +360,10 @@ namespace relic
 					if (!armor) {
 						return;
 					}
-					actor->RemoveItem(armor, 1, drop ? RE::ITEM_REMOVE_REASON::kDropping : RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+					const auto dropped = actor->RemoveItem(armor, 1, drop ? RE::ITEM_REMOVE_REASON::kDropping : RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+					if (drop) {
+						toss::Toss(dropped);
+					}
 					SKSE::log::info("relics: {:08X} died; its relic \"{}\" was {}", body, armor->GetName(), drop ? "dropped on the ground" : "not left");
 				});
 			}).detach();

@@ -742,6 +742,13 @@ Other commands:
   not person, else not `IsPerson`) get `BadassCreatureSize` 0.15 more per tier (Badass 1.30, Super 1.60, Ultimate 1.90 x own size); the user's "low-level creatures should still pose a threat": a creature's own health counts as at least
   `BadassCreatureHealth` 20 + `BadassCreatureHealthPerLevel` 5 x player level before the tier multiplies it, and its melee is x(1 + `BadassCreatureGap` 0.05 per level below the player, max `BadassCreatureGapMax` 3) on top of the tier; `CreatureDeathSink`
   rolls once per body (60 s). UNCONFIRMED in game: all of it (that refScale is kept by the save, how big an Ultimate dragon at 1.9 looks).
+- 0.52.0 in game (user, SkylandsNative.log da8de0c5 "SkylandsNative 393"): "everything looked great"; no exception lines; the creature floor and sizes work ("counted as 40: the creature floor at player level 4", mudcrab 0.75 -> 1.20 as a Super).
+  Seen: a Giant 0004BB23 (level 32) was rolled fresh with a maximum health of 132975 BEFORE any bonus (x15 -> 1994625): not explained (another mod/console, or an earlier untracked permanent bonus); ask if it repeats.
+  0.53.0 (TestBuild-164, plugin 1.29.0 = "SkylandsNative 394"), user requests: (1) a person with NO Skylands gun (held or in the pack, `shielditems::HasGun`) has at least `EnemyShieldUnarmedPercent` 60 (+ per level) shield chance, so melee
+  fighters are tankier; the roll now waits 3 s after the pump first sees a person (`g_firstSeen`) so the Hunter script has armed them; log "shield items: .. carries a gun / has no gun: shield chance N percent" (first 40).
+  (2) `toss.h`: dropped items (Badass `PlaceObjectAtMe`, shield/relic `RemoveItem(kDropping)` handles, the Hunter's `Placed` via the new native `TossDrop(ObjectReference) Bool`) get their first rigid body's linear velocity set
+  (`DropTossUp` 260 up, `DropTossOut` 90 sideways, game units/s x `bhkWorld::GetWorldScale()`, under `worldLock`) once their 3D is up (100 ms task while anything waits, 25 tries); log "toss: .. kicked .." (first 12) / "had no 3D/rigid body".
+  UNCONFIRMED in game: all of it (that SetLinearVelocity wakes a resting body, that the lock is safe, that the Papyrus drop gets its 3D in time).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

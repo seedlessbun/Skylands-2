@@ -14,6 +14,7 @@
 
 #include "PCH.h"
 #include "despawn.h"
+#include "toss.h"
 #include "relic.h"
 #include "shield.h"
 #include "shielditems.h"
@@ -450,6 +451,7 @@ namespace badass
 				continue;
 			}
 			const auto placed = body->PlaceObjectAtMe(item, false);
+			toss::Toss(placed.get());
 			const char* name = item->GetName();
 			said += fmt::format("{}\"{}\" ({} {}){}", said.empty() ? "" : ", ", name ? name : "?", despawn::kRarityNames[std::clamp(rarity, 0, 6)], type == 0 ? "gun" : type == 1 ? "shield" : "relic",
 				placed ? "" : " NOT PLACED");
