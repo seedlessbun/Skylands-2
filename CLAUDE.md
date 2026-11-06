@@ -735,6 +735,13 @@ Other commands:
   shield carry x ShieldDropPercent + relic carry x RelicDropPercent) capped at `CreatureDropCap` 60, one item, floor = class `min_rarity`, no shift, gates at the creature's level. A Badass dragon's tier drops are floored at rare. The class
   `badass` column now also keeps mammoths and critters from being rolled. Pending drops are a generic queue (`Pending{n, floor[3], shift[3], level, what}`, `g_pendLock`). Log: "N enemy classes from SkylandsEnemies.txt", "race X is class Y",
   "<id> (creature, class .., level ..) died: drop chance ..% (a person's ..% x ..), rolled ..: drops an item / nothing", "(dragon) dropped 2: ...". UNCONFIRMED in game: all of it (that dying creatures still read as hostile, regex on race ids).
+- 0.51.0 in game (user, SkylandsNative.log bfeb0801 "SkylandsNative 392"): no crash/fault lines; classes loaded and races mapped; creature drops and tier drops all within their floors; "plenty of badass creatures, they all
+  dropped what they should". Relics came up in 4 of 11 tier items (expected 12.1 % per item: unlucky, binomial ~4 %; the per-item odds were laid out for the user). FOUND in the log: (1) the size never reached the tier for small races:
+  `GetScale` = reference scale x race/base height (mudcrab 0.75), so "GetScale < 1.15" stayed true, SetScale(1.15) read back 0.86 and was set again every 500 ms (log spam "size 0.86 -> 0.86"); (2) one mudcrab's death event arrived twice
+  (two drop rolls). 0.52.0 (TestBuild-163, plugin 1.28.0 = "SkylandsNative 393"): `Present` grows the reference's own `refScale` from what it was when rolled (`Entry.scaleBefore`, co-save 'BDAS' v3; v1/v2 entries = 100); creatures (`IsCreature`: class kind
+  not person, else not `IsPerson`) get `BadassCreatureSize` 0.15 more per tier (Badass 1.30, Super 1.60, Ultimate 1.90 x own size); the user's "low-level creatures should still pose a threat": a creature's own health counts as at least
+  `BadassCreatureHealth` 20 + `BadassCreatureHealthPerLevel` 5 x player level before the tier multiplies it, and its melee is x(1 + `BadassCreatureGap` 0.05 per level below the player, max `BadassCreatureGapMax` 3) on top of the tier; `CreatureDeathSink`
+  rolls once per body (60 s). UNCONFIRMED in game: all of it (that refScale is kept by the save, how big an Ultimate dragon at 1.9 looks).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
