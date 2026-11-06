@@ -18,6 +18,7 @@
 #include "shield.h"
 #include "shielditems.h"
 
+#include <regex>
 #include <thread>
 
 namespace badass
@@ -91,8 +92,91 @@ namespace badass
 		return (edid.find("Dragon") != std::string_view::npos && edid.find("DragonPriest") == std::string_view::npos) || (race && race->HasKeywordString("ActorTypeDragon"));
 	}
 
+	// ---- the enemy classes (sheets/enemy_stats.json, written by the installer to Data\SKSE\Plugins\SkylandsEnemies.txt): matched by the race's editor id ----
+	struct Class
+	{
+		std::string id, kind;  // kind: person, creature, dragon, critter
+		std::regex  rx;
+		float       dropScale = 0.5f;
+		int         minRarity = 1;
+		bool        badass = true;
+	};
+	inline std::vector<Class>                  g_classes;  // filled once at data load, read only after
+	inline std::mutex                          g_classLock;
+	inline std::unordered_map<RE::FormID, int> g_classOfRace;
+	inline bool  g_creatureDrops = true, g_dragonBoss = true;
+	inline float g_creatureScale = 0.5f, g_creatureCap = 60.0f, g_gunPercent = 25.0f;
+
+	inline void LoadClasses()
+	{
+		std::ifstream f("Data/SKSE/Plugins/SkylandsEnemies.txt");
+		std::string   line;
+		while (f && std::getline(f, line)) {
+			if (!line.empty() && line.back() == '\r') {
+				line.pop_back();
+			}
+			if (line.rfind("class\t", 0) != 0) {
+				continue;
+			}
+			std::vector<std::string> cols;
+			std::size_t              start = 6;
+			for (std::size_t tab; (tab = line.find('\t', start)) != std::string::npos; start = tab + 1) {
+				cols.push_back(line.substr(start, tab - start));
+			}
+			cols.push_back(line.substr(start));
+			if (cols.size() < 6) {
+				continue;
+			}
+			try {
+				Class c;
+				c.id = cols[0];
+				c.rx = std::regex(cols[1], std::regex::ECMAScript | std::regex::icase);
+				c.kind = cols[2];
+				c.dropScale = std::stof(cols[3]);
+				c.minRarity = std::clamp(std::stoi(cols[4]), 1, 6);
+				c.badass = cols[5] == "yes";
+				g_classes.push_back(std::move(c));
+			} catch (...) {
+				SKSE::log::warn("badass: enemy class line not understood: {}", line);
+			}
+		}
+		std::string names;
+		for (const auto& c : g_classes) {
+			names += (names.empty() ? "" : ", ") + c.id;
+		}
+		SKSE::log::info("badass: {} enemy classes from SkylandsEnemies.txt ({})", g_classes.size(), names.empty() ? "none: every creature uses CreatureDropScale" : names);
+	}
+
+	inline int ClassOf(RE::Actor* a_actor)  // -1: no row for its race
+	{
+		const auto race = a_actor ? a_actor->GetRace() : nullptr;
+		if (!race) {
+			return -1;
+		}
+		const std::lock_guard guard(g_classLock);
+		if (const auto it = g_classOfRace.find(race->GetFormID()); it != g_classOfRace.end()) {
+			return it->second;
+		}
+		const std::string edid = race->formEditorID.c_str() ? race->formEditorID.c_str() : "";
+		int               found = -1;
+		for (int i = 0; i < static_cast<int>(g_classes.size()) && found < 0; ++i) {
+			if (!edid.empty() && std::regex_search(edid, g_classes[i].rx)) {
+				found = i;
+			}
+		}
+		g_classOfRace[race->GetFormID()] = found;
+		static std::atomic_int told{ 0 };
+		if (told.fetch_add(1) < 40) {
+			SKSE::log::info("badass: race {} is class {}", edid, found >= 0 ? g_classes[found].id : std::string("(none)"));
+		}
+		return found;
+	}
+
 	inline bool Eligible(RE::Actor* a_actor, RE::PlayerCharacter* a_player)
 	{
+		if (const int c = ClassOf(a_actor); c >= 0 && !g_classes[c].badass) {
+			return false;  // the sheet says this kind is never a Badass (mammoths, critters)
+		}
 		return a_actor && !a_actor->IsPlayerRef() && !a_actor->IsDead() && !a_actor->IsChild() && !a_actor->IsPlayerTeammate() && !a_actor->IsCommandedActor() && !a_actor->IsSummoned() &&
 		       !a_actor->IsEssential() && !a_actor->IsProtected() && a_actor->IsHostileToActor(a_player);
 	}
@@ -300,28 +384,31 @@ namespace badass
 
 	struct Pending
 	{
-		RE::FormID        id;
-		int               tier;
-		Clock::time_point due;
+		RE::FormID        id = 0;
+		int               n = 0;            // items
+		int               floor[3]{};       // each item's lowest rarity
+		int               shift[3]{};       // and how far its weights are moved up
+		int               level = 1;        // the rarity gates' level
+		std::string       what;             // for the log
+		Clock::time_point due{};
 	};
-	inline std::vector<Pending> g_pending;  // game thread only
+	inline std::mutex           g_pendLock;
+	inline std::vector<Pending> g_pending;
 	inline std::atomic_uint64_t g_dropSerial{ 1 };
 
-	inline void Drop(const Pending& a_p, int a_playerLevel)
+	inline void Drop(const Pending& a_p)
 	{
 		const auto body = RE::TESForm::LookupByID<RE::Actor>(a_p.id);
 		if (!body || !body->GetParentCell()) {
 			return;
 		}
 		ReadGuns();
-		const int   t = std::clamp(a_p.tier, 1, 3);
-		const int   level = std::max(a_playerLevel, kGateLevel[t]);
+		const int   level = a_p.level;
 		std::string said;
-		for (int i = 0; i < t; ++i) {
+		for (int i = 0; i < std::clamp(a_p.n, 0, 3); ++i) {
 			int        rarity = 0, type = 0;
 			const auto seed = shielditems::Mix(a_p.id ^ (g_dropSerial.fetch_add(1) * 0x9E3779B97F4A7C15ULL));
-			// each guaranteed item is shifted up to its own floor (BL2: an Ultimate drops a very rare, a rare and an uncommon; 0.50.0 shifted all three by the tier: three epics)
-			const auto item = PickDrop(seed, kFloors[t][i] - 1, kFloors[t][i], level, rarity, type);
+			const auto item = PickDrop(seed, a_p.shift[i], a_p.floor[i], level, rarity, type);
 			if (!item) {
 				said += (said.empty() ? "" : ", ") + std::string("nothing to pick");
 				continue;
@@ -333,9 +420,95 @@ namespace badass
 		}
 		static std::atomic_int told{ 0 };
 		if (told.fetch_add(1) < 60) {
-			SKSE::log::info("badass: {:08X} ({}) dropped {}: {} (rarity gates at level {})", a_p.id, kTierNames[t], t, said, level);
+			SKSE::log::info("badass: {:08X} ({}) dropped {}: {} (rarity gates at level {})", a_p.id, a_p.what, a_p.n, said, level);
 		}
 	}
+
+	// ---- creature drops (stage 3, docs/badass-roadmap.md 3.5): a creature that dies hostile to the player rolls once ----
+	// chance = its class's drop_scale x what a person of its level leaves on average (a gun CreatureGunPercent + the shield carry x ShieldDropPercent + the relic carry x
+	// RelicDropPercent), at most CreatureDropCap; one item, the usual rarity weights at the creature's level. A dragon always drops two (rare or better, gates at level 15+),
+	// another boss creature one (rare or better). A Badass creature has its tier's guaranteed drop instead.
+	inline float PersonChance(int a_level)
+	{
+		const float l = static_cast<float>(std::max(0, a_level - 1));
+		const float shieldCarry = std::clamp(static_cast<float>(shielditems::g_enemyPercent) + shielditems::g_perLevel * l, 0.0f, 100.0f);
+		const float relicCarry = std::clamp(static_cast<float>(relic::g_enemyPercent) + relic::g_perLevel * l, 0.0f, 100.0f);
+		return g_gunPercent + shieldCarry * static_cast<float>(shielditems::g_dropPercent) / 100.0f + relicCarry * static_cast<float>(relic::g_dropPercent) / 100.0f;
+	}
+
+	class CreatureDeathSink : public RE::BSTEventSink<RE::TESDeathEvent>
+	{
+	public:
+		static CreatureDeathSink* Get()
+		{
+			static CreatureDeathSink sink;
+			return std::addressof(sink);
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override
+		{
+			shield::g_stage = "badass: creature death";
+			const auto player = RE::PlayerCharacter::GetSingleton();
+			if (!g_on || !g_creatureDrops || !a_event || !a_event->actorDying || !player) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			const auto actor = a_event->actorDying->As<RE::Actor>();
+			if (!actor || actor->IsPlayerRef() || TierOf(actor->GetFormID()) > 0) {
+				return RE::BSEventNotifyControl::kContinue;  // a Badass has its own drop
+			}
+			const int         c = ClassOf(actor);
+			const std::string kind = c >= 0 ? g_classes[c].kind : (shielditems::IsPerson(actor) ? "person" : "creature");
+			if (kind == "person" || kind == "critter" || actor->IsChild() || actor->IsPlayerTeammate() || actor->IsCommandedActor() || actor->IsSummoned()) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			if (!actor->IsHostileToActor(player)) {
+				static std::atomic_int calm{ 0 };
+				if (calm.fetch_add(1) < 10) {
+					SKSE::log::info("badass: {:08X} (creature) died but was not hostile to the player: no drop", actor->GetFormID());
+				}
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			const int   level = actor->GetLevel();
+			const int   floor = c >= 0 ? g_classes[c].minRarity : 1;
+			const char* raw = actor->GetName();
+			Pending     p;
+			p.id = actor->GetFormID();
+			p.level = level;
+			if (kind == "dragon" && g_dragonBoss) {
+				p.n = 2;
+				p.floor[0] = p.floor[1] = std::max(floor, 3);
+				p.shift[0] = p.shift[1] = p.floor[0] - 1;
+				p.level = std::max(level, 15);
+				p.what = "dragon";
+			} else if (shielditems::IsBoss(actor)) {
+				p.n = 1;
+				p.floor[0] = std::max(floor, 3);
+				p.shift[0] = p.floor[0] - 1;
+				p.level = std::max(level, 15);
+				p.what = "boss creature";
+			} else {
+				const float scale = c >= 0 ? g_classes[c].dropScale : g_creatureScale;
+				const float chance = std::min(g_creatureCap, PersonChance(level) * scale);
+				const float roll = static_cast<float>(shielditems::Mix(p.id ^ 0xC4EA7ULL ^ (g_dropSerial.fetch_add(1) << 20)) % 10000ULL) / 100.0f;
+				static std::atomic_int told{ 0 };
+				if (told.fetch_add(1) < 40) {
+					SKSE::log::info("badass: {:08X} \"{}\" (creature, class {}, level {}) died: drop chance {:.1f}% (a person's {:.1f}% x {:.2f}), rolled {:.1f}: {}", p.id, raw ? raw : "?",
+						c >= 0 ? g_classes[c].id : std::string("none"), level, chance, PersonChance(level), scale, roll, roll < chance ? "drops an item" : "nothing");
+				}
+				if (roll >= chance) {
+					return RE::BSEventNotifyControl::kContinue;
+				}
+				p.n = 1;
+				p.floor[0] = floor;
+				p.shift[0] = 0;
+				p.what = "creature";
+			}
+			p.due = Clock::now() + std::chrono::milliseconds(1600);
+			const std::lock_guard guard(g_pendLock);
+			g_pending.push_back(std::move(p));
+			return RE::BSEventNotifyControl::kContinue;
+		}
+	};
 
 	// ---- the pass (game thread, every 500 ms) ----
 	inline void Scan()
@@ -410,16 +583,42 @@ namespace badass
 			}
 			Strip(s.actor, e, "died");
 			if (g_drops && e.tier > 0) {
-				g_pending.push_back({ s.id, e.tier, Clock::now() + std::chrono::milliseconds(1600) });  // after the shield and relic drops of the body (0.9 and 1.1 s)
+				// each guaranteed item is shifted up to its own floor (BL2: an Ultimate drops a very rare, a rare and an uncommon)
+				const int t = std::clamp(e.tier, 1, 3);
+				Pending   p;
+				p.id = s.id;
+				p.n = t;
+				p.level = std::max(level, kGateLevel[t]);
+				p.what = kTierNames[t];
+				for (int i = 0; i < t; ++i) {
+					p.floor[i] = kFloors[t][i];
+					p.shift[i] = kFloors[t][i] - 1;
+				}
+				if (const int c = ClassOf(s.actor); c >= 0 && g_classes[c].kind == "dragon") {  // a Badass dragon: never below rare
+					for (int i = 0; i < t; ++i) {
+						p.floor[i] = std::max(p.floor[i], 3);
+						p.shift[i] = p.floor[i] - 1;
+					}
+				}
+				p.due = Clock::now() + std::chrono::milliseconds(1600);  // after the shield and relic drops of the body (0.9 and 1.1 s)
+				const std::lock_guard guard(g_pendLock);
+				g_pending.push_back(std::move(p));
 			}
 		}
-		for (auto it = g_pending.begin(); it != g_pending.end();) {
-			if (Clock::now() >= it->due) {
-				Drop(*it, level);
-				it = g_pending.erase(it);
-			} else {
-				++it;
+		std::vector<Pending> due;
+		{
+			const std::lock_guard guard(g_pendLock);
+			for (auto it = g_pending.begin(); it != g_pending.end();) {
+				if (Clock::now() >= it->due) {
+					due.push_back(std::move(*it));
+					it = g_pending.erase(it);
+				} else {
+					++it;
+				}
 			}
+		}
+		for (const auto& p : due) {
+			Drop(p);
 		}
 		for (const auto& s : shown) {
 			Present(s.actor, TierOf(s.id));
@@ -568,8 +767,12 @@ namespace badass
 		g_entries.clear();
 	}
 
-	inline void Start()
+	inline void Start(RE::ScriptEventSourceHolder* a_holder)
 	{
+		LoadClasses();
+		if (a_holder) {
+			a_holder->AddEventSink(CreatureDeathSink::Get());
+		}
 		shield::g_extraSave.push_back(&Save);
 		shield::g_extraLoad.push_back(&Load);
 		shield::g_extraRevert.push_back(&Revert);
@@ -599,6 +802,24 @@ namespace badass
 
 	inline bool Config(const std::string& a_key, const std::string& a_value)
 	{
+		if (a_key == "CreatureDrops" || a_key == "DragonBoss" || a_key == "CreatureDropScale" || a_key == "CreatureDropCap" || a_key == "CreatureGunPercent") {
+			try {
+				const float v = std::stof(a_value);
+				if (a_key == "CreatureDrops") {
+					g_creatureDrops = v != 0.0f;
+				} else if (a_key == "DragonBoss") {
+					g_dragonBoss = v != 0.0f;
+				} else if (a_key == "CreatureDropScale") {
+					g_creatureScale = std::clamp(v, 0.0f, 10.0f);
+				} else if (a_key == "CreatureDropCap") {
+					g_creatureCap = std::clamp(v, 0.0f, 100.0f);
+				} else {
+					g_gunPercent = std::clamp(v, 0.0f, 100.0f);
+				}
+			} catch (...) {
+			}
+			return true;
+		}
 		if (!a_key.starts_with("Badass")) {
 			return false;
 		}

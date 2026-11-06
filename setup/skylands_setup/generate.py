@@ -84,6 +84,23 @@ class Masters:
         return r
 
 
+ENEMY_TABLE = "SkylandsEnemies.txt"
+
+
+def write_enemy_classes(out_data: Path) -> Path:
+    """Data\\SKSE\\Plugins\\SkylandsEnemies.txt: one line per row of sheets/enemy_stats.json (tab separated: class, id, race pattern without the (?i) flag, kind,
+    drop scale, lowest rarity, may be a Badass). The plugin matches a dying or rolled actor's race editor id against the patterns, first match wins."""
+    lines = ["# Skylands enemy classes (written by the installer from sheets/enemy_stats.json; read by SkylandsNative.dll at data load)",
+             "# class\tid\trace pattern\tkind\tdrop scale\tlowest rarity\tbadass"]
+    for row in S.ENEMY_STATS.values():
+        pattern = row.race_pattern.replace("(?i)", "")
+        lines.append("\t".join(["class", row.id, pattern, row.kind, f"{row.drop_scale:g}", str(row.min_rarity), row.badass]))
+    dest = Path(out_data) / "SKSE" / "Plugins"
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / ENEMY_TABLE).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return dest / ENEMY_TABLE
+
+
 def copy(rec: Record, new_type: str | None = None) -> esp.Rec:
     return esp.Rec(new_type or rec.type, rec.form_id, list(rec.subrecords), flags=rec.flags & esp.REC_COMPRESSED)
 
@@ -1454,6 +1471,9 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         except Exception as e:  # noqa: BLE001 - the voices must never stop the install
             report["voices_error"] = f"{type(e).__name__}: {e}"
             report.setdefault("model_log", []).append(f"voices: not built ({type(e).__name__}: {e})")
+
+    # ---- the enemy classes for the plugin's Badass and creature drops (sheets/enemy_stats.json; written fresh every install) -----------
+    write_enemy_classes(out_data)
 
     # ---- files ------------------------------------------------------------------------------------
     (out_data / PLUGIN).write_bytes(p.encode())

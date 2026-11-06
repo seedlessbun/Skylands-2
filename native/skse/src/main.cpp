@@ -20,7 +20,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 391;  // 1.26.1
+	constexpr std::int32_t kVersion = 392;  // 1.27.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -2739,7 +2739,7 @@ namespace
 				// loose drops go when the player is far from them (despawn.h); their beams with them
 				despawn::g_onRemoved = &DropBeamOf;
 				despawn::Start(holder);
-				badass::Start();  // Badass enemies, stage 1: tiers and stats
+				badass::Start(holder);  // Badass enemies, stage 1: tiers and stats
 			}
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
@@ -2869,7 +2869,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 26, 1, 0 },
+	.Version = { 1, 27, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

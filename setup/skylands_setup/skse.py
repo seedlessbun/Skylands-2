@@ -285,6 +285,9 @@ def badass_ini() -> str:
     """The Badass block (docs/badass-roadmap.md 3.1, 3.2): numbers from sheets/badass_tiers.json."""
     from .sheet_data import BADASS_TIERS as T
     from .sheet_data import ENEMY_DROPS as D
+    from .sheet_data import GENERATION
+
+    G = GENERATION["main"]
 
     b, s, u = T["badass"], T["super"], T["ultimate"]
     def num(v: float) -> str:
@@ -318,6 +321,14 @@ def badass_ini() -> str:
         f"BadassDropGun={num(D['gun_weight'].value)}",
         f"BadassDropShield={num(D['shield_weight'].value)}",
         f"BadassDropRelic={num(D['relic_weight'].value)}",
+        "; creature drops: a creature that dies hostile to you drops one item with (its class's drop scale, sheets/enemy_stats.json; else CreatureDropScale) x a person's",
+        "; chance at its level (a gun CreatureGunPercent + shield carry x ShieldDropPercent + relic carry x RelicDropPercent), at most CreatureDropCap percent;",
+        "; DragonBoss=1: dragons always drop two items, rare or better",
+        "CreatureDrops=1",
+        f"CreatureDropScale={num(D['creature_drop_scale'].value)}",
+        f"CreatureDropCap={num(D['creature_drop_cap'].value)}",
+        f"CreatureGunPercent={G.drop_chance}",
+        "DragonBoss=1",
     ]) + "\n"
 
 

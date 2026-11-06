@@ -33,10 +33,10 @@ def test_the_plugin_rolls_tiers_and_applies_the_stats():
     assert "ACTOR_VALUE_MODIFIER::kTemporary" in h and "0x53414442" in h  # tracked temporary modifiers, co-save 'BDAS'
     assert "IsPlayerTeammate()" in h and "IsCommandedActor()" in h and "IsHostileToActor(a_player)" in h and "IsChild()" in h
     # wiring: settings, start, the guns of a Badass, the shield sized without the bonus, co-save hooks shared with despawn
-    assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start();" in main and "data.power = badass::GunPower(a_shooter);" in main
+    assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start(holder);" in main and "data.power = badass::GunPower(a_shooter);" in main
     assert "g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID())" in shield and "shield::g_extraMaxOf = &HealthBonusOf;" in h
     assert "shield::g_extraSave.push_back(&Save);" in h and "shield::g_extraSave.push_back(&Save);" in (SRC / "despawn.h").read_text(encoding="utf-8")
-    assert "kVersion = 391" in main and "{ 1, 26, 1, 0 }" in main
+    assert "kVersion = 392" in main and "{ 1, 27, 0, 0 }" in main
 
 
 
@@ -65,4 +65,23 @@ def test_the_health_bonus_is_permanent_so_the_enemy_bar_shows_it():
 
 def test_each_guaranteed_item_is_shifted_to_its_own_floor():
     h = (SRC / "badass.h").read_text(encoding="utf-8")
-    assert "PickDrop(seed, kFloors[t][i] - 1, kFloors[t][i], level, rarity, type)" in h
+    assert "PickDrop(seed, a_p.shift[i], a_p.floor[i], level, rarity, type)" in h and "p.shift[i] = kFloors[t][i] - 1;" in h
+
+
+def test_creatures_drop_by_their_class_and_dragons_always_drop(tmp_path):
+    from skylands_setup import generate
+    from skylands_setup.sheet_data import ENEMY_STATS
+    path = generate.write_enemy_classes(tmp_path)
+    rows = [l.split("\t") for l in path.read_text(encoding="utf-8").splitlines() if l.startswith("class\t")]
+    assert len(rows) == len(ENEMY_STATS)
+    by_id = {r[1]: r for r in rows}
+    assert by_id["dragon"][3] == "dragon" and by_id["critter"][4] == "0" and by_id["wolf"][4] == "0.5" and "(?i)" not in by_id["wolf"][2]
+    assert by_id["mammoth"][6] == "no"
+    ini = skse.default_ini().splitlines()
+    for line in ("CreatureDrops=1", "CreatureDropScale=0.5", "CreatureDropCap=60", "CreatureGunPercent=25", "DragonBoss=1"):
+        assert line in ini, line
+    h = (SRC / "badass.h").read_text(encoding="utf-8")
+    sink = h.split("class CreatureDeathSink")[1].split("\n\t};\n")[0]
+    assert "TierOf(actor->GetFormID()) > 0" in sink and 'kind == "critter"' in sink and "IsHostileToActor(player)" in sink
+    assert 'kind == "dragon" && g_dragonBoss' in sink and "p.n = 2;" in sink and "PersonChance(level) * scale" in sink
+    assert "a_holder->AddEventSink(CreatureDeathSink::Get());" in h and "std::regex::icase" in h and "badass::Start(holder);" in (SRC / "main.cpp").read_text(encoding="utf-8")
