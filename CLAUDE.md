@@ -767,6 +767,9 @@ Other commands:
   shot within `ProfKillGrace` 0.25 s), kill XP stays, Badasses same XP per damage. 0.53.3 (TestBuild-167, python only, plugin 1.29.1): `progressprobe --deep` / `Check-BL2-Progress-Deep.bat` (writes
   `work\bl2-progress-deep-report.txt`): D1 whole groups `gd_ai_balance.xp`, `gd_balance_experience.*`, `gd_challenges.badassskill/badassrewards` and the combat/loot `gd_challenges.*` groups in full, D2 `GD_Globals.General.Globals`
   + class defaults in full, D3 a 2-level follow. NEXT: the deep report and the user's approval; then stage 1 (kill XP).
+- PROGRESS DEEP REPORT READ (TestBuild-167, 19,588 lines; facts in `docs/progression-roadmap.md` 1.3b): XP multipliers Chump 0.5 / Normal 0.75 / NormalHigh 1.0 / Tough 1.25 / ToughHigh 1.5 / Badass 3 / Super 10 / Ultimate 20 / Boss 40;
+  level gap above x1.00..1.15, below x0.90/0.70/0.40/0.15/0.05/0.01 (1..6+); challenge level points 5 x (1,5,10,50,100); token N needs rank N^1.8; token stat = 1 % x tokens^0.75. Challenge GOALS are in `:ChallengeConditionDefinition_<n>`
+  sub-objects (not printed: the deep pass skips ':' paths; a third pass at the Badass Rank stage). New game: none required (co-save record, records appended last); suggested for judging the kill-XP pace (roadmap 3.9).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

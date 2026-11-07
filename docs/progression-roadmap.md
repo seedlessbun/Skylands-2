@@ -1,6 +1,6 @@
 # Character progression for Skylands guns: plan (phase 1 deliverable)
 
-Status: **REVISED after the user's third round (section 2, item 11) and the survey report (section 1.3). No feature code is built.** The deep survey (0.53.3, TestBuild-167) fills the numbers still missing. Stage 0 (the BL2 survey) is in 0.53.2 / TestBuild-166 (python only, plugin unchanged at 1.29.1).
+Status: **REVISED after the user's third round (section 2, item 11) and the survey report (section 1.3). No feature code is built.** The deep survey (0.53.3, TestBuild-167) is READ (1.3b). New game: section 3.9. Stage 0 (the BL2 survey) is in 0.53.2 / TestBuild-166 (python only, plugin unchanged at 1.29.1).
 Written from the code at 0.53.1 and the user's interview answers (section 2). **Confirmed** = read in the code or a log of this project. **Unconfirmed** = my reading or a guess,
 with how it will be checked. No Borderlands 2 install is available to this session, so no BL2 numbers are read yet: every number below marked *design* is a placeholder that the
 survey report replaces where BL2 has one (the user's rule: BL2 file values replace static values).
@@ -70,6 +70,18 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 * The survey itself: `progressprobe.py` (`Check-BL2-Progress.bat`, `python -m skylands_setup bl2progress`), all by name; `--deep` (0.53.3, `Check-BL2-Progress-Deep.bat`, writes
   `work\bl2-progress-deep-report.txt`) dumps the objects named above in full, by the paths THIS report gave.
 
+### 1.3b The deep survey (READ: the user's `bl2-progress-deep-report.txt` of TestBuild-167, 19,588 lines, every section ran)
+* **XP multiplier per enemy kind** (`GD_AI_Balance.XP.XPMultiplier_*`, `Multiplier` constant, Level 1, Power 1): Chump 0.5, Normal 0.75, NormalHigh 1.0, Tough 1.25, ToughHigh 1.5,
+  **Badass 3, Super Badass 10, Ultimate Badass 20, Boss 40**. Skylands reads them against NormalHigh = 1.0 (an ordinary Skyrim enemy).
+* **XP by level difference** (`Globals.ExpScaleByLevelDifference`): enemy ABOVE the player by 1..6+ levels x1.00 / 1.03 / 1.06 / 1.09 / 1.12 / 1.15; BELOW by 1..6+ levels
+  x0.90 / 0.70 / 0.40 / 0.15 / 0.05 / 0.01. (Party weights `ExpAwardWeights` are co-op only: 1 player = x1.0.)
+* **Badass Rank:** a challenge level gives `Init_BadassPointsReward` (5) x the level's scale (SMG Kills: 1, 5, 10, 50, 100 for its five levels = 5 / 25 / 50 / 250 / 500 points);
+  the rank needed for the Nth token is `N ^ 1.8` (`Init_BadassRanksRequiredForToken`; the unit of "rank" against points is not proven); each token stat is `1.0 x tokens ^ 0.75`
+  (`Att_BadassBonusBase` 1.0, `Att_BadassBonusDiminisher` 0.75, all 14 `Init_BadassBonusCalc_*` alike) x 1 % (`BadassSkill` "Badassitude", `MT_Scale` 0.01; negative for the stats where
+  smaller is better: shield delay, accuracy spread, fire interval, recoil, reload time). So 1 token = +1 %, 10 tokens = +5.6 %, 50 tokens = +18.8 %, 100 tokens = +31.6 %.
+* **Not read yet:** each challenge level's GOAL (the count): it sits in `<challenge>:ChallengeConditionDefinition_<n>` sub-objects that the deep pass did not print. Needed only for the
+  Badass Rank stage; a small third pass then.
+
 ## 2. Interview answers (the design inputs)
 
 1. **Skills:** none for now. "I'd like to get a feel for a version of XP on enemy kill, and gaining weapon stats through a Weapon Proficiency system."
@@ -103,10 +115,10 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   - `threshold(Lp)` = the game's own `levelThreshold` read at the kill (so it follows any change to the level settings).
   - `KillXPKillsPerLevel` **30** (the user's pick): 30 kills of regular enemies of your own level fill one level, at every level (vanilla skills keep adding their own XP on top).
     Tunable after the first play test.
-  - `shape(Le, Lp)` = BL2's kill XP at the enemy's level over BL2's kill XP at the player's level, `(10 x Le + 4) / (10 x Lp + 4)` (**bl2**, section 1.3), times BL2's level-difference
-    factor `ExpScaleByLevelDifference` (deep survey; fallback *design* `clamp(1 + 0.10 x (Le - Lp), 0.1, 2.0)`).
-  - `tier` = BL2's `XPMultiplier_06_Badass / 07_SuperBadass / 08_UltimateBadass` over `02_Normal` (deep survey; fallback *design* 3 / 5 / 10); `boss` = `09_Boss` over `02_Normal` (fallback 5),
-    dragons count as bosses.
+  - `shape(Le, Lp)` = BL2's kill XP at the enemy's level over BL2's kill XP at the player's level, `(10 x Le + 4) / (10 x Lp + 4)` (**bl2**, 1.3), times BL2's level-difference
+    factor (**bl2**, 1.3b): above x1.00..1.15, below x0.90 / 0.70 / 0.40 / 0.15 / 0.05 / 0.01 (6+ levels below: 1 %).
+  - `tier` (**bl2**, 1.3b): Badass x3, Super Badass x10, Ultimate Badass x20; `boss` x40 (`IsBoss`; dragons count as bosses). With `KillXPMaxShare` 0.5 a boss or Ultimate gives at most
+    half a level.
   - A creature counts like a person (same formula; its class `drop_scale` is not used for XP).
 * **Applying it:** amounts are summed and given at most every 250 ms on the game thread: `data->xp += amount`. If `xp >= levelThreshold` the game should offer the level-up in the
   Skills menu (UNCONFIRMED). Stage 1 logs before/after (`xp`, `levelThreshold`, level) for the first 10 kills, and shows its own notice "Level up! Open the Skills menu" the first time
@@ -181,6 +193,16 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   appended **last** in `SkylandsGunModels.esp` so no older form id moves (a test asserts it, as for the voice records); `Skylands.esp` is untouched (byte-identical test). The gun's
   numbers keyword itself is not changed (changing its text could split shared keywords and move ids).
 
+### 3.9 Does any of this need a NEW GAME? (the user asked)
+Nothing REQUIRES one; two things SUGGEST one for the first test:
+* **No new game needed for the saves:** progress lives in a new co-save record ('PROF'); an old save without it simply starts every track at 0. Kill XP goes into Skyrim's own level meter.
+  The maker keywords (stage 2) are new records appended LAST in `SkylandsGunModels.esp`, so no existing form id moves (a test asserts it), and no Papyrus property changes (no ghost scripts).
+* **Suggested, to judge the PACE fairly:** the kill XP is sized against your current level, and BL2's level-gap rule gives almost nothing for enemies far below you (6+ levels below = 1 %).
+  An existing high-level character in cleared or low-level areas would see tiny XP and think it is broken; a new character from level 1 sees the intended 30 same-level kills per level.
+  Proficiencies start at 0 either way, but a fresh run shows how they grow from the first fight.
+* **Later stages:** Badass Rank is shared across characters through its own file (no new game); a token power, if chosen over a hot key, is a new record appended last (an existing save may
+  need the quest-start check described in CLAUDE.md lesson "Quest start"). If any later stage DOES move ids, the build notes will say so in advance.
+
 ### 3.8 Badass Rank (stages 4-5, LATER, after the user has played with 1-3)
 * **Challenges:** BL2's list from the report (P2), adapted: kept when Skylands can count it (kills by gun type, by element, by enemy kind, Badass kills by tier, bosses, shields broken
   (`shield.h` break), damage dealt, critical hits once a head-hit test exists, reloads, kills while the shield is down, ...); dropped when it cannot (vehicles, co-op, grenades,
@@ -232,5 +254,4 @@ After the survey report: the numbers go into `sheets/progression.json` (`source:
 * **Other mods:** none in the user's setup; an XP mod that hooks the same `xp` value would add to ours (ini `KillXP` 0 turns ours off).
 
 ## 6. Questions still open for you
-None about the design: round 3 answered the last three (bodies give nothing, kill XP stays, Badasses give the same XP per damage). Waiting for: your approval of this roadmap, and the
-deep survey report (`Check-BL2-Progress-Deep.bat`), whose tier multipliers and level-gap table go into stage 1 (until then stage 1 would use the fallbacks in 3.1).
+None about the design. The deep report is read (1.3b). Waiting for: your approval to build stage 1 (kill XP).
