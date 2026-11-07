@@ -42,6 +42,7 @@ namespace prof
 	inline float g_xpScale = 0.1f, g_base = 50.0f, g_step = 15.0f, g_killGrace = 0.25f;
 	inline int   g_statsPerLevel = 1;
 	inline float g_milestoneMult = 3.0f, g_decay = 0.75f, g_otherMakers = 0.25f, g_ownMaker = 1.0f, g_launcherProj = 0.5f;
+	inline float g_secondary = 0.5f;  // a maker's second stat grows at this share of the first (the user: half, a secondary bonus)
 	inline float g_start[kStats] = { 2.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f };
 	inline float g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f };
 	inline bool  g_hud = true, g_notices = true;
@@ -77,12 +78,14 @@ namespace prof
 		const bool milestone = Milestone(a_n);
 		if (a_maker >= 0) {
 			if (milestone) {
-				for (const int s : kMakerStats[a_maker]) {
-					a_out[s] += StepOf(s, passed) * g_milestoneMult;
+				for (int i = 0; i < 2; ++i) {
+					const int s = kMakerStats[a_maker][i];
+					a_out[s] += StepOf(s, passed) * g_milestoneMult * (i == 0 ? 1.0f : g_secondary);
 				}
 			} else {
-				const int s = kMakerStats[a_maker][(a_n - 1) % 2];
-				a_out[s] += StepOf(s, passed);
+				const int i = (a_n - 1) % 2;
+				const int s = kMakerStats[a_maker][i];
+				a_out[s] += StepOf(s, passed) * (i == 0 ? 1.0f : g_secondary);
 			}
 			return;
 		}
@@ -131,9 +134,13 @@ namespace prof
 			}
 		}
 		for (int m = 0; m < kMakers; ++m) {
-			const float share = m == a_maker ? g_ownMaker : g_otherMakers;
-			for (int s = 0; s < kStats; ++s) {
-				a_out[s] += g_makerBonus[m][s] * share;
+			if (m == a_maker) {  // its own maker: both stats in full
+				for (int s = 0; s < kStats; ++s) {
+					a_out[s] += g_makerBonus[m][s] * g_ownMaker;
+				}
+			} else {  // every other gun: only that maker's PRIMARY stat, at the share (the secondary is for the maker's own guns)
+				const int s = kMakerStats[m][0];
+				a_out[s] += g_makerBonus[m][s] * g_otherMakers;
 			}
 		}
 		if (a_type == kLauncher) {
@@ -358,8 +365,8 @@ namespace prof
 		shield::g_extraSave.push_back(&Save);
 		shield::g_extraLoad.push_back(&Load);
 		shield::g_extraRevert.push_back(&Revert);
-		SKSE::log::info("prof: {}; XP = damage x {:.2f}, level n costs {:.0f} + {:.0f} x n, {} stat(s) a level, milestones x{:.1f}, decay {:.2f}, other makers x{:.2f}, own maker x{:.2f}, launchers' projectiles x{:.2f}",
-			g_on ? "on" : "off", g_xpScale, g_base, g_step, g_statsPerLevel, g_milestoneMult, g_decay, g_otherMakers, g_ownMaker, g_launcherProj);
+		SKSE::log::info("prof: {}; XP = damage x {:.2f}, level n costs {:.0f} + {:.0f} x n, {} stat(s) a level, milestones x{:.1f}, decay {:.2f}, other makers' primary stat x{:.2f}, own maker x{:.2f} (its second stat x{:.2f}), launchers' projectiles x{:.2f}",
+			g_on ? "on" : "off", g_xpScale, g_base, g_step, g_statsPerLevel, g_milestoneMult, g_decay, g_otherMakers, g_ownMaker, g_secondary, g_launcherProj);
 	}
 
 	inline bool Config(const std::string& a_key, const std::string& a_value)
@@ -403,6 +410,8 @@ namespace prof
 			g_decay = std::clamp(v, 0.0f, 1.0f);
 		} else if (k == "OtherMakers") {
 			g_otherMakers = std::clamp(v, 0.0f, 10.0f);
+		} else if (k == "SecondaryShare") {
+			g_secondary = std::clamp(v, 0.0f, 10.0f);
 		} else if (k == "OwnMaker") {
 			g_ownMaker = std::clamp(v, 0.0f, 10.0f);
 		} else if (k == "LauncherProjectiles") {

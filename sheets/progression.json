@@ -154,7 +154,14 @@
    "value": 0.25,
    "source": "design",
    "bl2_object": "-",
-   "note": "... and every other maker's track at this share (the user: a quarter)"
+   "note": "... and every other maker's PRIMARY stat at this share (the user: a quarter; the second stat is only for the maker's own guns)"
+  },
+  {
+   "id": "ProfSecondaryShare",
+   "value": 0.5,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "a maker's second stat grows at this share of its first (the user: half, a secondary bonus)"
   },
   {
    "id": "ProfLauncherProjectiles",

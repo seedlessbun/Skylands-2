@@ -797,6 +797,11 @@ Other commands:
   and `tfProfM` "Jakobs 2" (gold) at y 46 of the ammo clip with 88-unit bars `profTFill`/`profMFill` at y 66. Ini `Prof*` keys (`sheets/progression.json`, `progression_ini`). Log: "prof: on; ...", the first 30 "prof: hit <id> by gun .. (type, maker): magnitude x power = damage -> XP",
   "prof: gun <id> (type / maker): damage +..% ..." when the held gun's bonuses change, "prof: N bonus projectile(s)", "prof: save/load - SMG n, ...". NEEDS A FRESH INSTALL (new keywords; no older id moves, so the save stays). UNCONFIRMED in game: all of it
   (that the maker keyword is read, the HUD layout, that launch power scales damage (unconfirmed since 0.42.0), the extra projectiles).
+- 0.55.0 in game (user, SkylandsNative.log edfb681f "SkylandsNative 398"): the HUD line works (user: "great"); log: "prof: on", maker keywords read (gun check "type 0, maker 1" ...), 30 "prof: hit" lines
+  (magnitude 8.00 x power 1.00 -> 0.80 XP), level-ups (SMG 1 +2% damage, Bandit 1 +3% magazine, Bandit 2 +2% fire rate, Shotgun 2, Hyperion 2), other makers' quarters on a gun, 'PROF' save/load across loads, no exception lines.
+  Not seen yet: bonus projectile lines (no track reached a projectile level). 0.56.0 (TestBuild-171, plugin 1.32.0 = "SkylandsNative 399"), the user's maker rule: a maker's second stat grows at HALF the first's step
+  (`ProfSecondaryShare` 0.5, `g_secondary`), and other makers' guns get only the maker's PRIMARY stat (`kMakerStats[m][0]`) at `ProfOtherMakers` 0.25; the own maker's guns get both. Legendary: PROPOSAL in
+  `docs/progression-roadmap.md` 3.6 (box trigger, cap 100 + 10, flat +3 %, `ProfTestLevels`), awaiting the user's answers; nothing built.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

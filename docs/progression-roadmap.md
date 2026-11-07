@@ -157,8 +157,9 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 * **Manufacturer tracks** use the same points and levels but raise only that maker's signature stats (*design*, from BL2's manufacturer styles): Jakobs damage, Maliwan damage
   (elemental guns; the elemental effect chance does not exist in Skylands yet) and accuracy, Dahl accuracy and reload, Vladof fire rate and magazine, Tediore reload and magazine,
   Torgue damage and bonus projectiles, Bandit magazine and fire rate, Hyperion accuracy and damage. A level gives 1 of its two stats (alternating), milestones both at 3x.
-* **The user's rule:** every gun gets **25 %** (`ProfOtherMakers` 0.25) of the bonuses of every OTHER maker's track and **100 %** of its own maker's track (the user: full bonus only,
-  1.0x, not 1.25x).
+  **0.56.0 (the user):** the first stat is the PRIMARY, the second a SECONDARY at **half** the step (`ProfSecondaryShare` 0.5). Jakobs level 10 = damage +16 %, fire rate +7 %.
+* **The user's rule (0.56.0):** a gun gets **100 %** of its own maker's track (both stats; full bonus only, 1.0x, not 1.25x), and from every OTHER maker's track only the
+  **primary** stat at **25 %** (`ProfOtherMakers` 0.25); a maker's secondary stat helps that maker's own guns only.
 * **Applied in the plugin, per shot, on top of relics:** fire interval / (relic rate x prof rate), reload / (relic x prof), spread / (relic x prof), clip x relic x prof, power x relic x prof
   (damage), extra projectiles. Nothing goes through actor values (no clash with relics, nothing for a load to drop).
 * **Bonus projectiles:** chance c (percent): each shot fires floor(c / 100) extra projectiles plus one more with probability (c mod 100) / 100; a shotgun applies it **per pellet**
@@ -183,10 +184,19 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   - display: `ProfHud` 1, `ProfNotices` 1, `ProfLog` 1.
   Gone from the first draft: `ProfWindow`, `ProfHitCap` (no measured damage any more). New keys take defaults; the user's values are kept (`merge_ini`).
 
-### 3.6 LATER (jotted down by the user, not built until asked): Legendary proficiencies
-* A track can be made Legendary when it reaches its cap: 100 the first time, +10 for each Legendary after (110, 120, ...). Making it Legendary resets the track to level 0 (its level
-  bonuses go), and gives a flat bonus to every stat of that track (*design* +2 % each, +5 points bonus projectiles) that stays, so each round ends with higher stats and a longer climb.
-  While Legendary is not built, tracks have no cap (the user's answer 6). How it is triggered (a power, a key, a confirm box from the plugin's `MessageBoxData`) is asked then.
+### 3.6 Legendary proficiencies (PROPOSAL 0.56.0, awaiting the user's answers; nothing built)
+The user's idea: a track can be made Legendary when it reaches its cap: 100 the first time, +10 for each Legendary after (110, 120, ...). Making it Legendary resets the track to
+level 0 (its level bonuses go) and gives a flat bonus to every stat of that track that stays, so each round ends with higher stats and a longer climb.
+Proposed defaults (*design*, every number an ini key `ProfLegendary...`):
+* **Cap:** `ProfLegendaryCap` 100 + `ProfLegendaryCapStep` 10 x Legendaries so far. At the cap the track stops taking XP (the overflow is kept, at most one level's worth, and counts
+  after the reset). Tracks with no cap until now: a save with a track above 100 is held at its level (nothing taken away) and can go Legendary at once.
+* **Trigger:** a confirm box from the plugin (`RE::MessageBoxData`: "Make your SMG proficiency Legendary? It goes back to level 0 and every SMG stat gets +X % for good." Yes / Later),
+  shown when a track reaches its cap and again the next time a gun of that track is drawn while it waits. No power, no key, no Papyrus (no ghost scripts).
+* **Flat bonus per Legendary:** type tracks every stat +3 % (bonus projectiles +5 points); maker tracks their primary +3 % and secondary +1.5 % (same sharing rule as 3.3: other
+  makers' guns get a quarter of the primary). Kept in the 'PROF' record's reserved `legendary` count (no new record version).
+* **Display:** the HUD line shows stars: `SMG 12 *2` (2 Legendaries); the level-up notice at the cap says "SMG proficiency 100: Legendary ready". The bar turns gold at the cap.
+* **Test aid:** ini `ProfTestLevels` N (0 = off) adds N levels to every track on the next load, so the reset can be tried without 800,000 damage.
+Open questions for the user: the trigger (box / key / automatic), the size of the flat bonus, whether maker tracks go Legendary too, what the HUD shows.
 
 ### 3.7 The gun's type and maker in the plugin (stage 2)
 * Type: from the ammo index (1.2), no record change. Maker: a new keyword `SkylandsMaker_<n>` (8 keywords, 0 Bandit .. 7 Vladof, `manufacturers.json` order) on every gun, records

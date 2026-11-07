@@ -75,8 +75,9 @@ def _gains(maker, n, stats_per_level=1):
     out = [0.0] * 6
     if maker is not None:
         pair = [(4, 3), (1, 2), (1, 0), (0, 3), (0, 1), (2, 4), (0, 5), (3, 4)][maker]
-        for s in (pair if mile(n) else (pair[(n - 1) % 2],)):
-            out[s] += step(s) * (mult if mile(n) else 1)
+        for i in ((0, 1) if mile(n) else ((n - 1) % 2,)):
+            s = pair[i]
+            out[s] += step(s) * (mult if mile(n) else 1) * (1.0 if i == 0 else 0.5)
         return out
     first = ((n - 1) * stats_per_level) % 6
     for i in range(4 if mile(n) else stats_per_level):
@@ -95,3 +96,17 @@ def test_the_type_track_bonus_table_matches_the_roadmap():
     assert [round(x, 1) for x in total] == [17.5, 11.5, 11.5, 15.5, 18.8, 25.0]
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
     assert "{ kMag, kRate }, { kAccuracy, kReload }, { kAccuracy, kDamage }, { kDamage, kRate }" in prof and "{ kDamage, kAccuracy }, { kReload, kMag }, { kDamage, kProj }, { kRate, kMag }" in prof
+
+
+def test_a_makers_second_stat_is_half_and_only_its_own_guns_get_it():
+    # Jakobs (3): damage first, fire rate second; level 10 = 5 ordinary levels of damage (2 %), 4 of fire rate at half (1 %), the milestone both x3 (fire rate at half)
+    total = [0.0] * 6
+    for n in range(1, 11):
+        total = [a + b for a, b in zip(total, _gains(3, n))]
+    assert [round(x, 2) for x in total] == [10.0 + 6.0, 0, 0, 4.0 + 3.0, 0, 0]
+    prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
+    assert "(i == 0 ? 1.0f : g_secondary)" in prof and "g_secondary = 0.5f" in prof and 'k == "SecondaryShare"' in prof
+    # every other gun: only the maker's PRIMARY stat, at the quarter
+    assert "const int s = kMakerStats[m][0];\n\t\t\t\ta_out[s] += g_makerBonus[m][s] * g_otherMakers;" in prof
+    from skylands_setup import skse
+    assert "ProfSecondaryShare=0.5" in skse.progression_ini()
