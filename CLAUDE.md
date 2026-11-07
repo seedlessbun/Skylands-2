@@ -802,6 +802,11 @@ Other commands:
   Not seen yet: bonus projectile lines (no track reached a projectile level). 0.56.0 (TestBuild-171, plugin 1.32.0 = "SkylandsNative 399"), the user's maker rule: a maker's second stat grows at HALF the first's step
   (`ProfSecondaryShare` 0.5, `g_secondary`), and other makers' guns get only the maker's PRIMARY stat (`kMakerStats[m][0]`) at `ProfOtherMakers` 0.25; the own maker's guns get both. Legendary: PROPOSAL in
   `docs/progression-roadmap.md` 3.6 (box trigger, cap 100 + 10, flat +3 %, `ProfTestLevels`), awaiting the user's answers; nothing built.
+- 0.57.0 (TestBuild-172, plugin 1.33.0 = "SkylandsNative 400"), the user's numbers (confirmed before building): (1) maker tracks: steps = type starts x `ProfMakerStartScale` 0.2083, GROWING x `ProfMakerGrowth` 1.105
+  a milestone, no floor (`MakerStepOf`): Bandit magazine +5 % at 10, +50 % at 100. (2) LEGENDARY, gun type tracks only (makers never cap/reset): cap `ProfLegendaryCap` 100 + 10 a Legendary, type-track `Gains` uses level
+  ((n-1) % cap) + 1 (falloff restarts), a Legendary resets to 0 and keeps `ProfLegendaryKeep` 10 % of the track at its cap (`g_typeKept`, recomputed from the `legendary` count already in 'PROF' v1); trigger = hold the
+  reload key `ProfLegendaryHold` 2 s with a gun of the capped type (`g_reloadHeldS` from `HeldDuration`, `prof::MakeLegendary` in TickGun); HUD "SMG 100 MAX" (gold) / "SMG 12 *2". (3) knobs `ProfTypeRate/MakerRate` (XP),
+  `ProfTypeBonus/MakerBonus` (strength), `ProfTestLevels` (adds levels on the first load of a session; needs a save with a 'PROF' record). UNCONFIRMED in game: all of it (the hold on the reload key, the notices).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

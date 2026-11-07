@@ -70,8 +70,12 @@ def _gains(maker, n, stats_per_level=1):
     # a Python copy of proficiency.h's Gains with the default numbers, to pin the bonus tables the roadmap shows
     start, floor, mult, decay = [2, 2, 2, 2, 3, 4], [0.5, 0.5, 0.5, 0.5, 1, 1], 3.0, 0.75
     mile = lambda k: k in (10, 25, 50, 75, 100) or (k > 100 and k % 50 == 0)  # noqa: E731
+    if maker is None:
+        n = (n - 1) % 100 + 1  # the type track's falloff starts again every 100 levels (Legendary)
     passed = sum(1 for m in range(1, n) if mile(m))
     step = lambda s: max(floor[s], start[s] * decay ** passed)  # noqa: E731
+    if maker is not None:
+        step = lambda s: start[s] * 0.208333 * 1.105 ** passed  # noqa: E731  (maker tracks grow)
     out = [0.0] * 6
     if maker is not None:
         pair = [(4, 3), (1, 2), (1, 0), (0, 3), (0, 1), (2, 4), (0, 5), (3, 4)][maker]
@@ -103,10 +107,44 @@ def test_a_makers_second_stat_is_half_and_only_its_own_guns_get_it():
     total = [0.0] * 6
     for n in range(1, 11):
         total = [a + b for a, b in zip(total, _gains(3, n))]
-    assert [round(x, 2) for x in total] == [10.0 + 6.0, 0, 0, 4.0 + 3.0, 0, 0]
+    assert [round(x, 2) for x in total] == [3.33, 0, 0, 1.46, 0, 0]  # 1.33.0: the growing maker curve (a fifth of the old steps)
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
     assert "(i == 0 ? 1.0f : g_secondary)" in prof and "g_secondary = 0.5f" in prof and 'k == "SecondaryShare"' in prof
     # every other gun: only the maker's PRIMARY stat, at the quarter
     assert "const int s = kMakerStats[m][0];\n\t\t\t\ta_out[s] += g_makerBonus[m][s] * g_otherMakers;" in prof
     from skylands_setup import skse
     assert "ProfSecondaryShare=0.5" in skse.progression_ini()
+
+
+def _track(maker, level):
+    total = [0.0] * 6
+    for n in range(1, level + 1):
+        total = [a + b for a, b in zip(total, _gains(maker, n))]
+    return total
+
+
+def test_the_maker_curve_grows_to_the_users_numbers():
+    # the user: Bandit's magazine about +5 % at level 10 and +50 % at level 100
+    assert round(_track(0, 10)[4], 1) == 5.0 and round(_track(0, 100)[4], 1) == 50.0
+    assert round(_track(0, 100)[3], 1) == 16.5  # its secondary, fire rate
+    prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
+    assert "g_makerStartScale = 0.208333f, g_makerGrowth = 1.105f" in prof and "MakerStepOf(s, passed)" in prof
+
+
+def test_legendary_keeps_a_tenth_of_each_round_and_the_falloff_restarts():
+    assert [round(x, 1) for x in _track(None, 100)] == [29.8, 25.3, 27.8, 33.7, 46.4, 54.7]
+    assert [round(x, 1) for x in _track(None, 110)] == [39.8, 29.3, 31.8, 41.7, 58.4, 70.7]  # 101-110 = 1-10 again
+    kept = [0.0] * 6
+    for r in range(3):
+        kept = [k + 0.1 * b for k, b in zip(kept, _track(None, 100 + 10 * r))]
+    assert [round(x, 1) for x in kept] == [11.2, 8.7, 9.3, 11.9, 16.8, 20.2]
+    prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
+    main = (SRC / "main.cpp").read_text(encoding="utf-8")
+    for text in ("((a_n - 1) % g_legCap) + 1", "Recompute(-1, g_legCap + g_legCapStep * r, round)", "round[s] * g_legKeep", "g_typeBonus[a_type][s] + g_typeKept[a_type][s]",
+                 "inline bool MakeLegendary(int a_type)", "xp * g_typeRate", "xp * g_makerRate", 'k == "TestLevels"'):
+        assert text in prof, text
+    assert "prof::MakeLegendary(g_gun.info.type)" in main and "button->HeldDuration()" in main and '" MAX"' in main
+    from skylands_setup import skse
+    ini = skse.progression_ini()
+    for key in ("ProfTypeRate=1", "ProfMakerRate=1", "ProfTypeBonus=1", "ProfMakerBonus=1", "ProfLegendaryCap=100", "ProfLegendaryKeep=0.1", "ProfTestLevels=0"):
+        assert key in ini, key

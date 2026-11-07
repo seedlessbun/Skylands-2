@@ -21,11 +21,12 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 399;  // 1.32.0
+	constexpr std::int32_t kVersion = 400;  // 1.33.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
 	std::atomic_bool g_reloadLatch{ false };  // the reload key went down (cleared by the tick)
+	std::atomic<float> g_reloadHeldS{ 0.0f };  // 1.33.0: how long the reload key has been held (0 when up): a Legendary is made by holding it
 	std::atomic_bool g_aimHeld{ false };  // the aim button ("Left Attack/Block": right mouse by default) is down
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
 
@@ -211,6 +212,7 @@ namespace
 					if (button->IsDown()) {
 						g_reloadLatch = true;
 					}
+					g_reloadHeldS = button->IsPressed() ? (std::max)(0.01f, button->HeldDuration()) : 0.0f;
 					continue;
 				}
 				if (button->GetDevice() != RE::INPUT_DEVICE::kKeyboard && button->IsDown()) {  // what the mouse and pad buttons send (the first thirty), to see which code a side button has
@@ -2194,7 +2196,9 @@ namespace
 		const bool profShow = prof::g_on && prof::g_hud && ptype >= 0 && ptype < prof::kTypes;
 		if (profShow) {
 			const auto v = prof::ViewOf(ptype, pmaker);
-			HudText(movie.get(), "_root.SkylandsHUD.tfProfT", fmt::format("<p align=\"left\"><font face=\"$EverywhereBoldFont\" size=\"14\" color=\"#8CD2FF\">{} {}</font></p>", prof::kTypeShort[ptype], v.typeLevel), lastProfT);
+			// 1.33.0: "SMG 12 *2" (two Legendaries), gold "SMG 100 MAX" at the cap
+			HudText(movie.get(), "_root.SkylandsHUD.tfProfT", fmt::format("<p align=\"left\"><font face=\"$EverywhereBoldFont\" size=\"14\" color=\"{}\">{} {}{}{}</font></p>", v.typeReady ? "#FFD700" : "#8CD2FF",
+				prof::kTypeShort[ptype], v.typeLevel, v.typeLegendary > 0 ? fmt::format(" *{}", v.typeLegendary) : std::string(), v.typeReady ? " MAX" : ""), lastProfT);
 			const bool maker = pmaker >= 0 && pmaker < prof::kMakers;
 			HudText(movie.get(), "_root.SkylandsHUD.tfProfM", maker ? fmt::format("<p align=\"left\"><font face=\"$EverywhereBoldFont\" size=\"14\" color=\"#FFB428\">{} {}</font></p>", prof::kMakerNames[pmaker], v.makerLevel) : std::string(), lastProfM);
 			const auto scaleBar = [&](const char* a_path, float a_frac, int& a_last) {
@@ -2373,6 +2377,23 @@ namespace
 		float pb[prof::kStats];
 		prof::BonusFor(g_gun.info.type, g_gun.info.maker, pb);
 		g_profProj = pb[prof::kProj];
+		{
+			// 1.33.0: the gun's type track at its cap goes Legendary while the reload key is held ProfLegendaryHold seconds (once per press)
+			static bool legDone = false, legTold = false;
+			const float held = g_reloadHeldS.load();
+			if (held <= 0.0f) {
+				legDone = legTold = false;
+			} else if (!legDone && prof::g_legOn && prof::Ready(g_gun.info.type)) {
+				if (!legTold && held > 0.3f) {
+					legTold = true;
+					RE::SendHUDMessage::ShowHUDMessage(fmt::format("Keep holding to make your {} proficiency Legendary...", prof::kTypeNames[g_gun.info.type]).c_str(), nullptr, true);
+				}
+				if (held >= prof::g_legHold) {
+					legDone = true;
+					prof::MakeLegendary(g_gun.info.type);
+				}
+			}
+		}
 		{
 			static float lastPb[prof::kStats]{};
 			if (!std::equal(std::begin(pb), std::end(pb), std::begin(lastPb))) {
@@ -3043,7 +3064,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 32, 0, 0 },
+	.Version = { 1, 33, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

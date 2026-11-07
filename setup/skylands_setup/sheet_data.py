@@ -377,6 +377,18 @@ PROGRESSION: dict[str, ProgressionRow] = {
     'ProfHud': ProgressionRow(id='ProfHud', value=1.0, source='design', bl2_object='-', note="1 = the held gun's type and maker levels under the ammo display"),
     'ProfNotices': ProgressionRow(id='ProfNotices', value=1.0, source='design', bl2_object='-', note='1 = a notice at every proficiency level-up'),
     'ProfLogHits': ProgressionRow(id='ProfLogHits', value=30.0, source='design', bl2_object='-', note='the first N proficiency hits are written to SkylandsNative.log'),
+    'ProfTypeRate': ProgressionRow(id='ProfTypeRate', value=1.0, source='design', bl2_object='-', note="ROUGH RATE: gun type tracks' XP times this (2 = levels twice as fast, 0.5 = half)"),
+    'ProfMakerRate': ProgressionRow(id='ProfMakerRate', value=1.0, source='design', bl2_object='-', note="ROUGH RATE: manufacturer tracks' XP times this"),
+    'ProfTypeBonus': ProgressionRow(id='ProfTypeBonus', value=1.0, source='design', bl2_object='-', note='ROUGH STRENGTH: every bonus a gun type level gives times this (Legendary keeps follow it)'),
+    'ProfMakerBonus': ProgressionRow(id='ProfMakerBonus', value=1.0, source='design', bl2_object='-', note='ROUGH STRENGTH: every bonus a manufacturer level gives times this'),
+    'ProfMakerStartScale': ProgressionRow(id='ProfMakerStartScale', value=0.208333, source='design', bl2_object='-', note="manufacturer steps = the type track's start steps x this (Bandit magazine 0.625 % a level)"),
+    'ProfMakerGrowth': ProgressionRow(id='ProfMakerGrowth', value=1.105, source='design', bl2_object='-', note='manufacturer steps grow this much at each milestone (no cap: +5 % magazine at level 10, +50 % at 100)'),
+    'ProfLegendary': ProgressionRow(id='ProfLegendary', value=1.0, source='design', bl2_object='-', note='1 = gun type tracks cap and can go Legendary (manufacturer tracks never cap or reset)'),
+    'ProfLegendaryCap': ProgressionRow(id='ProfLegendaryCap', value=100.0, source='design', bl2_object='-', note='the first cap; also how often the falloff starts again (level 101 gives what level 1 gave)'),
+    'ProfLegendaryCapStep': ProgressionRow(id='ProfLegendaryCapStep', value=10.0, source='design', bl2_object='-', note='each Legendary raises the cap by this'),
+    'ProfLegendaryKeep': ProgressionRow(id='ProfLegendaryKeep', value=0.1, source='design', bl2_object='-', note='a Legendary keeps this share of everything the track had at its cap, for good'),
+    'ProfLegendaryHold': ProgressionRow(id='ProfLegendaryHold', value=2.0, source='design', bl2_object='-', note='seconds to hold the reload key, with a gun of a capped type in hand, to go Legendary'),
+    'ProfTestLevels': ProgressionRow(id='ProfTestLevels', value=0.0, source='design', bl2_object='-', note='TESTING: on the first load of a session every track gets this many levels (type tracks at most to their cap); 0 = off'),
 }
 
 @dataclass(frozen=True)

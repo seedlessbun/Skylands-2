@@ -184,19 +184,19 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   - display: `ProfHud` 1, `ProfNotices` 1, `ProfLog` 1.
   Gone from the first draft: `ProfWindow`, `ProfHitCap` (no measured damage any more). New keys take defaults; the user's values are kept (`merge_ini`).
 
-### 3.6 Legendary proficiencies (PROPOSAL 0.56.0, awaiting the user's answers; nothing built)
-The user's idea: a track can be made Legendary when it reaches its cap: 100 the first time, +10 for each Legendary after (110, 120, ...). Making it Legendary resets the track to
-level 0 (its level bonuses go) and gives a flat bonus to every stat of that track that stays, so each round ends with higher stats and a longer climb.
-Proposed defaults (*design*, every number an ini key `ProfLegendary...`):
-* **Cap:** `ProfLegendaryCap` 100 + `ProfLegendaryCapStep` 10 x Legendaries so far. At the cap the track stops taking XP (the overflow is kept, at most one level's worth, and counts
-  after the reset). Tracks with no cap until now: a save with a track above 100 is held at its level (nothing taken away) and can go Legendary at once.
-* **Trigger:** a confirm box from the plugin (`RE::MessageBoxData`: "Make your SMG proficiency Legendary? It goes back to level 0 and every SMG stat gets +X % for good." Yes / Later),
-  shown when a track reaches its cap and again the next time a gun of that track is drawn while it waits. No power, no key, no Papyrus (no ghost scripts).
-* **Flat bonus per Legendary:** type tracks every stat +3 % (bonus projectiles +5 points); maker tracks their primary +3 % and secondary +1.5 % (same sharing rule as 3.3: other
-  makers' guns get a quarter of the primary). Kept in the 'PROF' record's reserved `legendary` count (no new record version).
-* **Display:** the HUD line shows stars: `SMG 12 *2` (2 Legendaries); the level-up notice at the cap says "SMG proficiency 100: Legendary ready". The bar turns gold at the cap.
-* **Test aid:** ini `ProfTestLevels` N (0 = off) adds N levels to every track on the next load, so the reset can be tried without 800,000 damage.
-Open questions for the user: the trigger (box / key / automatic), the size of the flat bonus, whether maker tracks go Legendary too, what the HUD shows.
+### 3.6 Legendary proficiencies (BUILT 0.57.0 / plugin 1.33.0, the user's rules)
+* **Gun type tracks only.** Manufacturer tracks never cap or reset; their steps instead GROW (below).
+* **Cap** `ProfLegendaryCap` 100 + `ProfLegendaryCapStep` 10 x Legendaries. At the cap the track takes no more levels (one level's worth of XP waits), the HUD shows "SMG 100 MAX" in gold,
+  a notice says "LEGENDARY READY". **Trigger:** hold the reload key `ProfLegendaryHold` 2 s with a gun of that type in hand (a box from the plugin was dropped: its queue call is not in
+  the CommonLib headers and would be a guess).
+* **Reset and keep:** the track goes to level 0, and keeps `ProfLegendaryKeep` 10 % of everything it had at the cap for good (worked out from the Legendary count, so ini changes apply to old ones).
+* **Falloff restarts every 100 levels:** level 101 gives what level 1 gave, 110 what 10 gave (milestone), so each higher cap ends a round with more and each Legendary keeps more:
+  kept per Legendary (damage / accuracy / reload / fire rate / magazine % / projectile points) 1st 3.0/2.5/2.8/3.4/4.6/5.5, 2nd 4.0/2.9/3.2/4.2/5.8/7.1, 3rd 4.3/3.2/3.3/4.3/6.3/7.7,
+  4th 4.7/3.8/4.0/5.0/6.7/8.2, 5th 5.0/4.0/4.3/5.3/6.9/8.4, 6th 5.2/4.5/4.7/5.7/7.7/8.9 (tested in `tests/test_progress.py`).
+* **Maker curve (0.57.0):** steps = the type track's starts x `ProfMakerStartScale` 0.2083, growing x `ProfMakerGrowth` 1.105 at each milestone, no floor: Bandit magazine +5.0 % at level 10,
+  +11.9 at 25, +23.4 at 50, +50.0 at 100 (the other primaries two thirds of that, secondaries half the step).
+* **Rough knobs:** `ProfTypeRate` / `ProfMakerRate` (XP), `ProfTypeBonus` / `ProfMakerBonus` (bonus strength), plus `ProfXPScale`, `ProfBase`, `ProfStep`. `ProfTestLevels` N adds N levels to every
+  track on the first load of a session (type tracks at most to the cap) for testing.
 
 ### 3.7 The gun's type and maker in the plugin (stage 2)
 * Type: from the ammo index (1.2), no record change. Maker: a new keyword `SkylandsMaker_<n>` (8 keywords, 0 Bandit .. 7 Vladof, `manufacturers.json` order) on every gun, records
