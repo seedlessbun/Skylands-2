@@ -749,6 +749,10 @@ Other commands:
   (2) `toss.h`: dropped items (Badass `PlaceObjectAtMe`, shield/relic `RemoveItem(kDropping)` handles, the Hunter's `Placed` via the new native `TossDrop(ObjectReference) Bool`) get their first rigid body's linear velocity set
   (`DropTossUp` 260 up, `DropTossOut` 90 sideways, game units/s x `bhkWorld::GetWorldScale()`, under `worldLock`) once their 3D is up (100 ms task while anything waits, 25 tries); log "toss: .. kicked .." (first 12) / "had no 3D/rigid body".
   UNCONFIRMED in game: all of it (that SetLinearVelocity wakes a resting body, that the lock is safe, that the Papyrus drop gets its 3D in time).
+- 0.53.0 in game (user, SkylandsNative.log e7560015 "SkylandsNative 394"): no exception lines; the toss works ("toss: .. kicked 231 up, 82 out (after 0 tries)", 12 lines, guns, shields, relics, a Badass mudcrab's drop) but "a lot still stuck in the body".
+  0.53.1 (TestBuild-165, plugin 1.29.1 = "SkylandsNative 395"): `DropTossUp` 420 / `DropTossOut` 150 (`DropTossRev=2` makes `merge_ini` put an old file's 260/90 back to the new defaults once); 450 ms after a kick an item that moved under 30 units is kicked
+  again x1.4 (log "moved only N units after its kick: kicked again, harder"). Creature drops go through the same `badass::Drop` path (tossed). UNCONFIRMED in game. NEXT FEATURE: character progression, see `docs/handoff-character-progression.md`
+  (gun XP into Skyrim skills/levels, weapon proficiencies, later Badass Rank challenges and tokens; planning + interview first).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
