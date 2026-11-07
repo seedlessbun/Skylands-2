@@ -753,6 +753,13 @@ Other commands:
   0.53.1 (TestBuild-165, plugin 1.29.1 = "SkylandsNative 395"): `DropTossUp` 420 / `DropTossOut` 150 (`DropTossRev=2` makes `merge_ini` put an old file's 260/90 back to the new defaults once); 450 ms after a kick an item that moved under 30 units is kicked
   again x1.4 (log "moved only N units after its kick: kicked again, harder"). Creature drops go through the same `badass::Drop` path (tossed). UNCONFIRMED in game. NEXT FEATURE: character progression, see `docs/handoff-character-progression.md`
   (gun XP into Skyrim skills/levels, weapon proficiencies, later Badass Rank challenges and tokens; planning + interview first).
+- PROGRESSION, PHASE 1 (0.53.2, TestBuild-166, python only, plugin unchanged 1.29.1 = "SkylandsNative 395"): interview done, `docs/progression-roadmap.md` WRITTEN, AWAITING APPROVAL (no feature code). The user's answers: NO skill
+  training; kills with a Skylands gun give CHARACTER XP straight to the level meter (BL2's shape, surveyed, rescaled to Skyrim's threshold; pace ~ vanilla Archery); DAMAGE dealt feeds weapon proficiencies per TYPE (6) and per
+  MANUFACTURER (8); every gun gets a quarter of every maker track's bonuses and its own maker's in full; stats: damage, accuracy, reload, fire rate, magazine, bonus projectile chance (>100 % = guaranteed extras); no cap, slowing
+  down, milestone levels (10, 25, 50, ...) give 3-4 bigger bonuses, the step shrinks after each milestone to a floor (fire rate 0.5 %); level-up notices + a HUD line under the ammo; per character (co-save). LATER: "Legendary" reset
+  (cap 100, +10 each time, flat bonus to every stat), Badass Rank (BL2's challenges adapted, tokens "pick one of five", SHARED across characters with an ini switch). Survey `progressprobe.py` (`python -m skylands_setup bl2progress`,
+  `Check-BL2-Progress.bat`, writes `work\bl2-progress-report.txt`): P0 name tables, P1 experience groups + GD_Globals, P2 challenge groups, P3 badass rank objects, P4 Default__ objects; all by name, packages opened once
+  (`badassprobe.objects_in_groups`). NEXT: the user's approval of the roadmap (section 6 has 5 small questions) and the report; then stage 1 (kill XP).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
