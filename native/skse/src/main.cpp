@@ -17,10 +17,11 @@
 #include "voices.h"
 #include "despawn.h"
 #include "badass.h"
+#include "progress.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 395;  // 1.29.1
+	constexpr std::int32_t kVersion = 396;  // 1.30.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -143,7 +144,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1)) || toss::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1)) || toss::Config(key, line.substr(eq + 1)) || progress::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -2748,6 +2749,13 @@ namespace
 				despawn::g_onRemoved = &DropBeamOf;
 				despawn::Start(holder);
 				badass::Start(holder);  // Badass enemies, stage 1: tiers and stats
+				// character progression, stage 1: kill XP into the level meter (progress.h)
+				progress::g_isGun = [](RE::FormID a_source) -> bool {
+					GunInfo    info;
+					const auto weapon = RE::TESForm::LookupByID<RE::TESObjectWEAP>(a_source);
+					return weapon && GunOf(weapon, info);
+				};
+				progress::Start(holder);
 			}
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
@@ -2877,7 +2885,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 29, 1, 0 },
+	.Version = { 1, 30, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

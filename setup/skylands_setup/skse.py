@@ -351,8 +351,21 @@ def badass_ini() -> str:
     ]) + "\n"
 
 
+def progression_ini() -> str:
+    """The kill XP block (docs/progression-roadmap.md 3.1): numbers from sheets/progression.json (Borderlands 2's tier multipliers, the user's pace)."""
+    from .sheet_data import PROGRESSION as P
+
+    lines = ["; Character progression, stage 1: kills with a Skylands gun give character XP (your level meter). One regular kill of your own level gives",
+             "; 1/KillXPKillsPerLevel of a level; higher-level enemies give more, lower ones much less (Borderlands 2: 6+ levels below you = 1 %).",
+             "; Badass / Super / Ultimate / boss multipliers are Borderlands 2's; one kill gives at most KillXPMaxShare of a level."]
+    for row in P.values():
+        lines.append(f"; {row.note}")
+        lines.append(f"{row.id}={row.value:g}")
+    return "\n".join(lines) + "\n"
+
+
 def default_ini(bl2_values: dict | None = None, slot: int = 0, relic_slot: int = 0) -> str:
-    return DEFAULT_INI.rstrip("\n") + "\n" + badass_ini() + shield_ini(bl2_values, slot, relic_slot)
+    return DEFAULT_INI.rstrip("\n") + "\n" + badass_ini() + progression_ini() + shield_ini(bl2_values, slot, relic_slot)
 
 
 def stage_plugin(stage: Path, bin_dir: Path, existing_ini: Path | None = None, bl2_shields: dict | None = None, shield_slot: int = 0, relic_slot: int = 0) -> str | None:

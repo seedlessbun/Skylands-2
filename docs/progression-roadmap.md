@@ -221,7 +221,7 @@ Nothing REQUIRES one; two things SUGGEST one for the first test:
 | Stage | What | Where | Main risk |
 |---|---|---|---|
 | 0 | BL2 survey: XP formulas, level curve, challenges, Badass Rank (`Check-BL2-Progress.bat`) | python, **built: 0.53.2 / TestBuild-166 (report read, 1.3); deep pass 0.53.3 / TestBuild-167** | class/group names guessed wrong (found by name, so the report says what it found) |
-| 1 | Kill XP into character level; hit-source log; gun-kill test | plugin | direct `xp` write does not offer the level-up |
+| 1 | Kill XP into character level; hit-source log; gun-kill test | plugin, **built: 0.54.0 / TestBuild-168, plugin 1.30.0** | direct `xp` write does not offer the level-up |
 | 2 | Type proficiencies: damage XP from hits, levels, the stats (bonus projectiles excluded), notices, co-save 'PROF' v1, maker keyword records | plugin + python (keywords) | hit events missing per pellet or doubled for explosions; form ids moving |
 | 3 | Manufacturer tracks and their quarter/full bonuses, bonus projectiles, HUD line | plugin | extra launches per pellet cost frame time |
 | 4 | Badass Rank: challenge counters, rank points, shared file | plugin + python (challenge table) | the shared file across saves of different characters |
@@ -254,4 +254,4 @@ After the survey report: the numbers go into `sheets/progression.json` (`source:
 * **Other mods:** none in the user's setup; an XP mod that hooks the same `xp` value would add to ours (ini `KillXP` 0 turns ours off).
 
 ## 6. Questions still open for you
-None about the design. The deep report is read (1.3b). Waiting for: your approval to build stage 1 (kill XP).
+None about the design. The deep report is read (1.3b). Stage 1 (kill XP) is APPROVED and built (0.54.0). Waiting for: the in-game report of stage 1.

@@ -770,6 +770,15 @@ Other commands:
 - PROGRESS DEEP REPORT READ (TestBuild-167, 19,588 lines; facts in `docs/progression-roadmap.md` 1.3b): XP multipliers Chump 0.5 / Normal 0.75 / NormalHigh 1.0 / Tough 1.25 / ToughHigh 1.5 / Badass 3 / Super 10 / Ultimate 20 / Boss 40;
   level gap above x1.00..1.15, below x0.90/0.70/0.40/0.15/0.05/0.01 (1..6+); challenge level points 5 x (1,5,10,50,100); token N needs rank N^1.8; token stat = 1 % x tokens^0.75. Challenge GOALS are in `:ChallengeConditionDefinition_<n>`
   sub-objects (not printed: the deep pass skips ':' paths; a third pass at the Badass Rank stage). New game: none required (co-save record, records appended last); suggested for judging the kill-XP pace (roadmap 3.9).
+- PROGRESSION STAGE 1 = 0.54.0 (TestBuild-168, plugin 1.30.0 = "SkylandsNative 396"; the user APPROVED the roadmap): `native/skse/src/progress.h` KILL XP. `HitSink` (TESHitEvent, cause = player, source = a Skylands gun via
+  `progress::g_isGun` = GunOf) notes per actor the last gun hit (time, hostile then, `badass::TierOf` read BEFORE our lock, boss = `shielditems::IsBoss` or `badass::IsDragon`, level); `DeathSink`: killer = player (or none, `KillXPNoKiller`),
+  last gun hit within `KillXPWindow` 3 s, hostile (unless `KillXPNonHostile`), not teammate/summoned/commanded/child, once per body (60 s): xp = levelThreshold / `KillXPKillsPerLevel` 30 x (10 Le + 4)/(10 Lp + 4) x BL2 level gap
+  (above 1.00..1.15, below 0.90/0.70/0.40/0.15/0.05/0.01) x max(tier 3/10/20, boss 40) x `KillXPScale`, capped at `KillXPMaxShare` 0.5 of a level; a 250 ms `shield::Queue` task adds it to
+  `GetInfoRuntimeData().skills->data->xp` (CommonLib v12.1.0 `PlayerCharacter::PlayerSkills::Data{xp, levelThreshold, ...}`); the first time xp passes the threshold a HUD notice "Level up! Open the Skills menu to level up."
+  Ini block `skse.progression_ini()` from the new `sheets/progression.json` (`sheet_data.PROGRESSION`, sources bl2/design). Log: "kill xp: on ...", the first 20 "the player hit ... source .. projectile ..: a Skylands gun / not",
+  the first 30 "kill xp: <id> (level .., tier, boss) killed with gun ..: N XP ..." / "no XP (why)", the first 10 "character XP a -> b (read back c), level, threshold; the game says it can level up: yes/no" (`PlayerSkills::CanLevelUp`),
+  a 30 s summary. NO esp/pex change (no ids move, no ghost scripts). New game SUGGESTED for judging the pace (roadmap 3.9), not required. UNCONFIRMED in game: all of it (hit source for the player's bullets, killer for explosion kills,
+  that a direct xp write offers the level-up in the Skills menu, the HUD notice).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

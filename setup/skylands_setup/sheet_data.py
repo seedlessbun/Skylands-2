@@ -328,6 +328,31 @@ PART_STATS: dict[str, PartStatsRow] = {
 }
 
 @dataclass(frozen=True)
+class ProgressionRow:
+    """Character progression (docs/progression-roadmap.md). Stage 1: kill XP into Skyrim's character level. The Borderlands 2 numbers were read from the user's progression surveys (bl2-progress-report.txt and bl2-progress-deep-report.txt; the rule: BL2 file values replace static values); the pace (kills per level) and the caps are Skylands choices. The plugin reads the values from SkylandsNative.ini (skse.progression_ini)."""
+
+    id: str
+    value: float
+    source: str
+    bl2_object: str
+    note: str
+
+
+PROGRESSION: dict[str, ProgressionRow] = {
+    'KillXP': ProgressionRow(id='KillXP', value=1.0, source='design', bl2_object='-', note='1 = kills with a Skylands gun give character XP; 0 = off'),
+    'KillXPKillsPerLevel': ProgressionRow(id='KillXPKillsPerLevel', value=30.0, source='design', bl2_object='-', note='regular kills of your own level that fill one level (the user: 30)'),
+    'KillXPScale': ProgressionRow(id='KillXPScale', value=1.0, source='design', bl2_object='-', note='every amount times this'),
+    'KillXPWindow': ProgressionRow(id='KillXPWindow', value=3.0, source='design', bl2_object='-', note='seconds after your last gun hit in which a death counts as a gun kill'),
+    'KillXPMaxShare': ProgressionRow(id='KillXPMaxShare', value=0.5, source='design', bl2_object='-', note='one kill gives at most this share of a level'),
+    'KillXPNoKiller': ProgressionRow(id='KillXPNoKiller', value=1.0, source='design', bl2_object='-', note='1 = a death with no killer named counts when your gun hit it last (explosions, burning)'),
+    'KillXPNonHostile': ProgressionRow(id='KillXPNonHostile', value=0.0, source='design', bl2_object='-', note='1 = kills of actors that were not hostile to you count too'),
+    'KillXPBadass': ProgressionRow(id='KillXPBadass', value=3.0, source='bl2', bl2_object='GD_AI_Balance.XP.XPMultiplier_06_Badass (against XPMultiplier_03_NormalHigh 1.0)', note='a Badass gives this many times the XP'),
+    'KillXPSuper': ProgressionRow(id='KillXPSuper', value=10.0, source='bl2', bl2_object='GD_AI_Balance.XP.XPMultiplier_07_SuperBadass', note='a Super Badass'),
+    'KillXPUltimate': ProgressionRow(id='KillXPUltimate', value=20.0, source='bl2', bl2_object='GD_AI_Balance.XP.XPMultiplier_08_UltimateBadass', note='an Ultimate Badass'),
+    'KillXPBoss': ProgressionRow(id='KillXPBoss', value=40.0, source='bl2', bl2_object='GD_AI_Balance.XP.XPMultiplier_09_Boss', note='a boss (named, level 35+, or a dragon); still capped by KillXPMaxShare'),
+}
+
+@dataclass(frozen=True)
 class RaritiesRow:
     """Rarity tiers by Borderlands rarity level. Colours are read from the player's GD_Globals (RarityLevelColors); words and multipliers are this mashup's."""
 
