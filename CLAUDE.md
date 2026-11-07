@@ -760,6 +760,13 @@ Other commands:
   (cap 100, +10 each time, flat bonus to every stat), Badass Rank (BL2's challenges adapted, tokens "pick one of five", SHARED across characters with an ini switch). Survey `progressprobe.py` (`python -m skylands_setup bl2progress`,
   `Check-BL2-Progress.bat`, writes `work\bl2-progress-report.txt`): P0 name tables, P1 experience groups + GD_Globals, P2 challenge groups, P3 badass rank objects, P4 Default__ objects; all by name, packages opened once
   (`badassprobe.objects_in_groups`). Round 2 (pace 30, own maker full only, launchers half, 1 stat a level, proficiency XP = bullet damage x 0.1, level cost 20 + 10n, no caps, damage after death counts) is in the roadmap; NEXT: approval of the revised roadmap (section 6: 3 questions) and the report; then stage 1 (kill XP).
+- PROGRESS REPORT READ (user's `bl2-progress-report.txt` of TestBuild-166, 4,248 lines, all sections ran; facts in `docs/progression-roadmap.md` 1.3): kill XP = 10 x enemy level + 4 (min 10;
+  `Init_BaseEnemyExperience`, x11 in TVHM), level curve 60 x level^2.8 + 7.33 (`Init_ExperienceRequiredForLevel`), tier XP multipliers exist as `GD_AI_Balance.XP.XPMultiplier_01_Chump..09_Boss` (numbers NOT read: nested
+  formula), `GD_Globals.General.Globals.ExpScaleByLevelDifference[6]` not read; 365 `ChallengeDefinition`s (base list `GD_Challenges.ChallengeList.List`, 227) with `Levels[5]` not opened; 14 `BadassRewardDefinition`s
+  (`GD_Challenges.BadassRewards.BARD_*`, values from `GD_Challenges.BadassSkill.Init_BadassBonusCalc_<stat>`, not read). User round 3: `ProfBase` 50, `ProfStep` 15, dead bodies give NO proficiency XP (only the killing
+  shot within `ProfKillGrace` 0.25 s), kill XP stays, Badasses same XP per damage. 0.53.3 (TestBuild-167, python only, plugin 1.29.1): `progressprobe --deep` / `Check-BL2-Progress-Deep.bat` (writes
+  `work\bl2-progress-deep-report.txt`): D1 whole groups `gd_ai_balance.xp`, `gd_balance_experience.*`, `gd_challenges.badassskill/badassrewards` and the combat/loot `gd_challenges.*` groups in full, D2 `GD_Globals.General.Globals`
+  + class defaults in full, D3 a 2-level follow. NEXT: the deep report and the user's approval; then stage 1 (kill XP).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

@@ -1,6 +1,6 @@
 # Character progression for Skylands guns: plan (phase 1 deliverable)
 
-Status: **REVISED after the user's second round (section 2, items 9-10), AWAITING THE USER'S APPROVAL. No feature code is built.** Stage 0 (the BL2 survey) is in 0.53.2 / TestBuild-166 (python only, plugin unchanged at 1.29.1).
+Status: **REVISED after the user's third round (section 2, item 11) and the survey report (section 1.3). No feature code is built.** The deep survey (0.53.3, TestBuild-167) fills the numbers still missing. Stage 0 (the BL2 survey) is in 0.53.2 / TestBuild-166 (python only, plugin unchanged at 1.29.1).
 Written from the code at 0.53.1 and the user's interview answers (section 2). **Confirmed** = read in the code or a log of this project. **Unconfirmed** = my reading or a guess,
 with how it will be checked. No Borderlands 2 install is available to this session, so no BL2 numbers are read yet: every number below marked *design* is a placeholder that the
 survey report replaces where BL2 has one (the user's rule: BL2 file values replace static values).
@@ -47,15 +47,28 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 * Saving: co-save records through `shield::g_extraSave / g_extraLoad / g_extraRevert`. HUD: `HudFrame` draws the ammo display; anything in Scaleform runs as `AddUITask` inside `Guarded`.
 * Settings: `skse.default_ini` / `merge_ini` (`IniVersion`, `...Rev` keys), numbers from `sheets/*.json` (`python tools/gen.py`).
 
-### 1.3 Borderlands 2 (to be read by the stage 0 survey)
-* What is known only from memory, **all unconfirmed until the report**: kill XP depends on the enemy's level and grows faster than linearly; enemies far below the player give little;
-  Badasses give more; the level curve grows roughly with a power of the level; challenges have 5 levels each with rising goals and rank points; Badass Rank tokens raise one of
-  about 14 stats (max health, shield capacity, shield recharge delay and rate, melee damage, grenade damage, gun accuracy, gun damage, fire rate, recoil reduction, reload speed,
-  elemental effect chance and damage, critical hit damage) with diminishing returns as more tokens go into the same stat, and the rank is shared by every character of a profile.
-* The survey (`Check-BL2-Progress.bat`, `python -m skylands_setup bl2progress`, writes `work\bl2-progress-report.txt`, `setup/skylands_setup/progressprobe.py`) finds everything by
-  name, never by a guessed path: P0 name tables (experience / level / challenge / badass rank words), P1 every group whose name says experience / xp / level-up plus `GD_Globals`
-  (each object with its properties, then the XP-named ones followed two levels: formulas, initialisations, curves), P2 every group whose name says challenge (one line per object,
-  a census, a few in full), P3 badass rank / reward / token objects, P4 `Default__` objects with those words. Packages are opened once each (lesson of 0.45.2).
+### 1.3 Borderlands 2 (READ: the user's `bl2-progress-report.txt` of TestBuild-166, 4,248 lines, every section ran; the file is on the user's PC only, so the facts are here)
+* **Kill XP** (`GD_Balance_Experience.Formulas.Init_BaseEnemyExperience`): `10 x enemy level + 4`, at least 10 (`Multiplier` = `Init_EnemyExperience_PerPlaythrough`: 10 in normal mode,
+  11 in True Vault Hunter Mode; `Level` = the pawn's `ExpLevel`; `Power` 1, `Offset` 4; `RangeRestriction.MinValue` 10). So a level 10 enemy gives 104 XP, a level 30 one 304.
+* **Level curve** (`Init_ExperienceRequiredForLevel`): `60 x level ^ 2.8 + 7.33` (the total XP to reach a level, read as cumulative: unconfirmed, the deep survey's `Globals.ExpPointsRequiredForLevel`
+  says). Between levels 10 and 11 that is ~11,700 XP = ~112 kills of level-10 enemies; BL2's max level is 50 (`Default__GlobalsDefinition.ExpMaxPlayerLevel`, 72 with the DLC packs: not read).
+* **Per enemy type and tier:** `GD_AI_Balance.XP.XPMultiplier_01_Chump`, `02_Normal`, `03_NormalHigh`, `04_Tough`, `05_ToughHigh`, `06_Badass`, `07_SuperBadass`, `08_UltimateBadass`, `09_Boss`
+  exist; their numbers sit in a 4-part `ValueFormula` the first survey only summarised -> **deep survey**. Also not yet read: `GD_Globals.General.Globals` `ExpScaleByLevelDifference[6]`
+  (how XP falls/rises with the level gap), `ExpAwardWeights[4]`, `BaseEnemyExperienceFormula`; `Default__WillowPlayerController.ExpScaleForCriticalHitKills` (crit kills give more).
+* **Challenges** (`ChallengeDefinition`, 365 objects; base game list `GD_Challenges.ChallengeList.List` with 227): categories General Combat, Melee, Pistol, Shotgun, SMG, Assault Rifle, Sniper
+  Rifle, Rocket Launcher, Shields, Grenades, Health and Recovery, Vehicle, Money and Trading, Loot, Elemental, Enemies (+ one per DLC). Usable ones by name (base game): per gun type "Kill enemies with
+  <type>" (Hail of Bullets, Aggravated Assault, The Killer, Shotgun!, Longshot, Rocket and Roll), "Get critical hits with <type>" and "... critical hit kills", shotgun point-blank / long range,
+  sniper from the hip / unaware / one-shot shielded, launcher direct hit / splash / long range / one-shot shielded, pistol quick-draw, AR crouched; Knee-Deep in Brass (rounds fired), Critical
+  Acclaim (crit kills), day / night kills; elemental kills and status damage (fire, corrosive, shock, slag, explosive); shield kills (nova, spike, amp, roid, absorb); melee kills; loot (chests,
+  lootables, weapons picked up, items by rarity white..orange); Heal Plz (health recovered); enemy kinds (bruisers, marauders, nomads, psychos, goliaths, midgets, skags, spiderants, rats,
+  stalkers, threshers, varkids, ...). Each has `Levels[5]` (goals and rewards in a struct array the first survey did not open -> **deep survey**). Level/map challenges give a fixed
+  `BPReward` = 1 / 5 / 10 / 25 points x `Init_BadassPointsReward`; `Default__ChallengeDefinition.BPReward` 20.
+* **Badass Rank rewards** (`BadassRewardDefinition`, exactly 14, `GD_Challenges.BadassRewards.BARD_*`): Critical Hit Damage, Grenade Damage, Gun Accuracy, Gun Damage, Gun Fire Rate, Gun Recoil
+  Reduction, Gun Reload Speed, Max Health, Melee Damage, Shield Capacity, Shield Recharge Delay, Shield Recharge Rate, Elemental Effect Damage, Elemental Effect Chance. Each value comes from
+  `GD_Challenges.BadassSkill.Init_BadassBonusCalc_<stat>` (the diminishing curve: **deep survey**). The UI strings confirm "BADASS RANK", "Badass Tokens:", "Redeem Token!", "CHOOSE A REWARD!",
+  and "BONUS STATS" can be switched off. How many rank points make a token is not in the report (**deep survey**: the `BadassSkill` group and the player controller defaults).
+* The survey itself: `progressprobe.py` (`Check-BL2-Progress.bat`, `python -m skylands_setup bl2progress`), all by name; `--deep` (0.53.3, `Check-BL2-Progress-Deep.bat`, writes
+  `work\bl2-progress-deep-report.txt`) dumps the objects named above in full, by the paths THIS report gave.
 
 ## 2. Interview answers (the design inputs)
 
@@ -76,7 +89,9 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
    (enchantment magnitude x launch power, so relic and proficiency damage bonuses count; damage to shields counts), **no cap per enemy or per hit, overkill and damage after death count**;
    XP = damage x `ProfXPScale` 0.1 to both the type and the maker track; level n -> n+1 costs `ProfBase` 20 + `ProfStep` 10 x n; no scaling by player level (later guns fill it faster:
    intended); nothing from essential/protected NPCs, followers/teammates, summoned/commanded actors or anything not hostile to the player; added a few times a second; the first 30 hits logged.
-   Rocket and elemental splash damage later, at the blast's own damage. Character level: kill XP (3.1) stays (my pick between the two options offered; the damage-to-character-XP option is dropped).
+   Rocket and elemental splash damage later, at the blast's own damage. Character level: kill XP (3.1) stays (my pick of the two options offered; the damage-to-character-XP option is dropped).
+11. **Third round:** `ProfBase` **50**, `ProfStep` **15**; **dead bodies give no proficiency XP** (only living people and creatures; this replaces "damage after death counts"); character XP
+   stays on kill; Badass enemies give the same XP per damage as anyone (their extra health already means more damage).
 
 ## 3. Design (defaults; every number is an ini key and a sheet value in `sheets/progression.json`, `source: bl2` once the report gives it, else `design`)
 
@@ -88,9 +103,10 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   - `threshold(Lp)` = the game's own `levelThreshold` read at the kill (so it follows any change to the level settings).
   - `KillXPKillsPerLevel` **30** (the user's pick): 30 kills of regular enemies of your own level fill one level, at every level (vanilla skills keep adding their own XP on top).
     Tunable after the first play test.
-  - `shape(Le, Lp)` = BL2's kill XP at enemy level Le divided by BL2's kill XP at the player's level, times BL2's level-difference factor (from the report). **Fallback** (*design*)
-    if the report has no usable formula: `clamp(1 + 0.10 x (Le - Lp), 0.1, 2.0)`.
-  - `tier` = BL2's Badass XP multipliers (report) else *design* Badass x3, Super x5, Ultimate x10 (about their health multipliers 3 / 5.8 / 15, a bit less); `boss` x5 (`IsBoss`), dragons x5.
+  - `shape(Le, Lp)` = BL2's kill XP at the enemy's level over BL2's kill XP at the player's level, `(10 x Le + 4) / (10 x Lp + 4)` (**bl2**, section 1.3), times BL2's level-difference
+    factor `ExpScaleByLevelDifference` (deep survey; fallback *design* `clamp(1 + 0.10 x (Le - Lp), 0.1, 2.0)`).
+  - `tier` = BL2's `XPMultiplier_06_Badass / 07_SuperBadass / 08_UltimateBadass` over `02_Normal` (deep survey; fallback *design* 3 / 5 / 10); `boss` = `09_Boss` over `02_Normal` (fallback 5),
+    dragons count as bosses.
   - A creature counts like a person (same formula; its class `drop_scale` is not used for XP).
 * **Applying it:** amounts are summed and given at most every 250 ms on the game thread: `data->xp += amount`. If `xp >= levelThreshold` the game should offer the level-up in the
   Skills menu (UNCONFIRMED). Stage 1 logs before/after (`xp`, `levelThreshold`, level) for the first 10 kills, and shows its own notice "Level up! Open the Skills menu" the first time
@@ -100,12 +116,14 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 ### 3.2 Proficiency XP from damage (stage 2)
 * **What counts:** every `TESHitEvent` whose `cause` is the player and whose `source` is a Skylands gun (`GunOf`), on a target that counts (below). One event per projectile, so a
   shotgun books each pellet that hits (UNCONFIRMED that every pellet raises its own hit event: stage 2 logs pellets launched against hits booked per shot).
+* **Only living targets** (the user, round 3): a hit counts when the target was alive just before it: the killing hit counts in full (overkill included), and so do the other pellets of
+  the same shot that land within `ProfKillGrace` 0.25 s of the death; any later hit on the body counts for nothing.
 * **How much:** the bullet's own damage, **not** measured health loss: the gun's enchantment magnitude (per pellet, as the installer wrote it: shot damage / pellets x 1.5) x the launch
   power the player's bullets carry at that moment (relic `Variable09` x the gun's proficiency damage multiplier). So relic and proficiency damage bonuses count, damage that lands on a
-  shield counts (the bullet's damage does not care what absorbs it), resistances and armour are not taken off. **No cap** per hit or per enemy: overkill counts, and hits on the body
-  after death count.
+  shield counts (the bullet's damage does not care what absorbs it), resistances and armour are not taken off. **No cap** per hit or per enemy: overkill of the killing shot counts;
+  hits on a body after death do not (above).
 * **XP** = damage x `ProfXPScale` 0.1, booked to BOTH the gun's type track and its maker track (the maker gets the same XP, not a share).
-* **Which targets count:** hostile to the player (`IsHostileToActor`), checked when the actor was last hit or seen alive, so a body that was an enemy keeps counting after death);
+* **Which targets count:** living people and creatures hostile to the player (`IsHostileToActor`; for the killing hit, as it was just before the death);
   NOT: essential or protected actors, the player's followers and teammates, summoned or commanded actors (and their bodies), critters, children, or anyone not hostile (townsfolk give
   nothing). A target that becomes hostile (the player attacks a guard) counts from then on.
 * **Not yet:** rocket and elemental SPLASH damage (the explosion's own damage) comes later; until then a rocket books its direct hit only, and an explosion's hit event is not counted twice
@@ -113,8 +131,8 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 * **Batching:** hits add to a pending total under one lock; the 250 ms pump (`ProfBatchMs`) moves it into the tracks, levels them up and queues the notices. No game call per bullet.
 * **Log:** the first 30 booked hits ("prof: hit FF000E22 by gun FE003A99 (smg, Jakobs) pellet: magnitude 6.2 x power 1.15 = 7.1 damage -> 0.71 XP"), every level-up with the held gun's
   total multipliers, a 30 s summary.
-* **Cost** of level n -> n+1: `ProfBase` 20 + `ProfStep` 10 x n XP, no cap, no scaling by player level (later-game guns and enemies fill it faster: intended). Totals:
-  level 1 = 20 XP (200 damage), level 10 = 650 XP (6,500 damage), level 25 = 3,500 XP (35,000), level 50 = 13,250 XP (132,500), level 100 = 51,500 XP (515,000).
+* **Cost** of level n -> n+1: `ProfBase` **50** + `ProfStep` **15** x n XP (the user, round 3), no cap, no scaling by player level (later-game guns and enemies fill it faster: intended). Totals:
+  level 1 = 50 XP (500 damage), level 10 = 1,175 XP (11,750 damage), level 25 = 5,750 XP (57,500), level 50 = 20,875 XP (208,750), level 100 = 79,250 XP (792,500).
 
 ### 3.3 Proficiency bonuses (stage 2 for types, stage 3 for makers)
 * **The six stats** (type tracks): damage %, accuracy % (less spread), reload speed %, fire rate %, magazine %, bonus projectile chance (points of percent).
@@ -146,8 +164,8 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 * Ini block `[Progression]` from `sheets/progression.json`:
   - kill XP: `KillXP` 1, `KillXPScale` 1.0, `KillXPKillsPerLevel` 30, `KillXPWindow` 3, `KillXPMaxShare` 0.5, `KillXPNoKiller` 1, `KillXPNonHostile` 0, `KillXPBadass` / `KillXPSuper` /
     `KillXPUltimate` / `KillXPBoss` (BL2's from the report, else 3 / 5 / 10 / 5);
-  - proficiency XP: `Prof` 1, `ProfXPScale` 0.1, `ProfBase` 20, `ProfStep` 10, `ProfBatchMs` 250, `ProfLogHits` 30, `ProfCorpseSeconds` 0 (0 = hits on a body count for ever, the user's rule;
-    N = only for N s after death: an opt-in guard against farming, section 5);
+  - proficiency XP: `Prof` 1, `ProfXPScale` 0.1, `ProfBase` 50, `ProfStep` 15, `ProfBatchMs` 250, `ProfLogHits` 30, `ProfKillGrace` 0.25 (seconds after a death in which the
+    rest of the killing shot still counts; bodies count for nothing after it);
   - bonuses: `ProfStatsPerLevel` 1, `ProfMilestoneMult` 3, `ProfDecay` 0.75, `ProfOtherMakers` 0.25, `ProfOwnMaker` 1.0, `ProfLauncherProjectiles` 0.5, the per-stat starts and floors
     (`ProfDamageStart` 2 / `ProfDamageFloor` 0.5, ... `ProfProjectileStart` 4 / `ProfProjectileFloor` 1);
   - display: `ProfHud` 1, `ProfNotices` 1, `ProfLog` 1.
@@ -180,7 +198,7 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 
 | Stage | What | Where | Main risk |
 |---|---|---|---|
-| 0 | BL2 survey: XP formulas, level curve, challenges, Badass Rank (`Check-BL2-Progress.bat`) | python, **built: 0.53.2 / TestBuild-166** | class/group names guessed wrong (found by name, so the report says what it found) |
+| 0 | BL2 survey: XP formulas, level curve, challenges, Badass Rank (`Check-BL2-Progress.bat`) | python, **built: 0.53.2 / TestBuild-166 (report read, 1.3); deep pass 0.53.3 / TestBuild-167** | class/group names guessed wrong (found by name, so the report says what it found) |
 | 1 | Kill XP into character level; hit-source log; gun-kill test | plugin | direct `xp` write does not offer the level-up |
 | 2 | Type proficiencies: damage XP from hits, levels, the stats (bonus projectiles excluded), notices, co-save 'PROF' v1, maker keyword records | plugin + python (keywords) | hit events missing per pellet or doubled for explosions; form ids moving |
 | 3 | Manufacturer tracks and their quarter/full bonuses, bonus projectiles, HUD line | plugin | extra launches per pellet cost frame time |
@@ -197,9 +215,8 @@ After the survey report: the numbers go into `sheets/progression.json` (`source:
   killer is missing (`KillXPNoKiller` 1 = count it when the player's gun hit it last and nobody else is named). The hit event's `source` for the player's bullets is logged in stage 1.
 * **The hit event** (UNCONFIRMED): that every pellet raises its own `TESHitEvent`, that `cause` is the player and `source` the gun for the player's plugin-launched bullets, and how an
   explosion's hit names its source. Stage 2 logs the first 30 hits and pellets launched against hits booked.
-* **What farming is still possible under the new rule** (by design: no caps, overkill and damage after death count):
-  - **Shooting a body.** A hostile enemy's corpse keeps giving XP for every bullet, for ever: a magazine into a corpse is as good as one into a live enemy. This is the big one.
-    Guard: `ProfCorpseSeconds` (default 0 = your rule; e.g. 5 = only hits within 5 s of death count). Say if you want it on by default.
+* **What farming is still possible** (no caps per hit or per enemy; only living hostile targets count):
+  - **Shooting bodies: closed** (round 3). Only the killing shot's own pellets within 0.25 s of the death count.
   - **Unkillable or tanky hostiles:** a Badass giant, a regenerating troll, a dragon on a perch, an enemy stuck behind a wall that cannot reach you: damage keeps flowing as long as you have
     ammo (ammo is the only limit: rounds come out of the pack).
   - **Making someone hostile:** attacking a townsperson or guard makes them hostile, and from then on their damage counts (they are excluded only while not hostile). Essential and
@@ -214,9 +231,6 @@ After the survey report: the numbers go into `sheets/progression.json` (`source:
   Natives keep no String parameters. No lock is taken while holding another (0.43.0). Scaleform only from `AddUITask` inside `Guarded` (0.48.1).
 * **Other mods:** none in the user's setup; an XP mod that hooks the same `xp` value would add to ours (ini `KillXP` 0 turns ours off).
 
-## 6. Questions still open for you (defaults in brackets)
-Answered in round 2: pace 30, own maker full bonus only, launchers half, 1 stat per level, the new damage XP rule (section 3.2). Still open:
-1. **Shooting bodies:** keep "damage after death counts" with no limit [as you asked: `ProfCorpseSeconds` 0], or count only the first few seconds after death (e.g. 5)?
-2. **Character level:** I kept kill XP (3.1) and dropped the "damage x KillXPDamageScale into character XP" option, because kills already reward fighting and damage already feeds the
-   proficiencies; say if you want the other one instead.
-3. **Hits on Badass, Super and Ultimate enemies:** the same XP per damage as anyone [yes: their extra health already means more damage]?
+## 6. Questions still open for you
+None about the design: round 3 answered the last three (bodies give nothing, kill XP stays, Badasses give the same XP per damage). Waiting for: your approval of this roadmap, and the
+deep survey report (`Check-BL2-Progress-Deep.bat`), whose tier multipliers and level-gap table go into stage 1 (until then stage 1 would use the fallbacks in 3.1).

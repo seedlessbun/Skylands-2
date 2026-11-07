@@ -160,6 +160,16 @@ echo.
 echo Send work\bl2-progress-report.txt back to Claude.
 pause
 """
+PROGRESS_DEEP_PROBE = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+echo The second progression survey: Borderlands 2's XP per enemy tier, XP by level difference, each challenge's levels and Badass Rank bonus curves (changes nothing; about 5-15 minutes) ...
+"%~dp0python\python.exe" -X utf8 -m skylands_setup bl2progress --deep --out "%~dp0work\bl2-progress-deep-report.txt" %*
+echo.
+echo Send work\bl2-progress-deep-report.txt back to Claude.
+pause
+"""
 SHOOTING_SURVEY = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -236,6 +246,7 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   PANDORA BANDIT VOICES (0.46.0, plugin 1.22.0): the bandits Skylands renames (Marauder, Nomad, Psycho, Bruiser, Goliath, Badass Marauder, Badass Nomad) speak Borderlands 2's lines
     (entering a fight, getting hurt, dying, taunts, a gloat when you die) and no longer Skyrim's. The installer extracts them from your Borderlands 2 (setup log "voices:" lines); settings
     Voices / VoiceGap / VoicePainGap / VoiceTauntMin / VoiceTauntMax / VoiceRange in SkylandsNative.ini; the plugin log says "voice: ... says ..." for the first lines.
+  Check-BL2-Progress-Deep.bat is the second progression survey (XP per enemy tier, XP by level difference, challenge levels, Badass Rank curves; 5-15 minutes) and writes work\\bl2-progress-deep-report.txt.
   Check-BL2-Progress.bat looks at how Borderlands 2 does experience, challenges and Badass Rank (changes nothing, 10-25 minutes) and writes work\\bl2-progress-report.txt.
   Check-BL2-Spawns.bat looks at how often Borderlands 2 spawns its Badass / Super Badass / Ultimate Badass enemies (changes nothing, 5-15 minutes) and writes work\\bl2-spawn-report.txt.
   Check-BL2-EnemyVoice.bat finds the human enemies' voice lines (taunts, pain, death...) in Borderlands 2's English voice packs, saves a few of every bandit-like voice as WAV files in work\\voice-samples to listen to (changes nothing, 5-15 minutes), and writes
@@ -289,7 +300,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-166.zip"
+    out = dist / "Skylands-TestBuild-167.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -317,6 +328,7 @@ def main() -> int:
         z.writestr("Check-BL2-EnemyVoice.bat", VOICE_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Spawns.bat", SPAWN_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Progress.bat", PROGRESS_PROBE.replace("\n", "\r\n"))
+        z.writestr("Check-BL2-Progress-Deep.bat", PROGRESS_DEEP_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Relics-Deep.bat", RELIC_DEEP.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))

@@ -10,6 +10,13 @@ their class and group names are UNCONFIRMED, so everything is found by NAME (nam
   P3  Badass Rank: groups and objects named badass + rank / reward / token / point / stat / bonus (the token stats and their diminishing-returns curve)
   P4  class defaults (Default__ objects) whose names say experience, challenge, badass, globals or player controller
 Each section runs on its own and the report is saved after each one. Packages are opened ONCE each (lesson of 0.45.2: never loop group_objects over many groups).
+
+--deep (0.53.3): the objects the first report (TestBuild-166) named but only summarised, dumped in full by the paths that report gave (not guessed):
+  D1  whole groups: GD_AI_Balance.XP (XP multiplier per enemy kind and Badass tier), GD_Balance_Experience.Formulas, GD_Challenges.BadassSkill (the token bonus curves),
+      GD_Challenges.BadassRewards, and the combat / loot challenge groups of GD_Challenges (each challenge's Levels: goals and rank points)
+  D2  single objects: GD_Globals.General.Globals (ExpScaleByLevelDifference, ExpAwardWeights, the formulas), the Default__ objects of the player controller, experience pool,
+      globals and challenge classes
+  D3  a two-level follow of what those refer to (Init_BadassPointsReward, the bonus formulas' attributes)
 """
 
 from __future__ import annotations
@@ -24,9 +31,10 @@ from . import steam
 from .badassprobe import objects_in_groups
 from .bl2 import upk
 from .bl2.index import Index
+from .gestaltprobe import show
 from .shieldprobe import Ctx, brief, follow
 
-VERSION = 1
+VERSION = 2
 XP = re.compile(r"(?i)(experience|(^|[_.])xp($|[_.\d])|xpreward|explevel|exppoints|expreward|levelup|level_up|playerlevel|expscale|expmultiplier)")
 CHALLENGE = re.compile(r"(?i)challenge")
 RANK = re.compile(r"(?i)badass.*(rank|reward|token|point|stat|bonus|level)|(rank|reward|token).*badass")
@@ -148,6 +156,59 @@ def defaults(ctx: Ctx) -> None:
     ctx.save()
 
 
+DEEP_GROUPS = ("gd_ai_balance.xp", "gd_balance_experience.formulas", "gd_balance_experience.attributes", "gd_challenges.badassskill", "gd_challenges.badassrewards")
+# the challenge groups of the base game worth keeping (combat, loot, kinds of enemy); level, echo, vehicle, economy and duel challenges cannot be counted in Skyrim
+DEEP_CHALLENGE_SKIP = ("levelchallenges", "levelechochallenges", "vehicles", "economy", "dueling", "challengelist", "categories")
+DEEP_OBJECTS = ("GD_Globals.General.Globals", "Default__WillowPlayerController", "Default__ExperienceResourcePool", "Default__GlobalsDefinition", "Default__ChallengeDefinition",
+                "Default__BadassRewardDefinition", "Default__WillowPlayerReplicationInfo")
+
+
+def deep_groups(ctx: Ctx) -> list[str]:
+    ctx.head("D1. In full: XP multipliers, experience formulas, Badass Rank bonus curves, and the combat / loot challenges with their levels")
+    ix = ctx.ix
+    groups = [g for g in DEEP_GROUPS if g in ix.groups]
+    groups += sorted(g for g in ix.groups if g.startswith("gd_challenges.") and g.count(".") == 1 and not g.endswith(DEEP_CHALLENGE_SKIP) and g not in groups)
+    missing = [g for g in DEEP_GROUPS if g not in ix.groups]
+    ctx.say(f"groups: {groups}" + (f"; not in this install: {missing}" if missing else ""))
+    found = objects_in_groups(ctx, groups, ANY, keep_props=lambda _p: True, label="deep")
+    ctx.say(f"{len(found)} objects; by class: {dict(Counter(c for _p, c, _x in found).most_common(30))}")
+    for path, cls, props in sorted(found):
+        if ":" in path:
+            continue
+        ctx.put("")
+        ctx.put(f"--- {path} [{cls}]")
+        for line in show(props or {}, 1, [400]):
+            ctx.put(line)
+    ctx.save()
+    return [p for p, _c, _x in found if ":" not in p]
+
+
+def deep_objects(ctx: Ctx) -> None:
+    ctx.head("D2. In full: the globals (XP by level difference, award weights) and the class defaults")
+    ix = ctx.ix
+    for path in DEEP_OBJECTS:
+        if ctx.out_of_time():
+            ctx.say("(time is up)")
+            break
+        try:
+            props = ix.props(path)
+        except Exception as e:  # noqa: BLE001
+            ctx.put(f"--- {path}: {type(e).__name__}: {str(e)[:120]}")
+            continue
+        ctx.put("")
+        ctx.put(f"--- {path}" + ("" if props else " (not found or no properties)"))
+        for line in show(props or {}, 1, [1500]):
+            ctx.put(line)
+    ctx.save()
+
+
+def deep_follow(ctx: Ctx, seeds: list[str]) -> None:
+    ctx.head("D3. What those objects refer to (reward formulas, attributes)")
+    keep = [p for p in seeds if re.search(r"(?i)(badassskill|badassreward|\.xp\.|formulas)", p)]
+    keep += [p for p in seeds if re.search(r"(?i)gd_challenges\.weapons\.smg_kills$", p)]  # one ordinary challenge, to see where its rank points come from
+    follow(ctx, list(dict.fromkeys(keep))[:120] + ["GD_Globals.General.Globals"], depth=2, cap=300, lines_each=400, title="deep", fanout=30)
+
+
 def main(argv: list[str]) -> int:
     import argparse
 
@@ -155,11 +216,12 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--bl2")
     ap.add_argument("--out", default="BL2-Progress-Report.txt")
     ap.add_argument("--minutes", type=float, default=25.0, help="time allowed for reading packages (the index is extra)")
+    ap.add_argument("--deep", action="store_true", help="the objects the first report named, in full (D1-D3)")
     a = ap.parse_args(argv)
     bl2 = Path(a.bl2) if a.bl2 else steam.find("bl2")
     out_path = Path(a.out)
     ctx = Ctx(None, out_path, time.time() + a.minutes * 60)
-    ctx.say(f"skylands bl2progress {VERSION}  {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    ctx.say(f"skylands bl2progress {VERSION}{' --deep' if a.deep else ''}  {time.strftime('%Y-%m-%d %H:%M:%S')}")
     if not bl2 or not (bl2 / "WillowGame").is_dir():
         ctx.say(f"Borderlands 2 not found ({bl2}). Run with --bl2 \"D:\\path\\Borderlands 2\".")
         ctx.save()
@@ -189,6 +251,19 @@ def main(argv: list[str]) -> int:
             ctx.put(traceback.format_exc())
             ctx.save()
 
+    if a.deep:
+        state: dict = {"seeds": []}
+
+        def d1() -> None:
+            state["seeds"] = deep_groups(ctx)
+
+        run("deep groups", d1)
+        run("deep objects", lambda: deep_objects(ctx))
+        run("deep follow", lambda: deep_follow(ctx, state["seeds"]))
+        ctx.say("")
+        ctx.say(f"Finished{' (sections that failed: ' + ', '.join(failed) + ')' if failed else ''}. Report written to {out_path}. Send it to Claude.")
+        ctx.save()
+        return 1 if failed else 0
     run("names", lambda: name_scan(ctx, list(ix.files)))
     run("experience", lambda: experience(ctx))
     run("challenges", lambda: challenges(ctx))

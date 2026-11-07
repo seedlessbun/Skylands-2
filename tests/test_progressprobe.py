@@ -52,3 +52,29 @@ def test_name_words():
     assert not progressprobe.XP.search("Exposure") and not progressprobe.XP.search("Pool_Shields_Explosive")
     assert progressprobe.RANK.search("BadassRankStat_GunDamage") and progressprobe.RANK.search("BadassTokens")
     assert not progressprobe.RANK.search("PawnBalance_BadassMarauder")
+
+
+def deep_install(root):
+    progress_install(root)
+    cooked = root / "WillowGame" / "CookedPCConsole"
+    b = ObjBuilder()
+    b.obj("GD_AI_Balance.XP.XPMultiplier_06_Badass", "AttributeInitializationDefinition", b.st("ValueFormula", "AttributeInitializationData", b.f("BaseValueConstant", 2.5)))
+    b.obj("GD_Challenges.BadassSkill.Init_BadassBonusCalc_Gun_Damage", "AttributeInitializationDefinition", b.f("Power", 0.75))
+    b.obj("GD_Challenges.Weapons.SMG_Kills", "ChallengeDefinition",
+          b.s("ChallengeName", "Hail of Bullets") + b.arr_structs("Levels", [b.i("RewardPoints", 1) + b.f("CompletionValue", 25.0), b.i("RewardPoints", 3) + b.f("CompletionValue", 100.0)]))
+    b.obj("GD_Challenges.Vehicles.Vehicles_KillByRamming", "ChallengeDefinition", b.s("ChallengeName", "Hit-and-Fun"))
+    (cooked / "Startup_ProgressDeep_Fake.upk").write_bytes(b.build())
+
+
+def test_deep_progress_survey_dumps_the_named_objects_in_full(tmp_path):
+    bl2 = tmp_path / "bl2"
+    deep_install(bl2)
+    out = tmp_path / "deep.txt"
+    assert progressprobe.main(["--bl2", str(bl2), "--out", str(out), "--minutes", "2", "--deep"]) == 0
+    text = out.read_text(encoding="utf-8")
+    for needle in ("bl2progress 2 --deep", "D1. In full", "--- GD_AI_Balance.XP.XPMultiplier_06_Badass", "BaseValueConstant: 2.5",
+                   "Init_BadassBonusCalc_Gun_Damage", "Power: 0.75", "--- GD_Challenges.Weapons.SMG_Kills", "CompletionValue: 100.0", "RewardPoints: 3",
+                   "D2. In full", "--- GD_Globals.General.Globals", "RarityLevelColors", "D3.", "Finished. Report written"):
+        assert needle in text, needle
+    assert "Hit-and-Fun" not in text  # vehicle challenges are skipped
+    assert "SECTION" not in text
