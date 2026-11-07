@@ -389,6 +389,13 @@ PROGRESSION: dict[str, ProgressionRow] = {
     'ProfLegendaryKeep': ProgressionRow(id='ProfLegendaryKeep', value=0.1, source='design', bl2_object='-', note='a Legendary keeps this share of everything the track had at its cap, for good'),
     'ProfLegendaryHold': ProgressionRow(id='ProfLegendaryHold', value=2.0, source='design', bl2_object='-', note='seconds to hold the reload key, with a gun of a capped type in hand, to go Legendary'),
     'ProfTestLevels': ProgressionRow(id='ProfTestLevels', value=0.0, source='design', bl2_object='-', note='TESTING: on the first load of a session every track gets this many levels (type tracks at most to their cap); 0 = off'),
+    'ProfSkyrimStyle': ProgressionRow(id='ProfSkyrimStyle', value=1.0, source='design', bl2_object='-', note='SKYRIM STYLE (1 = on, 0 = the plain system): proficiency levels act like Skyrim skills and feed your character level'),
+    'ProfSkyrimCharXP': ProgressionRow(id='ProfSkyrimCharXP', value=0.5, source='design', bl2_object='-', note="Skyrim style: a gun type proficiency level n gives n x this character XP (Skyrim's skills: 1.0; the user: half)"),
+    'ProfSkyrimMakerXP': ProgressionRow(id='ProfSkyrimMakerXP', value=0.0, source='design', bl2_object='-', note='Skyrim style: manufacturer levels give this share of that (the user: none, type tracks only)'),
+    'ProfSkyrimKillXP': ProgressionRow(id='ProfSkyrimKillXP', value=0.0, source='design', bl2_object='-', note='Skyrim style: kill XP times this (the user: 0 = off, levels come from proficiencies only)'),
+    'ProfSkyrimCurveMult': ProgressionRow(id='ProfSkyrimCurveMult', value=0.291, source='design', bl2_object='-', note='Skyrim style: level n costs Mult x n ^ Exp + Base proficiency XP (fast early, slow late; level 100 costs the same in all as the plain curve)'),
+    'ProfSkyrimCurveExp': ProgressionRow(id='ProfSkyrimCurveExp', value=1.95, source='design', bl2_object='-', note="Skyrim style: the curve's power (Skyrim's skill use curve is 1.95)"),
+    'ProfSkyrimCurveBase': ProgressionRow(id='ProfSkyrimCurveBase', value=20.0, source='design', bl2_object='-', note="Skyrim style: the curve's flat part"),
 }
 
 @dataclass(frozen=True)

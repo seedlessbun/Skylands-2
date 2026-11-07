@@ -807,6 +807,9 @@ Other commands:
   ((n-1) % cap) + 1 (falloff restarts), a Legendary resets to 0 and keeps `ProfLegendaryKeep` 10 % of the track at its cap (`g_typeKept`, recomputed from the `legendary` count already in 'PROF' v1); trigger = hold the
   reload key `ProfLegendaryHold` 2 s with a gun of the capped type (`g_reloadHeldS` from `HeldDuration`, `prof::MakeLegendary` in TickGun); HUD "SMG 100 MAX" (gold) / "SMG 12 *2". (3) knobs `ProfTypeRate/MakerRate` (XP),
   `ProfTypeBonus/MakerBonus` (strength), `ProfTestLevels` (adds levels on the first load of a session; needs a save with a 'PROF' record). UNCONFIRMED in game: all of it (the hold on the reload key, the notices).
+- 0.58.0 (TestBuild-173, plugin 1.34.0 = "SkylandsNative 401"): SKYRIM-STYLE PROFICIENCIES behind ini `ProfSkyrimStyle` (default 1; 0 = the 0.57.0 system), the user's poll: a gun type level n gives n x `ProfSkyrimCharXP` 0.5 character XP
+  (`g_charPending`, `prof::TakeCharXP` added in `progress::Apply`), maker levels x `ProfSkyrimMakerXP` 0, kill XP x `ProfSkyrimKillXP` 0, `Cost` = 0.291 x n^1.95 + 20 (same total at 100 as the plain curve). Our HUD stays; Skyrim's own notices LATER.
+  Log: "prof: Skyrim style ON: ...", "prof: SMG 12 gives 6.0 character XP", "kill xp: .. and N XP from proficiency levels: character XP a -> b". UNCONFIRMED in game.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

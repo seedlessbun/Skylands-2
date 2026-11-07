@@ -198,6 +198,15 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 * **Rough knobs:** `ProfTypeRate` / `ProfMakerRate` (XP), `ProfTypeBonus` / `ProfMakerBonus` (bonus strength), plus `ProfXPScale`, `ProfBase`, `ProfStep`. `ProfTestLevels` N adds N levels to every
   track on the first load of a session (type tracks at most to the cap) for testing.
 
+### 3.6b Skyrim-style proficiencies (BUILT 0.58.0 / plugin 1.34.0, the user's poll; ini switch `ProfSkyrimStyle`, 1 = on, 0 = the 3.1-3.6 system)
+* A gun type proficiency level n gives **n x `ProfSkyrimCharXP` 0.5** character XP (Skyrim: a skill raised to n gives n; the user chose half). Manufacturer levels give `ProfSkyrimMakerXP` 0 of that (the user:
+  type tracks only). Legendary rounds level the track again, so they keep feeding the character level (like Skyrim's Legendary skills).
+* Kill XP x `ProfSkyrimKillXP` **0** (the user: off).
+* Cost of level n -> n+1: `ProfSkyrimCurveMult` 0.291 x n ^ `ProfSkyrimCurveExp` 1.95 + `ProfSkyrimCurveBase` 20 (Skyrim's skill curve shape), sized so 0 -> 100 costs the same in all as the plain curve
+  (79,250 XP = 792,500 damage): totals level 10 = 275 XP (plain 1,175), 25 = 1,737 (5,750), 50 = 10,849 (20,875), 75 = 34,398 (45,375). Applies to every track.
+* Rough numbers: one type track 0 -> 100 = 2,525 character XP (Skyrim's level cost is 75 + 25 x level) = about level 12 from level 1; all six = about level 32.
+* Kept for later (the user): Skyrim's own skill-increase notices / level meter; our HUD line and notices stay.
+
 ### 3.7 The gun's type and maker in the plugin (stage 2)
 * Type: from the ammo index (1.2), no record change. Maker: a new keyword `SkylandsMaker_<n>` (8 keywords, 0 Bandit .. 7 Vladof, `manufacturers.json` order) on every gun, records
   appended **last** in `SkylandsGunModels.esp` so no older form id moves (a test asserts it, as for the voice records); `Skylands.esp` is untouched (byte-identical test). The gun's

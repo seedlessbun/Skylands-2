@@ -208,7 +208,13 @@ namespace progress
 			}
 			const int   lp = player->GetLevel();
 			const float threshold = data->levelThreshold;
-			const float xp = KillXP(threshold, hit.level, lp, hit.tier, hit.boss);
+			const float xp = KillXP(threshold, hit.level, lp, hit.tier, hit.boss) * (prof::g_skyrim ? prof::g_skyKill : 1.0f);  // 1.34.0: Skyrim style takes kill XP down (default off)
+			if (!(xp > 0.0f)) {
+				if (told.fetch_add(1) < 30) {
+					SKSE::log::info("kill xp: {:08X} killed with gun {:08X}: no kill XP (Skyrim-style proficiencies: ProfSkyrimKillXP {:.2f})", id, hit.gun, prof::g_skyKill);
+				}
+				return RE::BSEventNotifyControl::kContinue;
+			}
 			{
 				const std::lock_guard guard(g_lock);
 				g_counted[id] = now;
@@ -240,6 +246,8 @@ namespace progress
 			std::erase_if(g_counted, [&](const auto& kv) { return now - kv.second > std::chrono::seconds(120); });
 			std::erase_if(g_hits, [&](const auto& kv) { return now - kv.second.at > std::chrono::seconds(30); });
 		}
+		const float fromProf = prof::TakeCharXP();  // 1.34.0: Skyrim-style proficiency levels (its own lock, taken after ours is let go)
+		add += fromProf;
 		if (add <= 0.0f) {
 			return;
 		}
@@ -255,7 +263,7 @@ namespace progress
 		static std::atomic_int told{ 0 };
 		if (told.fetch_add(1) < 10) {
 			const auto skills = Skills();
-			SKSE::log::info("kill xp: {} kill(s): character XP {:.1f} -> {:.1f} (read back {:.1f}), level {}, threshold {:.1f}; the game says it can level up: {}", kills, before, before + add, data->xp,
+			SKSE::log::info("kill xp: {} kill(s) and {:.1f} XP from proficiency levels: character XP {:.1f} -> {:.1f} (read back {:.1f}), level {}, threshold {:.1f}; the game says it can level up: {}", kills, fromProf, before, before + add, data->xp,
 				player->GetLevel(), threshold, skills && skills->CanLevelUp() ? "yes" : "no");
 		}
 		if (before < threshold && data->xp >= threshold && !g_toldLevelUp.exchange(true)) {

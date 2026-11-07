@@ -50,7 +50,15 @@ namespace prof
 	// 1.33.0 Legendary (gun type tracks only; maker tracks never cap or reset): cap 100 + 10 a Legendary, the falloff restarts every 100 levels, a Legendary keeps 10 % of the round
 	inline bool  g_legOn = true;
 	inline int   g_legCap = 100, g_legCapStep = 10, g_testLevels = 0;
-	inline float g_legKeep = 0.1f, g_legHold = 2.0f;  // a maker's second stat grows at this share of the first (the user: half, a secondary bonus)
+	inline float g_legKeep = 0.1f, g_legHold = 2.0f;
+	// 1.34.0 Skyrim style (ini ProfSkyrimStyle; the user's poll): proficiency levels act like Skyrim skills - a gun type level n gives n x ProfSkyrimCharXP character XP (Skyrim: a skill
+	// raised to n gives n), maker levels x ProfSkyrimMakerXP of that, every track costs ProfSkyrimCurveMult x n ^ ProfSkyrimCurveExp + ProfSkyrimCurveBase (Skyrim's skill curve shape,
+	// sized so level 100 costs the same in all as the plain curve), and kill XP is times ProfSkyrimKillXP (0 = off). Off: the 0.57.0 system as it was.
+	inline bool  g_skyrim = true;
+	inline float g_skyCharXP = 0.5f, g_skyMakerXP = 0.0f, g_skyKill = 0.0f;
+	inline float g_skyMult = 0.291f, g_skyExp = 1.95f, g_skyBase = 20.0f;
+	inline float g_charPending = 0.0f;  // character XP from proficiency levels, waiting for progress.h's Apply (under g_lock)
+	inline std::atomic_int g_charTold{ 0 };  // a maker's second stat grows at this share of the first (the user: half, a secondary bonus)
 	inline float g_start[kStats] = { 2.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f };
 	inline float g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f };
 	inline bool  g_hud = true, g_notices = true;
@@ -73,7 +81,13 @@ namespace prof
 	inline std::atomic_int g_hitsBooked{ 0 };
 
 	inline bool Milestone(int a_n) { return a_n == 10 || a_n == 25 || a_n == 50 || a_n == 75 || a_n == 100 || (a_n > 100 && a_n % 50 == 0); }
-	inline float Cost(int a_level) { return (std::max)(1.0f, g_base + g_step * static_cast<float>(a_level)); }
+	inline float Cost(int a_level)
+	{
+		if (g_skyrim) {
+			return (std::max)(1.0f, g_skyMult * std::pow(static_cast<float>((std::max)(0, a_level)), g_skyExp) + g_skyBase);
+		}
+		return (std::max)(1.0f, g_base + g_step * static_cast<float>(a_level));
+	}
 	inline float StepOf(int a_stat, int a_passed) { return (std::max)(g_floor[a_stat], g_start[a_stat] * std::pow(g_decay, static_cast<float>(a_passed))); }
 	inline float MakerStepOf(int a_stat, int a_passed) { return g_start[a_stat] * g_makerStartScale * std::pow(g_makerGrowth, static_cast<float>((std::min)(a_passed, 200))); }
 	inline int   CapOf(const Track& a_t) { return g_legCap + g_legCapStep * (std::max)(0, a_t.legendary); }
@@ -274,6 +288,15 @@ namespace prof
 					const std::string text = fmt::format("{} proficiency {}{}: {}", a_name, a_t.level, Milestone(a_t.level) ? " (milestone)" : "", GainText(g));
 					notices.push_back(text);
 					SKSE::log::info("prof: {} (total XP {:.0f}, next level at {:.0f})", text, a_t.total, Cost(a_t.level));
+					if (g_skyrim) {  // like a Skyrim skill: the new level is character XP
+						const float give = static_cast<float>(a_t.level) * g_skyCharXP * (a_maker >= 0 ? g_skyMakerXP : 1.0f);
+						if (give > 0.0f) {
+							g_charPending += give;
+							if (g_charTold.fetch_add(1) < 30) {
+								SKSE::log::info("prof: {} {} gives {:.1f} character XP (Skyrim style)", a_name, a_t.level, give);
+							}
+						}
+					}
 					if (capped && a_t.level >= CapOf(a_t)) {
 						const std::string ready = fmt::format("{} proficiency {}: LEGENDARY READY - hold the reload key {:.0f} s with a {} in hand", a_name, a_t.level, g_legHold, a_name);
 						notices.push_back(ready);
@@ -298,6 +321,15 @@ namespace prof
 				RE::SendHUDMessage::ShowHUDMessage(n.c_str(), nullptr, true);
 			}
 		}
+	}
+
+	// 1.34.0: the character XP the proficiency levels have earned since the last call (progress.h adds it to the level meter)
+	inline float TakeCharXP()
+	{
+		const std::lock_guard guard(g_lock);
+		const float v = g_charPending;
+		g_charPending = 0.0f;
+		return v;
 	}
 
 	// 1.33.0: a type track at its cap goes Legendary (from main.cpp's tick when the reload key is held ProfLegendaryHold seconds with a gun of that type)
@@ -442,6 +474,7 @@ namespace prof
 		}
 		std::fill(std::begin(g_pendType), std::end(g_pendType), 0.0f);
 		std::fill(std::begin(g_pendMaker), std::end(g_pendMaker), 0.0f);
+		g_charPending = 0.0f;
 		g_deathAt.clear();
 		RecomputeAllLocked();
 	}
@@ -456,6 +489,10 @@ namespace prof
 		SKSE::log::info("prof: rates - type XP x{:.2f}, maker XP x{:.2f}, type bonuses x{:.2f}, maker bonuses x{:.2f}; maker steps x{:.3f} of the type's, growing x{:.3f} a milestone; "
 						"Legendary {} (cap {} + {} each, keeps {:.0f}%, hold {:.1f} s), test levels {}",
 			g_typeRate, g_makerRate, g_typeBonusScale, g_makerBonusScale, g_makerStartScale, g_makerGrowth, g_legOn ? "on" : "off", g_legCap, g_legCapStep, g_legKeep * 100.0f, g_legHold, g_testLevels);
+		SKSE::log::info("prof: Skyrim style {}{}", g_skyrim ? "ON" : "off",
+			g_skyrim ? fmt::format(": a gun type level n gives n x {:.2f} character XP, maker levels x{:.2f} of that, level n costs {:.3f} x n^{:.2f} + {:.0f} (level 1 {:.0f}, 10 {:.0f}, 50 {:.0f}, 100 {:.0f}), kill XP x{:.2f}",
+							g_skyCharXP, g_skyMakerXP, g_skyMult, g_skyExp, g_skyBase, Cost(1), Cost(10), Cost(50), Cost(100), g_skyKill) :
+						std::string(" (the plain curve; kill XP as set)"));
 	}
 
 	inline bool Config(const std::string& a_key, const std::string& a_value)
@@ -499,6 +536,20 @@ namespace prof
 			g_decay = std::clamp(v, 0.0f, 1.0f);
 		} else if (k == "OtherMakers") {
 			g_otherMakers = std::clamp(v, 0.0f, 10.0f);
+		} else if (k == "SkyrimStyle") {
+			g_skyrim = v != 0.0f;
+		} else if (k == "SkyrimCharXP") {
+			g_skyCharXP = std::clamp(v, 0.0f, 100.0f);
+		} else if (k == "SkyrimMakerXP") {
+			g_skyMakerXP = std::clamp(v, 0.0f, 100.0f);
+		} else if (k == "SkyrimKillXP") {
+			g_skyKill = std::clamp(v, 0.0f, 100.0f);
+		} else if (k == "SkyrimCurveMult") {
+			g_skyMult = std::clamp(v, 0.0f, 1e6f);
+		} else if (k == "SkyrimCurveExp") {
+			g_skyExp = std::clamp(v, 0.0f, 4.0f);
+		} else if (k == "SkyrimCurveBase") {
+			g_skyBase = std::clamp(v, 0.0f, 1e7f);
 		} else if (k == "TypeRate") {
 			g_typeRate = std::clamp(v, 0.0f, 1000.0f);
 		} else if (k == "MakerRate") {

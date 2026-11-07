@@ -148,3 +148,20 @@ def test_legendary_keeps_a_tenth_of_each_round_and_the_falloff_restarts():
     ini = skse.progression_ini()
     for key in ("ProfTypeRate=1", "ProfMakerRate=1", "ProfTypeBonus=1", "ProfMakerBonus=1", "ProfLegendaryCap=100", "ProfLegendaryKeep=0.1", "ProfTestLevels=0"):
         assert key in ini, key
+
+
+def test_skyrim_style_proficiencies_feed_the_character_level_behind_an_ini_switch():
+    prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
+    progress = (SRC / "progress.h").read_text(encoding="utf-8")
+    for text in ('k == "SkyrimStyle"', "g_skyMult * std::pow(static_cast<float>((std::max)(0, a_level)), g_skyExp) + g_skyBase",
+                 "static_cast<float>(a_t.level) * g_skyCharXP * (a_maker >= 0 ? g_skyMakerXP : 1.0f)", "inline float TakeCharXP()"):
+        assert text in prof, text
+    assert "const float fromProf = prof::TakeCharXP();" in progress and "(prof::g_skyrim ? prof::g_skyKill : 1.0f)" in progress
+    # the curve: level 100 costs the same in all as the plain 50 + 15 n, early levels much less
+    plain = sum(50 + 15 * n for n in range(100))
+    sky = sum(0.291 * n ** 1.95 + 20 for n in range(100))
+    assert abs(sky - plain) / plain < 0.01 and sum(0.291 * n ** 1.95 + 20 for n in range(10)) < 300
+    from skylands_setup import skse
+    ini = skse.progression_ini()
+    for key in ("ProfSkyrimStyle=1", "ProfSkyrimCharXP=0.5", "ProfSkyrimMakerXP=0", "ProfSkyrimKillXP=0", "ProfSkyrimCurveExp=1.95"):
+        assert key in ini, key
