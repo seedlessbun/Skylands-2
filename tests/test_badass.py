@@ -36,7 +36,7 @@ def test_the_plugin_rolls_tiers_and_applies_the_stats():
     assert '#include "badass.h"' in main and "badass::Config(" in main and "badass::Start(holder);" in main and "data.power = badass::GunPower(a_shooter);" in main
     assert "g_extraMaxOf ? g_extraMaxOf(a_actor->GetFormID())" in shield and "shield::g_extraMaxOf = &HealthBonusOf;" in h
     assert "shield::g_extraSave.push_back(&Save);" in h and "shield::g_extraSave.push_back(&Save);" in (SRC / "despawn.h").read_text(encoding="utf-8")
-    assert "kVersion = 394" in main and "{ 1, 29, 0, 0 }" in main
+    assert "kVersion = 395" in main and "{ 1, 29, 1, 0 }" in main
 
 
 
@@ -104,7 +104,7 @@ def test_creatures_grow_more_and_low_level_ones_get_a_stat_floor():
 
 def test_gunless_people_are_likelier_to_carry_a_shield_and_drops_are_tossed():
     ini = skse.default_ini(slot=59, relic_slot=58).splitlines()
-    for line in ("EnemyShieldUnarmedPercent=60", "DropToss=1", "DropTossUp=260", "DropTossOut=90"):
+    for line in ("EnemyShieldUnarmedPercent=60", "DropToss=1", "DropTossUp=420", "DropTossOut=150", "DropTossRev=2"):
         assert line in ini, line
     items = (SRC / "shielditems.h").read_text(encoding="utf-8")
     assert "const bool armed = HasGun(actor);" in items and "(std::max)(g_enemyPercent, g_unarmedPercent)" in items
@@ -117,3 +117,12 @@ def test_gunless_people_are_likelier_to_carry_a_shield_and_drops_are_tossed():
     assert 'RegisterFunction("TossDrop"sv, "SkylandsNative"sv, TossDrop)' in main and "toss::Config(" in main
     from skylands_setup.skyrim import scripts
     assert "TossDrop" in [f.name for f in scripts.native_stub().functions]
+
+
+def test_a_stronger_toss_reaches_an_old_settings_file_and_stuck_items_get_a_second_kick():
+    new = skse.default_ini(slot=59, relic_slot=58)
+    old = new.replace("DropTossRev=2\n", "").replace("DropTossUp=420", "DropTossUp=260").replace("DropTossOut=150", "DropTossOut=90").replace("BadassPercent=", "BadassPercent=7#").replace("7#3", "7")
+    merged, kept = skse.merge_ini(new, old)
+    assert kept and "DropTossUp=420" in merged and "DropTossOut=150" in merged
+    toss = (SRC / "toss.h").read_text(encoding="utf-8")
+    assert "moved >= 30.0f || a_w.kicks >= 2" in toss and "a_w.kicks > 0 ? 1.4f : 1.0f" in toss

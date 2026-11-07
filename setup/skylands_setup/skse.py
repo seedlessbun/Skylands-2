@@ -184,6 +184,9 @@ def merge_ini(default: str, old: str | None) -> tuple[str, bool]:
     lines = []
     # values put back to the defaults once when ShieldDefaultsRev changes (the testing values of 0.39.2 to 0.40.0: every person a shield, every shield dropped)
     reset = {"EnemyShieldPercent", "ShieldDropPercent"} if before.get("ShieldDefaultsRev") != after.get("ShieldDefaultsRev") else set()
+    # the drop toss of 0.53.0 was too weak (items still in the bodies): its strengths are put back to the new defaults once when DropTossRev changes
+    if before.get("DropTossRev") != after.get("DropTossRev"):
+        reset |= {"DropTossUp", "DropTossOut"}
     for line in default.splitlines():
         key = line.partition("=")[0].strip()
         if "=" in line and not line.strip().startswith((";", "[")) and key in before and key != "IniVersion" and key not in reset:
@@ -335,9 +338,11 @@ def badass_ini() -> str:
         "; chance at its level (a gun CreatureGunPercent + shield carry x ShieldDropPercent + relic carry x RelicDropPercent), at most CreatureDropCap percent;",
         "; DragonBoss=1: dragons always drop two items, rare or better",
         "; items an enemy drops (guns, shields, relics, a Badass's items) get a small kick so they land around the body, not inside it: units per second up and sideways (DropToss=0: off)",
+        "; (DropTossRev: when it changes, the installer puts DropTossUp and DropTossOut back to these values once)",
+        "DropTossRev=2",
         "DropToss=1",
-        "DropTossUp=260",
-        "DropTossOut=90",
+        "DropTossUp=420",
+        "DropTossOut=150",
         "CreatureDrops=1",
         f"CreatureDropScale={num(D['creature_drop_scale'].value)}",
         f"CreatureDropCap={num(D['creature_drop_cap'].value)}",

@@ -17,14 +17,16 @@
 namespace toss
 {
 	inline bool  g_on = true;
-	inline float g_up = 260.0f;   // game units per second
-	inline float g_out = 90.0f;   // game units per second, sideways
+	inline float g_up = 420.0f;   // game units per second (1.29.1: was 260, items still stuck in bodies)
+	inline float g_out = 150.0f;  // game units per second, sideways (was 90)
 
 	struct Waiting
 	{
 		RE::ObjectRefHandle                   ref;
 		std::chrono::steady_clock::time_point due;
 		int                                   tries = 0;
+		int                                   kicks = 0;   // 1.29.1: an item that barely moved after the first kick (caught in the body) gets one more, harder
+		RE::NiPoint3                          at{};        // where it was at the last kick
 	};
 	inline std::mutex           g_lock;
 	inline std::vector<Waiting> g_waiting;
@@ -60,6 +62,17 @@ namespace toss
 		if (!ref || ref->IsDisabled() || ref->IsDeleted()) {
 			return true;
 		}
+		if (a_w.kicks > 0) {
+			const auto  now = ref->GetPosition();
+			const float moved = now.GetDistance(a_w.at);
+			if (moved >= 30.0f || a_w.kicks >= 2) {
+				return true;
+			}
+			static std::atomic_int again{ 0 };
+			if (again.fetch_add(1) < 12) {
+				SKSE::log::info("toss: {:08X} moved only {:.0f} units after its kick: kicked again, harder", ref->GetFormID(), moved);
+			}
+		}
 		const auto root = ref->Get3D();
 		const auto cell = ref->GetParentCell();
 		const auto body = root ? BodyIn(root) : nullptr;
@@ -76,8 +89,9 @@ namespace toss
 		}
 		static thread_local std::mt19937 rng{ std::random_device{}() };
 		const float angle = std::uniform_real_distribution<float>(0.0f, 6.2831853f)(rng);
-		const float out = g_out * std::uniform_real_distribution<float>(0.6f, 1.2f)(rng);
-		const float up = g_up * std::uniform_real_distribution<float>(0.85f, 1.15f)(rng);
+		const float harder = a_w.kicks > 0 ? 1.4f : 1.0f;
+		const float out = harder * g_out * std::uniform_real_distribution<float>(0.6f, 1.2f)(rng);
+		const float up = harder * g_up * std::uniform_real_distribution<float>(0.85f, 1.15f)(rng);
 		const float s = RE::bhkWorld::GetWorldScale();  // game units -> havok units
 		{
 			RE::BSWriteLockGuard guard(world->worldLock);
@@ -88,7 +102,11 @@ namespace toss
 			const char* name = base ? base->GetName() : nullptr;
 			SKSE::log::info("toss: {:08X} \"{}\" kicked {:.0f} up, {:.0f} out (after {} tries)", ref->GetFormID(), name ? name : "?", up, out, a_w.tries);
 		}
-		return true;
+		// look again in 0.45 s: an item caught in the body's collision has hardly moved
+		a_w.at = ref->GetPosition();
+		++a_w.kicks;
+		a_w.due = std::chrono::steady_clock::now() + std::chrono::milliseconds(450);
+		return false;
 	}
 
 	inline void Frame()
