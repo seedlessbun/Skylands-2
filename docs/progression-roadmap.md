@@ -254,4 +254,4 @@ After the survey report: the numbers go into `sheets/progression.json` (`source:
 * **Other mods:** none in the user's setup; an XP mod that hooks the same `xp` value would add to ours (ini `KillXP` 0 turns ours off).
 
 ## 6. Questions still open for you
-None about the design. The deep report is read (1.3b). Stage 1 (kill XP) is APPROVED and built (0.54.0). Waiting for: the in-game report of stage 1.
+None about the design. The deep report is read (1.3b). Stage 1 (kill XP) works in game (0.54.1). Stages 2 and 3 (proficiencies with their HUD line) are built together in 0.55.0 / TestBuild-170 at the user's request. Waiting for: the in-game report.

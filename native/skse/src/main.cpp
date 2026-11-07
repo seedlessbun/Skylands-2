@@ -21,7 +21,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 397;  // 1.30.1
+	constexpr std::int32_t kVersion = 398;  // 1.31.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -50,6 +50,7 @@ namespace
 	bool  g_aimCenter = true;    // move the gun to the middle of the screen while aimed (ini: AimCenter=0 turns it off)
 	float g_aimRate = 7.0f;   // how fast the aim comes up and down, in whole aims a second (ini: AimRate)
 	float g_convergence = 3000.0f;  // how far ahead the bullets are aimed to cross the crosshair (game units)
+	float                    g_profProj = 0.0f;  // 1.31.0: the held gun's bonus projectile chance in percent (proficiency.h), set by TickGun, read by Launch (both on the game thread)
 	std::atomic<float>       g_damageMult{ 1.0f };  // the player's relic damage bonus (Variable09) as a multiplier; Launch gives it to the player's bullets as their power
 	float g_recoilPitch = 0.55f;   // degrees the view kicks up with a shot at the reference fire rate (ini: RecoilPitch; 0 = no recoil)
 	float g_recoilYaw = 0.22f;     // ... and at most this far sideways, either way (ini: RecoilYaw)
@@ -144,7 +145,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1)) || toss::Config(key, line.substr(eq + 1)) || progress::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1)) || toss::Config(key, line.substr(eq + 1)) || progress::Config(key, line.substr(eq + 1)) || prof::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -341,6 +342,8 @@ namespace
 		int   zoom{ 10 };        // the magnification when aimed, in tenths (13 is 1.3x)
 		int   rarity{ 0 };       // 1 common ... 6 e-tech (the colour of its name on the display)
 		std::uint32_t ammo{ 0 };  // the form id (without its file) of the item this gun uses as ammo; 0: none, the reserve is unlimited
+		int   type{ -1 };   // 1.31.0: 0 SMG, 1 assault rifle, 2 pistol, 3 shotgun, 4 sniper, 5 launcher (its ammo's place in the SkylandsAmmos_ list = generate.STAFF_KINDS); -1 unknown
+		int   maker{ -1 };  // 1.31.0: 0 Bandit .. 7 Vladof, from the SkylandsMaker_<n>_<Name> keyword the installer adds; -1 unknown
 	};
 
 	std::vector<std::uint32_t> g_ammoLocals;  // the form ids (without the file) of every ammo item of the set, read from the SkylandsAmmos_ keyword of a gun
@@ -402,6 +405,10 @@ namespace
 			if (names.size() < 300) {
 				names += std::string(edid) + " ";
 			}
+			if (edid.starts_with("SkylandsMaker_") && edid.size() > 14) {
+				const int n = edid[14] - '0';
+				info.maker = n >= 0 && n <= 7 ? n : -1;
+			}
 			if (edid.starts_with("SkylandsRarity_")) {
 				const std::string_view r = edid.substr(15);
 				info.rarity = r == "common" ? 1 : r == "uncommon" ? 2 : r == "rare" ? 3 : r == "epic" ? 4 : r == "legendary" ? 5 : r == "etech" ? 6 : 0;
@@ -438,11 +445,18 @@ namespace
 			}
 			return RE::BSContainer::ForEachResult::kContinue;
 		});
+		if (info.ammo) {  // the gun's type: where its ammo item stands in the set
+			for (std::size_t i = 0; i < g_ammoLocals.size(); ++i) {
+				if ((g_ammoLocals[i] & 0xFFFFFFu) == (info.ammo & 0xFFFFFFu)) {
+					info.type = static_cast<int>(i);
+				}
+			}
+		}
 		static int told = 0;
 		if (told < 12 && (info.clip > 0 || told < 4)) {  // the first weapons looked at are told: how many keywords, which, and what was read
 			++told;
-			SKSE::log::info("gun check {:08X}: {} keywords [{}] -> clip {}, interval {:.3f}, reload {:.1f}, spread {:.1f}, burst {}", a_weapon->GetFormID(), seen,
-				names, info.clip, info.interval, info.reload, info.spread, info.burst);
+			SKSE::log::info("gun check {:08X}: {} keywords [{}] -> clip {}, interval {:.3f}, reload {:.1f}, spread {:.1f}, burst {}, type {}, maker {}", a_weapon->GetFormID(), seen,
+				names, info.clip, info.interval, info.reload, info.spread, info.burst, info.type, info.maker);
 		}
 		g_guns[a_weapon->GetFormID()] = info;
 		a_out = info;
@@ -656,7 +670,16 @@ namespace
 		const bool tell = launches.fetch_add(1) < 3;  // the first launches are told before and after, so a crash inside the game's launch shows in the log
 		static thread_local std::mt19937 rng{ std::random_device{}() };
 		std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-		for (int pellet = 0; pellet < (a_pellets > 0 ? a_pellets : (std::max)(1, info.pellets)); ++pellet) {
+		int count = a_pellets > 0 ? a_pellets : (std::max)(1, info.pellets);
+		if (!npc && a_pellets < 0 && g_profProj > 0.0f) {  // 1.31.0: the proficiencies' bonus projectiles (one round of ammo, per pellet for a shotgun)
+			const int extra = prof::Extra(g_profProj, count, info.pellets > 1, rng);
+			static std::atomic_int toldExtra{ 0 };
+			if (extra > 0 && toldExtra.fetch_add(1) < 10) {
+				SKSE::log::info("prof: {} bonus projectile(s) on {} ({:.1f}% chance{})", extra, count, g_profProj, info.pellets > 1 ? " per pellet" : "");
+			}
+			count += extra;
+		}
+		for (int pellet = 0; pellet < count; ++pellet) {
 			float aimPitch = pitch, aimHeading = heading;
 			if (spread > 0.0f) {
 				const float radius = spread * std::numbers::pi_v<float> / 180.0f * std::sqrt(unit(rng));
@@ -1952,6 +1975,23 @@ namespace
 		field("tfName", 1, -420.0, -64.0, 420.0, 26.0);
 		field("tfAmmo", 2, -360.0, -42.0, 360.0, 58.0);
 		field("tfWarn", 3, -260.0, 26.0, 260.0, 22.0);
+		// 1.31.0: the held gun's proficiency levels (type, maker), each with a thin bar of the way to the next level
+		field("tfProfT", 4, -196.0, 46.0, 96.0, 20.0);
+		field("tfProfM", 5, -96.0, 46.0, 96.0, 20.0);
+		{
+			const auto bar = [&](const char* a_name, double a_depth, double a_rgb, double a_alpha, double a_x) {
+				RE::GFxValue b;
+				clip.CreateEmptyMovieClip(&b, a_name, a_depth);
+				HudRect(b, a_rgb, a_alpha, 88.0, 3.0);
+				RE::GFxValue::DisplayInfo di;
+				di.SetPosition(a_x, 66.0);
+				b.SetDisplayInfo(di);
+			};
+			bar("profTBg", 30, 0x000000, 55.0, -192.0);
+			bar("profTFill", 31, 0x8CD2FF, 95.0, -192.0);
+			bar("profMBg", 32, 0x000000, 55.0, -92.0);
+			bar("profMFill", 33, 0xFFB428, 95.0, -92.0);
+		}
 		RE::GFxValue bg, fill;
 		clip.CreateEmptyMovieClip(&bg, "barBg", 20);
 		HudRect(bg, 0x000000, 60.0, 190.0, 6.0);
@@ -2045,7 +2085,8 @@ namespace
 	{
 		static Clock::time_point next{};
 		static bool              broken = false, shownLast = false;
-		static std::string       lastAmmo, lastName, lastWarn;
+		static std::string       lastAmmo, lastName, lastWarn, lastProfT, lastProfM;
+		static int               lastBarT = -1, lastBarM = -1;
 		if (!g_hud || broken || a_now < next) {
 			return;
 		}
@@ -2071,6 +2112,9 @@ namespace
 			lastAmmo.clear();
 			lastName.clear();
 			lastWarn.clear();
+			lastProfT.clear();
+			lastProfM.clear();
+			lastBarT = lastBarM = -1;
 			shownLast = false;
 			if (!movie->GetVariable(&clip, "_root.SkylandsHUD")) {
 				return;
@@ -2144,6 +2188,47 @@ namespace
 			HudSet(movie.get(), "_root.SkylandsHUD.tfName", left < 1.2 ? left / 1.2 * 100.0 : 100.0, true);
 		} else {
 			HudSet(movie.get(), "_root.SkylandsHUD.tfName", 0.0, false);
+		}
+		// the proficiency line: "SMG 4" and "Jakobs 2", the bars filling towards the next level
+		const int  ptype = g_gun.info.type, pmaker = g_gun.info.maker;
+		const bool profShow = prof::g_on && prof::g_hud && ptype >= 0 && ptype < prof::kTypes;
+		if (profShow) {
+			const auto v = prof::ViewOf(ptype, pmaker);
+			HudText(movie.get(), "_root.SkylandsHUD.tfProfT", fmt::format("<p align=\"left\"><font face=\"$EverywhereBoldFont\" size=\"14\" color=\"#8CD2FF\">{} {}</font></p>", prof::kTypeShort[ptype], v.typeLevel), lastProfT);
+			const bool maker = pmaker >= 0 && pmaker < prof::kMakers;
+			HudText(movie.get(), "_root.SkylandsHUD.tfProfM", maker ? fmt::format("<p align=\"left\"><font face=\"$EverywhereBoldFont\" size=\"14\" color=\"#FFB428\">{} {}</font></p>", prof::kMakerNames[pmaker], v.makerLevel) : std::string(), lastProfM);
+			const auto scaleBar = [&](const char* a_path, float a_frac, int& a_last) {
+				const int pct = static_cast<int>(a_frac * 100.0f + 0.5f);
+				if (pct == a_last) {
+					return;
+				}
+				a_last = pct;
+				RE::GFxValue b;
+				if (movie->GetVariable(&b, a_path) && b.IsObject()) {
+					RE::GFxValue::DisplayInfo di;
+					di.SetScale((std::max)(0.5, static_cast<double>(pct)), 100.0);
+					di.SetVisible(pct > 0);
+					b.SetDisplayInfo(di);
+				}
+			};
+			scaleBar("_root.SkylandsHUD.profTFill", v.typeFrac, lastBarT);
+			HudSet(movie.get(), "_root.SkylandsHUD.profTBg", 100.0, true);
+			HudSet(movie.get(), "_root.SkylandsHUD.tfProfT", 100.0, true);
+			if (maker) {
+				scaleBar("_root.SkylandsHUD.profMFill", v.makerFrac, lastBarM);
+			}
+			HudSet(movie.get(), "_root.SkylandsHUD.profMBg", 100.0, maker);
+			HudSet(movie.get(), "_root.SkylandsHUD.tfProfM", 100.0, maker);
+			if (!maker) {
+				HudSet(movie.get(), "_root.SkylandsHUD.profMFill", 100.0, false);
+				lastBarM = -1;
+			}
+		} else {
+			for (const char* path : { "_root.SkylandsHUD.tfProfT", "_root.SkylandsHUD.tfProfM", "_root.SkylandsHUD.profTBg", "_root.SkylandsHUD.profTFill", "_root.SkylandsHUD.profMBg",
+					 "_root.SkylandsHUD.profMFill" }) {
+				HudSet(movie.get(), path, 100.0, false);
+			}
+			lastBarT = lastBarM = -1;
 		}
 		g_hudLive = true;
 	}
@@ -2284,14 +2369,26 @@ namespace
 			SKSE::log::info("player gun {:08X}: magazine {} of {}, interval {:.3f}, reload {:.1f}, spread {:.1f}", g_gun.weapon, g_gun.mag, info.clip,
 				info.interval, info.reload, info.spread);
 		}
-		const float rate = Relic(player, RE::ActorValue::kVariable06);
-		const float quick = Relic(player, RE::ActorValue::kVariable07);
-		const float accuracy = Relic(player, RE::ActorValue::kVariable08);
+		// 1.31.0: the weapon proficiencies of this gun's type and maker (proficiency.h), on top of the relics (each its own multiplier)
+		float pb[prof::kStats];
+		prof::BonusFor(g_gun.info.type, g_gun.info.maker, pb);
+		g_profProj = pb[prof::kProj];
+		{
+			static float lastPb[prof::kStats]{};
+			if (!std::equal(std::begin(pb), std::end(pb), std::begin(lastPb))) {
+				std::copy(std::begin(pb), std::end(pb), std::begin(lastPb));
+				SKSE::log::info("prof: gun {:08X} ({} / {}): damage +{:.1f}%, accuracy +{:.1f}%, reload +{:.1f}%, fire rate +{:.1f}%, magazine +{:.1f}%, bonus projectiles {:.1f}%", g_gun.weapon,
+					g_gun.info.type >= 0 ? prof::kTypeNames[g_gun.info.type] : "type ?", g_gun.info.maker >= 0 ? prof::kMakerNames[g_gun.info.maker] : "maker ?", pb[0], pb[1], pb[2], pb[3], pb[4], pb[5]);
+			}
+		}
+		const float rate = Relic(player, RE::ActorValue::kVariable06) * (1.0f + pb[prof::kRate] * 0.01f);
+		const float quick = Relic(player, RE::ActorValue::kVariable07) * (1.0f + pb[prof::kReload] * 0.01f);
+		const float accuracy = Relic(player, RE::ActorValue::kVariable08) * (1.0f + pb[prof::kAccuracy] * 0.01f);
 		{
 			// Variable09: damage bonus in percent (the bullets' power); Variable04: magazine size bonus in percent. 0.42.0: console `player.modav variable09 50`, `player.modav variable04 50`.
 			const auto  ao = player->AsActorValueOwner();
-			const float damage = (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable09) * 0.01f);
-			const float clipBonus = (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable04) * 0.01f);
+			const float damage = (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable09) * 0.01f) * (1.0f + pb[prof::kDamage] * 0.01f);
+			const float clipBonus = (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable04) * 0.01f) * (1.0f + pb[prof::kMag] * 0.01f);
 			g_damageMult = damage;
 			const int clip = (std::max)(1, static_cast<int>(static_cast<float>(g_gun.baseClip > 0 ? g_gun.baseClip : g_gun.info.clip) * clipBonus + 0.5f));
 			static float lastDamage = 1.0f, lastClip = 1.0f;
@@ -2795,10 +2892,26 @@ namespace
 				despawn::Start(holder);
 				badass::Start(holder);  // Badass enemies, stage 1: tiers and stats
 				// character progression, stage 1: kill XP into the level meter (progress.h)
-				progress::g_isGun = [](RE::FormID a_source) -> RE::FormID {
+				progress::g_gunFacts = [](RE::FormID a_source, progress::GunFacts& a_out) -> bool {
 					GunInfo    info;
 					const auto weapon = GunFromSource(a_source);
-					return weapon && GunOf(weapon, info) ? weapon->GetFormID() : 0;
+					if (!weapon || !GunOf(weapon, info)) {
+						return false;
+					}
+					a_out.gun = weapon->GetFormID();
+					a_out.type = info.type;
+					a_out.maker = info.maker;
+					a_out.magnitude = 0.0f;
+					if (weapon->formEnchanting) {
+						for (const auto effect : weapon->formEnchanting->effects) {
+							if (effect) {
+								a_out.magnitude = effect->effectItem.magnitude;  // the bullet's damage (one pellet's for a shotgun)
+								break;
+							}
+						}
+					}
+					a_out.power = g_damageMult.load();  // the player's bullets carry it (relic and proficiency damage)
+					return true;
 				};
 				progress::Start(holder);
 			}
@@ -2930,7 +3043,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 30, 1, 0 },
+	.Version = { 1, 31, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

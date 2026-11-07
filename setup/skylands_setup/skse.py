@@ -357,7 +357,8 @@ def progression_ini() -> str:
 
     lines = ["; Character progression, stage 1: kills with a Skylands gun give character XP (your level meter). One regular kill of your own level gives",
              "; 1/KillXPKillsPerLevel of a level; higher-level enemies give more, lower ones much less (Borderlands 2: 6+ levels below you = 1 %).",
-             "; Badass / Super / Ultimate / boss multipliers are Borderlands 2's; one kill gives at most KillXPMaxShare of a level."]
+             "; Badass / Super / Ultimate / boss multipliers are Borderlands 2's; one kill gives at most KillXPMaxShare of a level.",
+             "; Weapon proficiencies (Prof...): your bullets' damage on living enemies raises the gun's type and maker tracks; their levels raise that gun's stats."]
     for row in P.values():
         lines.append(f"; {row.note}")
         lines.append(f"{row.id}={row.value:g}")

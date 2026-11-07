@@ -12,6 +12,7 @@
 
 #include "PCH.h"
 #include "badass.h"
+#include "proficiency.h"
 #include "shield.h"
 #include "shielditems.h"
 
@@ -33,8 +34,15 @@ namespace progress
 	inline float g_above[7] = { 1.0f, 1.0f, 1.03f, 1.06f, 1.09f, 1.12f, 1.15f };  // by levels above the player, 0..6+
 	inline float g_below[7] = { 1.0f, 0.9f, 0.7f, 0.4f, 0.15f, 0.05f, 0.01f };   // by levels below the player, 0..6+
 
-	// set by main.cpp: the Skylands gun a hit's source belongs to (the source is the gun's enchantment for plugin-launched bullets: the 0.54.0 log), 0 = none
-	inline RE::FormID (*g_isGun)(RE::FormID) = nullptr;
+	// set by main.cpp: the Skylands gun a hit's source belongs to (the source is the gun's enchantment for plugin-launched bullets: the 0.54.0 log), with what the
+	// proficiencies need: its type (0..5) and maker (0..7, -1 unknown), its bullet's damage (the enchantment's magnitude) and the player's launch power now
+	struct GunFacts
+	{
+		RE::FormID gun = 0;
+		int        type = -1, maker = -1;
+		float      magnitude = 0.0f, power = 1.0f;
+	};
+	inline bool (*g_gunFacts)(RE::FormID, GunFacts&) = nullptr;
 
 	struct Hit
 	{
@@ -96,23 +104,32 @@ namespace progress
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESHitEvent* a_event, RE::BSTEventSource<RE::TESHitEvent>*) override
 		{
 			shield::g_stage = "progress: hit event";
-			if (!g_on || !a_event || !a_event->target || !a_event->cause || !a_event->cause->IsPlayerRef()) {
+			if ((!g_on && !prof::g_on) || !a_event || !a_event->target || !a_event->cause || !a_event->cause->IsPlayerRef()) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const auto actor = a_event->target->As<RE::Actor>();
 			if (!actor || actor->IsPlayerRef()) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
-			const RE::FormID gunId = g_isGun ? g_isGun(a_event->source) : 0;
-			const bool       gun = gunId != 0;
+			GunFacts         facts;
+			const bool       gun = g_gunFacts && g_gunFacts(a_event->source, facts) && facts.gun != 0;
+			const RE::FormID gunId = facts.gun;
 			if (const int n = g_hitsSeen.fetch_add(1); n < 20) {
 				SKSE::log::info("kill xp: the player hit {:08X} (level {}, {}) with source {:08X} projectile {:08X}: {}", actor->GetFormID(), actor->GetLevel(), actor->IsDead() ? "dead" : "alive",
 					a_event->source, a_event->projectile, gun ? fmt::format("Skylands gun {:08X}", gunId) : std::string("not a Skylands gun"));
 			}
-			if (!gun || actor->IsDead()) {
+			if (!gun) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const auto player = RE::PlayerCharacter::GetSingleton();
+			// proficiency XP (proficiency.h): living hostile actors (the killing shot's pellets a moment after the death), not the protected kinds
+			if (prof::g_on && player && actor->IsHostileToActor(player) && !actor->IsEssential() && !actor->IsProtected() && !actor->IsPlayerTeammate() && !actor->IsSummoned() &&
+				!actor->IsCommandedActor() && !actor->IsChild()) {
+				prof::Book(actor->GetFormID(), facts.type, facts.maker, facts.magnitude * facts.power, !actor->IsDead(), gunId, facts.magnitude, facts.power);
+			}
+			if (!g_on || actor->IsDead()) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
 			Hit        h;
 			h.at = Clock::now();
 			h.hostile = player && actor->IsHostileToActor(player);
@@ -139,11 +156,15 @@ namespace progress
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override
 		{
 			shield::g_stage = "progress: death event";
-			if (!g_on || !a_event || !a_event->actorDying) {
+			if (!a_event || !a_event->actorDying) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const auto dying = a_event->actorDying->As<RE::Actor>();
 			if (!dying || dying->IsPlayerRef()) {
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			prof::NoteDeath(dying->GetFormID());
+			if (!g_on) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			const auto killer = a_event->actorKiller.get();
@@ -248,8 +269,9 @@ namespace progress
 
 	inline void Start(RE::ScriptEventSourceHolder* a_holder)
 	{
-		if (!g_on || !a_holder) {
-			SKSE::log::info("kill xp: off");
+		prof::Start();
+		if ((!g_on && !prof::g_on) || !a_holder) {
+			SKSE::log::info("kill xp: off; proficiencies: off");
 			return;
 		}
 		a_holder->AddEventSink(HitSink::Get());
@@ -269,6 +291,8 @@ namespace progress
 				shield::Queue([]() {
 					shield::g_stage = "progress: apply";
 					Apply();
+					shield::g_stage = "progress: proficiencies";
+					prof::Apply();
 					queued = false;
 				});
 			}

@@ -105,6 +105,15 @@ def copy(rec: Record, new_type: str | None = None) -> esp.Rec:
     return esp.Rec(new_type or rec.type, rec.form_id, list(rec.subrecords), flags=rec.flags & esp.REC_COMPRESSED)
 
 
+def maker_index(name: str) -> int | None:
+    """The place of a gun's manufacturer in sheets/manufacturers.json (0 Bandit ... 7 Vladof), the number the plugin's proficiencies use; None when unknown."""
+    low = (name or "").strip().lower()
+    for i, m in enumerate(S.MANUFACTURERS):
+        if m.lower() == low or (low and low.startswith(m.lower())):
+            return i
+    return None
+
+
 def insert_ordered(rec: esp.Rec, sig: str, data: bytes, order: list[str]) -> None:
     rec.drop(sig)
     pos = order.index(sig)
@@ -661,6 +670,7 @@ class Armory:
         self.tracers: dict[str, bytes] = {}
         self.count = 0
         self.kinds: set[str] = set()
+        self.makers: list[tuple[esp.Rec, int]] = []  # (staff gun record, manufacturer index): the maker keywords are added LAST (add_maker_keywords)
         for i in range(STAFF_ID_SHIFT):
             view.new_id(f"SHIFT:SkylandsStaffGun_{STAFF_REV}_{i}")
         # the ids of the records the player's script lives in, reserved now so they do not move when the number of guns does
@@ -900,6 +910,9 @@ class Armory:
             ids.append(self._keyword(f"SkylandsSnd_{kind}_{re.sub('[^A-Za-z0-9]+', '_', mfr)}"))
         insert_ordered(w, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
         insert_ordered(w, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)
+        maker = maker_index(mfr)
+        if maker is not None:
+            self.makers.append((w, maker))
         mesh = self.models.model_for(g, built, rr.id, color, edid, self.hold) if self.models is not None else None
         if mesh:
             w.set("MODL", esp.zstr(mesh))
@@ -918,6 +931,22 @@ class Armory:
         self.report.setdefault("staff_guns", {})[edid] = {"name": name, "element": element, "damage": damage, "magazine": magazine,
                                                           "interval": interval, "burst": burst, "mesh": mesh}
         return w.form_id
+
+    def add_maker_keywords(self) -> int:
+        """1.30.2 (weapon proficiencies): every staff gun gets a keyword `SkylandsMaker_<n>_<Name>` (n = its manufacturer's place in sheets/manufacturers.json, 0 Bandit ..
+        7 Vladof) that the plugin reads. Called LAST, after every other record of the second plugin, so the 8 new keywords take the last form ids and nothing made before
+        them moves (the second plugin numbers its records by position); the guns' keyword lists are then extended in place. Returns the number of guns given one."""
+        names = list(S.MANUFACTURERS)
+        kw: dict[int, int] = {}
+        for rec, n in self.makers:
+            if n not in kw:
+                kw[n] = self.view.new("KYWD", f"SkylandsMaker_{n}_{re.sub('[^A-Za-z0-9]+', '_', names[n])}").form_id
+            old = rec.get("KWDA") or b""
+            ids = [*struct.unpack(f"<{len(old) // 4}I", old), kw[n]]
+            insert_ordered(rec, "KSIZ", struct.pack("<I", len(ids)), WEAP_ORDER)
+            insert_ordered(rec, "KWDA", struct.pack(f"<{len(ids)}I", *ids), WEAP_ORDER)
+        self.log.append(f"maker keywords: {len(kw)} manufacturers, {len(self.makers)} staff guns tagged")
+        return len(self.makers)
 
     def finish(self, m: "Masters") -> None:
         """The player's script: an ability (run by a start-game-enabled quest) with the few numbers that are not the gun's own."""
@@ -1471,6 +1500,10 @@ def generate(bl2: dict, skyrim_dir: Path, out_dir: Path, seed: int = 4, formids:
         except Exception as e:  # noqa: BLE001 - the voices must never stop the install
             report["voices_error"] = f"{type(e).__name__}: {e}"
             report.setdefault("model_log", []).append(f"voices: not built ({type(e).__name__}: {e})")
+
+    # ---- the manufacturer of every staff gun, for the weapon proficiencies (LAST: after the voices, so no older form id moves) ------------
+    if armory is not None and armory.ok and armory.count:
+        report["maker_keywords"] = armory.add_maker_keywords()
 
     # ---- the enemy classes for the plugin's Badass and creature drops (sheets/enemy_stats.json; written fresh every install) -----------
     write_enemy_classes(out_data)

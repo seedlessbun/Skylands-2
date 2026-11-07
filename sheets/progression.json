@@ -1,6 +1,6 @@
 {
  "sheet": "progression",
- "description": "Character progression (docs/progression-roadmap.md). Stage 1: kill XP into Skyrim's character level. The Borderlands 2 numbers were read from the user's progression surveys (bl2-progress-report.txt and bl2-progress-deep-report.txt; the rule: BL2 file values replace static values); the pace (kills per level) and the caps are Skylands choices. The plugin reads the values from SkylandsNative.ini (skse.progression_ini).",
+ "description": "Character progression (docs/progression-roadmap.md). Stage 1: kill XP into Skyrim's character level. Stages 2-3: weapon proficiencies per gun type and manufacturer (Prof keys). The Borderlands 2 numbers were read from the user's progression surveys (bl2-progress-report.txt and bl2-progress-deep-report.txt; the rule: BL2 file values replace static values); the pace (kills per level) and the caps are Skylands choices. The plugin reads the values from SkylandsNative.ini (skse.progression_ini).",
  "columns": {
   "id": "row id (the ini key)",
   "value": "the default written to the ini",
@@ -9,16 +9,264 @@
   "note": "what it does"
  },
  "rows": [
-  {"id": "KillXP", "value": 1, "source": "design", "bl2_object": "-", "note": "1 = kills with a Skylands gun give character XP; 0 = off"},
-  {"id": "KillXPKillsPerLevel", "value": 30, "source": "design", "bl2_object": "-", "note": "regular kills of your own level that fill one level (the user: 30)"},
-  {"id": "KillXPScale", "value": 1.0, "source": "design", "bl2_object": "-", "note": "every amount times this"},
-  {"id": "KillXPWindow", "value": 3.0, "source": "design", "bl2_object": "-", "note": "seconds after your last gun hit in which a death counts as a gun kill"},
-  {"id": "KillXPMaxShare", "value": 0.5, "source": "design", "bl2_object": "-", "note": "one kill gives at most this share of a level"},
-  {"id": "KillXPNoKiller", "value": 1, "source": "design", "bl2_object": "-", "note": "1 = a death with no killer named counts when your gun hit it last (explosions, burning)"},
-  {"id": "KillXPNonHostile", "value": 0, "source": "design", "bl2_object": "-", "note": "1 = kills of actors that were not hostile to you count too"},
-  {"id": "KillXPBadass", "value": 3.0, "source": "bl2", "bl2_object": "GD_AI_Balance.XP.XPMultiplier_06_Badass (against XPMultiplier_03_NormalHigh 1.0)", "note": "a Badass gives this many times the XP"},
-  {"id": "KillXPSuper", "value": 10.0, "source": "bl2", "bl2_object": "GD_AI_Balance.XP.XPMultiplier_07_SuperBadass", "note": "a Super Badass"},
-  {"id": "KillXPUltimate", "value": 20.0, "source": "bl2", "bl2_object": "GD_AI_Balance.XP.XPMultiplier_08_UltimateBadass", "note": "an Ultimate Badass"},
-  {"id": "KillXPBoss", "value": 40.0, "source": "bl2", "bl2_object": "GD_AI_Balance.XP.XPMultiplier_09_Boss", "note": "a boss (named, level 35+, or a dragon); still capped by KillXPMaxShare"}
+  {
+   "id": "KillXP",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "1 = kills with a Skylands gun give character XP; 0 = off"
+  },
+  {
+   "id": "KillXPKillsPerLevel",
+   "value": 30,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "regular kills of your own level that fill one level (the user: 30)"
+  },
+  {
+   "id": "KillXPScale",
+   "value": 1.0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "every amount times this"
+  },
+  {
+   "id": "KillXPWindow",
+   "value": 3.0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "seconds after your last gun hit in which a death counts as a gun kill"
+  },
+  {
+   "id": "KillXPMaxShare",
+   "value": 0.5,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "one kill gives at most this share of a level"
+  },
+  {
+   "id": "KillXPNoKiller",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "1 = a death with no killer named counts when your gun hit it last (explosions, burning)"
+  },
+  {
+   "id": "KillXPNonHostile",
+   "value": 0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "1 = kills of actors that were not hostile to you count too"
+  },
+  {
+   "id": "KillXPBadass",
+   "value": 3.0,
+   "source": "bl2",
+   "bl2_object": "GD_AI_Balance.XP.XPMultiplier_06_Badass (against XPMultiplier_03_NormalHigh 1.0)",
+   "note": "a Badass gives this many times the XP"
+  },
+  {
+   "id": "KillXPSuper",
+   "value": 10.0,
+   "source": "bl2",
+   "bl2_object": "GD_AI_Balance.XP.XPMultiplier_07_SuperBadass",
+   "note": "a Super Badass"
+  },
+  {
+   "id": "KillXPUltimate",
+   "value": 20.0,
+   "source": "bl2",
+   "bl2_object": "GD_AI_Balance.XP.XPMultiplier_08_UltimateBadass",
+   "note": "an Ultimate Badass"
+  },
+  {
+   "id": "KillXPBoss",
+   "value": 40.0,
+   "source": "bl2",
+   "bl2_object": "GD_AI_Balance.XP.XPMultiplier_09_Boss",
+   "note": "a boss (named, level 35+, or a dragon); still capped by KillXPMaxShare"
+  },
+  {
+   "id": "Prof",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "1 = weapon proficiencies on; 0 = off"
+  },
+  {
+   "id": "ProfXPScale",
+   "value": 0.1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "proficiency XP = each bullet's damage x this (to the gun's type track AND its maker track)"
+  },
+  {
+   "id": "ProfBase",
+   "value": 50,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "XP for proficiency level n -> n+1 = ProfBase + ProfStep x n (the user: 50)"
+  },
+  {
+   "id": "ProfStep",
+   "value": 15,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "(the user: 15); no cap"
+  },
+  {
+   "id": "ProfKillGrace",
+   "value": 0.25,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "seconds after a death in which the rest of the killing shot still counts; a body gives nothing after it"
+  },
+  {
+   "id": "ProfStatsPerLevel",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "stats an ordinary level raises (the user: 1), in turn: damage, accuracy, reload, fire rate, magazine, bonus projectiles"
+  },
+  {
+   "id": "ProfMilestoneMult",
+   "value": 3,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "milestone levels (10, 25, 50, 75, 100, then every 50) raise 4 stats at this many times the step"
+  },
+  {
+   "id": "ProfDecay",
+   "value": 0.75,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "after each milestone the step is this times smaller, down to the stat's floor"
+  },
+  {
+   "id": "ProfOwnMaker",
+   "value": 1.0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "a gun gets its own maker's track at this share (the user: full)"
+  },
+  {
+   "id": "ProfOtherMakers",
+   "value": 0.25,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "... and every other maker's track at this share (the user: a quarter)"
+  },
+  {
+   "id": "ProfLauncherProjectiles",
+   "value": 0.5,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "launchers get this share of the bonus projectile chance (the user: half)"
+  },
+  {
+   "id": "ProfDamageStart",
+   "value": 2,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "damage step in percent at first ..."
+  },
+  {
+   "id": "ProfDamageFloor",
+   "value": 0.5,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "... and its smallest"
+  },
+  {
+   "id": "ProfAccuracyStart",
+   "value": 2,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "accuracy step"
+  },
+  {
+   "id": "ProfAccuracyFloor",
+   "value": 0.5,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "accuracy floor"
+  },
+  {
+   "id": "ProfReloadStart",
+   "value": 2,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "reload speed step"
+  },
+  {
+   "id": "ProfReloadFloor",
+   "value": 0.5,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "reload floor"
+  },
+  {
+   "id": "ProfRateStart",
+   "value": 2,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "fire rate step"
+  },
+  {
+   "id": "ProfRateFloor",
+   "value": 0.5,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "fire rate floor (the user: +0.5% at the least)"
+  },
+  {
+   "id": "ProfMagazineStart",
+   "value": 3,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "magazine size step"
+  },
+  {
+   "id": "ProfMagazineFloor",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "magazine floor"
+  },
+  {
+   "id": "ProfProjectileStart",
+   "value": 4,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "bonus projectile chance step (points of percent; over 100 = a sure extra plus a chance of one more)"
+  },
+  {
+   "id": "ProfProjectileFloor",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "projectile floor"
+  },
+  {
+   "id": "ProfHud",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "1 = the held gun's type and maker levels under the ammo display"
+  },
+  {
+   "id": "ProfNotices",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "1 = a notice at every proficiency level-up"
+  },
+  {
+   "id": "ProfLogHits",
+   "value": 30,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "the first N proficiency hits are written to SkylandsNative.log"
+  }
  ]
 }

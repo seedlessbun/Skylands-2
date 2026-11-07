@@ -715,9 +715,11 @@ def test_pandora_bandits_get_borderlands_voices_and_lose_skyrims(tmp_path):
     assert (data / "Sound" / "FX" / "Skylands" / "VO" / "nomad_death_00000001.wav").is_file()
     # the new records come last: everything that was already in the second plugin keeps its id
     now = {(r.type, r.edid): r.form_id for r in recs}
-    assert all(now.get((r.type, r.edid)) == r.form_id for r in before if r.edid)
+    # (the maker keywords of 1.30.2 are added after the voices, so they are the one thing that is LATER than the voices: left out here, tested on their own)
+    older = [r for r in before if r.edid and not r.edid.startswith("SkylandsMaker_")]
+    assert all(now.get((r.type, r.edid)) == r.form_id for r in older)
     new_local = [r.form_id & 0xFFFFFF for r in sndr.values()]
-    assert min(new_local) > max(r.form_id & 0xFFFFFF for r in before if (r.form_id >> 24) == (min(r.form_id for r in sndr.values()) >> 24))
+    assert min(new_local) > max(r.form_id & 0xFFFFFF for r in older if (r.form_id >> 24) == (min(r.form_id for r in sndr.values()) >> 24))
     silent = next(r for r in recs if r.type == "VTYP")
     assert silent.edid == voices.SILENT_VOICE
     boss = next(r for r in recs if r.type == "NPC_" and r.edid == "EncBandit03Boss1HNordM")  # the bandit boss (Badass Nomad) had a voice type: now the silent one
@@ -736,3 +738,26 @@ def test_pandora_bandits_get_borderlands_voices_and_lose_skyrims(tmp_path):
     assert "name Badass Nomad|nomad" in table and "name Nomad|nomad" in table
     assert f"silent {silent.form_id & 0xFFFFFF:06X}" in table
     assert rep["voices"]["silenced"] >= 1 and plain.get("voices") is None
+
+
+def test_every_staff_gun_carries_its_manufacturer_keyword_added_last(tmp_path):
+    # 1.30.2 weapon proficiencies: the plugin reads the maker from SkylandsMaker_<n>_<Name>; the 8 keywords are the LAST records, so no older form id moves
+    bl2 = staff_bl2(tmp_path)
+    rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", shooting="staff")
+    data = tmp_path / "out" / "Data"
+    recs = [r for rs in read_plugin(data / generate.MODELS_PLUGIN, {"WEAP", "KYWD", "SNDR", "ENCH", "MGEF", "ARMO", "LVLI", "PROJ"})[1].values() for r in rs]
+    makers = {r.form_id: r.edid for r in recs if r.type == "KYWD" and (r.edid or "").startswith("SkylandsMaker_")}
+    assert makers and rep["maker_keywords"] > 0
+    for edid in makers.values():
+        n, name = edid.split("_")[1:3]
+        assert list(generate.S.MANUFACTURERS)[int(n)] == name
+    top = max(r.form_id & 0xFFFFFF for r in recs if r.form_id >> 24 == next(iter(makers)) >> 24)
+    assert min(k & 0xFFFFFF for k in makers) > max(r.form_id & 0xFFFFFF for r in recs if r.form_id not in makers and r.form_id >> 24 == next(iter(makers)) >> 24)
+    assert max(k & 0xFFFFFF for k in makers) == top
+    guns = [r for r in recs if r.type == "WEAP" and r.first("KWDA")]
+    tagged = [g for g in guns if any(k in makers for k in struct.unpack(f"<{len(g.first('KWDA')) // 4}I", g.first("KWDA")))]
+    assert len(tagged) == rep["maker_keywords"]
+    for g in tagged:
+        kw = g.first("KWDA")
+        assert struct.unpack("<I", g.first("KSIZ"))[0] == len(kw) // 4
+    assert generate.maker_index("Jakobs") == 3 and generate.maker_index("vladof") == 7 and generate.maker_index("Gearbox") is None

@@ -329,7 +329,7 @@ PART_STATS: dict[str, PartStatsRow] = {
 
 @dataclass(frozen=True)
 class ProgressionRow:
-    """Character progression (docs/progression-roadmap.md). Stage 1: kill XP into Skyrim's character level. The Borderlands 2 numbers were read from the user's progression surveys (bl2-progress-report.txt and bl2-progress-deep-report.txt; the rule: BL2 file values replace static values); the pace (kills per level) and the caps are Skylands choices. The plugin reads the values from SkylandsNative.ini (skse.progression_ini)."""
+    """Character progression (docs/progression-roadmap.md). Stage 1: kill XP into Skyrim's character level. Stages 2-3: weapon proficiencies per gun type and manufacturer (Prof keys). The Borderlands 2 numbers were read from the user's progression surveys (bl2-progress-report.txt and bl2-progress-deep-report.txt; the rule: BL2 file values replace static values); the pace (kills per level) and the caps are Skylands choices. The plugin reads the values from SkylandsNative.ini (skse.progression_ini)."""
 
     id: str
     value: float
@@ -350,6 +350,32 @@ PROGRESSION: dict[str, ProgressionRow] = {
     'KillXPSuper': ProgressionRow(id='KillXPSuper', value=10.0, source='bl2', bl2_object='GD_AI_Balance.XP.XPMultiplier_07_SuperBadass', note='a Super Badass'),
     'KillXPUltimate': ProgressionRow(id='KillXPUltimate', value=20.0, source='bl2', bl2_object='GD_AI_Balance.XP.XPMultiplier_08_UltimateBadass', note='an Ultimate Badass'),
     'KillXPBoss': ProgressionRow(id='KillXPBoss', value=40.0, source='bl2', bl2_object='GD_AI_Balance.XP.XPMultiplier_09_Boss', note='a boss (named, level 35+, or a dragon); still capped by KillXPMaxShare'),
+    'Prof': ProgressionRow(id='Prof', value=1.0, source='design', bl2_object='-', note='1 = weapon proficiencies on; 0 = off'),
+    'ProfXPScale': ProgressionRow(id='ProfXPScale', value=0.1, source='design', bl2_object='-', note="proficiency XP = each bullet's damage x this (to the gun's type track AND its maker track)"),
+    'ProfBase': ProgressionRow(id='ProfBase', value=50.0, source='design', bl2_object='-', note='XP for proficiency level n -> n+1 = ProfBase + ProfStep x n (the user: 50)'),
+    'ProfStep': ProgressionRow(id='ProfStep', value=15.0, source='design', bl2_object='-', note='(the user: 15); no cap'),
+    'ProfKillGrace': ProgressionRow(id='ProfKillGrace', value=0.25, source='design', bl2_object='-', note='seconds after a death in which the rest of the killing shot still counts; a body gives nothing after it'),
+    'ProfStatsPerLevel': ProgressionRow(id='ProfStatsPerLevel', value=1.0, source='design', bl2_object='-', note='stats an ordinary level raises (the user: 1), in turn: damage, accuracy, reload, fire rate, magazine, bonus projectiles'),
+    'ProfMilestoneMult': ProgressionRow(id='ProfMilestoneMult', value=3.0, source='design', bl2_object='-', note='milestone levels (10, 25, 50, 75, 100, then every 50) raise 4 stats at this many times the step'),
+    'ProfDecay': ProgressionRow(id='ProfDecay', value=0.75, source='design', bl2_object='-', note="after each milestone the step is this times smaller, down to the stat's floor"),
+    'ProfOwnMaker': ProgressionRow(id='ProfOwnMaker', value=1.0, source='design', bl2_object='-', note="a gun gets its own maker's track at this share (the user: full)"),
+    'ProfOtherMakers': ProgressionRow(id='ProfOtherMakers', value=0.25, source='design', bl2_object='-', note="... and every other maker's track at this share (the user: a quarter)"),
+    'ProfLauncherProjectiles': ProgressionRow(id='ProfLauncherProjectiles', value=0.5, source='design', bl2_object='-', note='launchers get this share of the bonus projectile chance (the user: half)'),
+    'ProfDamageStart': ProgressionRow(id='ProfDamageStart', value=2.0, source='design', bl2_object='-', note='damage step in percent at first ...'),
+    'ProfDamageFloor': ProgressionRow(id='ProfDamageFloor', value=0.5, source='design', bl2_object='-', note='... and its smallest'),
+    'ProfAccuracyStart': ProgressionRow(id='ProfAccuracyStart', value=2.0, source='design', bl2_object='-', note='accuracy step'),
+    'ProfAccuracyFloor': ProgressionRow(id='ProfAccuracyFloor', value=0.5, source='design', bl2_object='-', note='accuracy floor'),
+    'ProfReloadStart': ProgressionRow(id='ProfReloadStart', value=2.0, source='design', bl2_object='-', note='reload speed step'),
+    'ProfReloadFloor': ProgressionRow(id='ProfReloadFloor', value=0.5, source='design', bl2_object='-', note='reload floor'),
+    'ProfRateStart': ProgressionRow(id='ProfRateStart', value=2.0, source='design', bl2_object='-', note='fire rate step'),
+    'ProfRateFloor': ProgressionRow(id='ProfRateFloor', value=0.5, source='design', bl2_object='-', note='fire rate floor (the user: +0.5% at the least)'),
+    'ProfMagazineStart': ProgressionRow(id='ProfMagazineStart', value=3.0, source='design', bl2_object='-', note='magazine size step'),
+    'ProfMagazineFloor': ProgressionRow(id='ProfMagazineFloor', value=1.0, source='design', bl2_object='-', note='magazine floor'),
+    'ProfProjectileStart': ProgressionRow(id='ProfProjectileStart', value=4.0, source='design', bl2_object='-', note='bonus projectile chance step (points of percent; over 100 = a sure extra plus a chance of one more)'),
+    'ProfProjectileFloor': ProgressionRow(id='ProfProjectileFloor', value=1.0, source='design', bl2_object='-', note='projectile floor'),
+    'ProfHud': ProgressionRow(id='ProfHud', value=1.0, source='design', bl2_object='-', note="1 = the held gun's type and maker levels under the ammo display"),
+    'ProfNotices': ProgressionRow(id='ProfNotices', value=1.0, source='design', bl2_object='-', note='1 = a notice at every proficiency level-up'),
+    'ProfLogHits': ProgressionRow(id='ProfLogHits', value=30.0, source='design', bl2_object='-', note='the first N proficiency hits are written to SkylandsNative.log'),
 }
 
 @dataclass(frozen=True)
