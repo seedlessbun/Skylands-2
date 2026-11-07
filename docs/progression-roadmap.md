@@ -1,6 +1,6 @@
 # Character progression for Skylands guns: plan (phase 1 deliverable)
 
-Status: **WRITTEN, AWAITING THE USER'S APPROVAL. No feature code is built.** Stage 0 (the BL2 survey) is in 0.53.2 / TestBuild-166 (python only, plugin unchanged at 1.29.1).
+Status: **REVISED after the user's second round (section 2, items 9-10), AWAITING THE USER'S APPROVAL. No feature code is built.** Stage 0 (the BL2 survey) is in 0.53.2 / TestBuild-166 (python only, plugin unchanged at 1.29.1).
 Written from the code at 0.53.1 and the user's interview answers (section 2). **Confirmed** = read in the code or a log of this project. **Unconfirmed** = my reading or a guess,
 with how it will be checked. No Borderlands 2 install is available to this session, so no BL2 numbers are read yet: every number below marked *design* is a placeholder that the
 survey report replaces where BL2 has one (the user's rule: BL2 file values replace static values).
@@ -11,8 +11,8 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   Skyrim awards nothing; Skyrim's character level only rises from skill increases.
 * **Kill XP (Borderlands style, no skill training):** a kill made with a Skylands gun adds **character XP** straight to Skyrim's level meter, sized by the enemy's level against yours,
   its Badass tier and boss status, with BL2's shape rescaled to Skyrim's level thresholds. Skills are not trained by guns (the user: "skip training skills for now").
-* **Weapon proficiencies:** the **damage** a gun deals raises the proficiency of its **type** (6 tracks) and its **manufacturer** (8 tracks). Levels have **no cap** and get slower;
-  each level gives 1-2 stat bonuses, **milestone levels** (10, 25, 50, 75, 100, ...) give 3-4 bigger ones, and after each milestone the ordinary per-level bonus shrinks, down to a floor.
+* **Weapon proficiencies:** the **damage** a gun's bullets deal (each bullet's own damage, overkill and damage to shields included) x 0.1 is XP for its **type** track (6) and its
+  **manufacturer** track (8). Levels have **no cap** and get slower (level n -> n+1 costs 20 + 10 x n XP); each level gives 1 stat bonus, **milestone levels** (10, 25, 50, 75, 100, ...) give 3-4 bigger ones, and after each milestone the ordinary per-level bonus shrinks, down to a floor.
   Stats: damage, accuracy, reload speed, fire rate, magazine size, and a **bonus projectile chance** (over 100 % = guaranteed extras plus a chance of one more).
   Every gun gets a **quarter of every manufacturer track's bonuses**, and the **full** bonus of its own maker's track.
 * **Shown as** level-up notices and a **HUD line under the ammo display** (held gun's type and maker level, thin progress bars). Saved **per character** (co-save).
@@ -70,6 +70,13 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
    the next one.
 7. **Display:** level-up notices and a HUD line by the ammo display. **Other XP mods:** none.
 8. **Badass Rank (later):** BL2's challenge list adapted; tokens "pick one of five" like BL2; **shared across characters, with a switch**. Proficiencies (and Legendary): **per character**.
+9. **Second round:** pace **30** same-level kills per level; a gun's own maker gives its **full bonus only** (1.0x, no extra quarter); launchers get **half** the bonus
+   projectile chance; **1 stat per ordinary level**.
+10. **Proficiency XP rule (replaces "enemies' worth")**: raw damage goes into the pool: every hit of a Skylands gun's bullet on a hostile enemy, per pellet, at the bullet's own damage
+   (enchantment magnitude x launch power, so relic and proficiency damage bonuses count; damage to shields counts), **no cap per enemy or per hit, overkill and damage after death count**;
+   XP = damage x `ProfXPScale` 0.1 to both the type and the maker track; level n -> n+1 costs `ProfBase` 20 + `ProfStep` 10 x n; no scaling by player level (later guns fill it faster:
+   intended); nothing from essential/protected NPCs, followers/teammates, summoned/commanded actors or anything not hostile to the player; added a few times a second; the first 30 hits logged.
+   Rocket and elemental splash damage later, at the blast's own damage. Character level: kill XP (3.1) stays (my pick between the two options offered; the damage-to-character-XP option is dropped).
 
 ## 3. Design (defaults; every number is an ini key and a sheet value in `sheets/progression.json`, `source: bl2` once the report gives it, else `design`)
 
@@ -79,8 +86,8 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   critters, children, actors that were not hostile to the player at death (no XP for shooting townsfolk; ini `KillXPNonHostile` 0).
 * **Size:** `xp = threshold(Lp) / KillXPKillsPerLevel x shape(Le, Lp) x tier x boss x KillXPScale`
   - `threshold(Lp)` = the game's own `levelThreshold` read at the kill (so it follows any change to the level settings).
-  - `KillXPKillsPerLevel` 20 (*design*): 20 kills of regular enemies of your own level fill one level, at every level. This is the "about like vanilla Archery" knob: vanilla gives
-    a level for roughly 1-2 cleared dungeons of mixed fighting (a rough estimate, unconfirmed); 20 same-level kills is about that. Tunable after the first play test.
+  - `KillXPKillsPerLevel` **30** (the user's pick): 30 kills of regular enemies of your own level fill one level, at every level (vanilla skills keep adding their own XP on top).
+    Tunable after the first play test.
   - `shape(Le, Lp)` = BL2's kill XP at enemy level Le divided by BL2's kill XP at the player's level, times BL2's level-difference factor (from the report). **Fallback** (*design*)
     if the report has no usable formula: `clamp(1 + 0.10 x (Le - Lp), 0.1, 2.0)`.
   - `tier` = BL2's Badass XP multipliers (report) else *design* Badass x3, Super x5, Ultimate x10 (about their health multipliers 3 / 5.8 / 15, a bit less); `boss` x5 (`IsBoss`), dragons x5.
@@ -90,35 +97,43 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
   `xp` passes the threshold, in case the game shows none. Safety: an amount is clamped to `KillXPMaxShare` 0.5 of a level per kill; nothing is written when `skills` or `data` is null.
 * **Notices:** none per kill (the user did not pick "XP on kill"); the level-up notice only. A summary line in the log every 30 s ("kill XP: N kills, X XP given, level a (xp b / c)").
 
-### 3.2 Proficiency points from damage (stage 2)
-* **Measured damage:** the hit sink notes every actor the player's gun hits (time, type, maker, its Health then). A 100 ms game-thread pass reads current Health of the noted actors
-  (alive or just dead) and books each **drop** to the gun that hit it last within `ProfWindow` 1 s. Healing is ignored (only drops), damage after the window is not booked, a drop
-  is capped at `ProfHitCap` 3 x the bullet's nominal damage x pellets (so a follower's big hit at the same moment is not booked to the gun). **Fallback** if Health cannot be read
-  (the log says so): the nominal damage of each hit (enchantment magnitude x power).
-* **Points = enemies' worth of damage:** points = damage / the target's maximum Health (Badass bonus included), so one enemy's whole health is 1 point whatever its level; a Badass,
-  having 3x the health, is worth 3. Damage past death does not count. Per target at most its max Health in total. Both the gun's type track and its maker track get the points.
-* **Points needed** for level n -> n+1: `ProfBase` 5 + `ProfStep` 2 x n (*design*): level 1 after 5 enemies' worth, level 10 after 140, level 25 after 725, level 50 after 2,700,
-  level 100 after 10,400. No cap.
+### 3.2 Proficiency XP from damage (stage 2)
+* **What counts:** every `TESHitEvent` whose `cause` is the player and whose `source` is a Skylands gun (`GunOf`), on a target that counts (below). One event per projectile, so a
+  shotgun books each pellet that hits (UNCONFIRMED that every pellet raises its own hit event: stage 2 logs pellets launched against hits booked per shot).
+* **How much:** the bullet's own damage, **not** measured health loss: the gun's enchantment magnitude (per pellet, as the installer wrote it: shot damage / pellets x 1.5) x the launch
+  power the player's bullets carry at that moment (relic `Variable09` x the gun's proficiency damage multiplier). So relic and proficiency damage bonuses count, damage that lands on a
+  shield counts (the bullet's damage does not care what absorbs it), resistances and armour are not taken off. **No cap** per hit or per enemy: overkill counts, and hits on the body
+  after death count.
+* **XP** = damage x `ProfXPScale` 0.1, booked to BOTH the gun's type track and its maker track (the maker gets the same XP, not a share).
+* **Which targets count:** hostile to the player (`IsHostileToActor`), checked when the actor was last hit or seen alive, so a body that was an enemy keeps counting after death);
+  NOT: essential or protected actors, the player's followers and teammates, summoned or commanded actors (and their bodies), critters, children, or anyone not hostile (townsfolk give
+  nothing). A target that becomes hostile (the player attacks a guard) counts from then on.
+* **Not yet:** rocket and elemental SPLASH damage (the explosion's own damage) comes later; until then a rocket books its direct hit only, and an explosion's hit event is not counted twice
+  (an event with an explosion source, or a second event for the same projectile, is skipped: UNCONFIRMED how explosion hits name their source; the log shows it).
+* **Batching:** hits add to a pending total under one lock; the 250 ms pump (`ProfBatchMs`) moves it into the tracks, levels them up and queues the notices. No game call per bullet.
+* **Log:** the first 30 booked hits ("prof: hit FF000E22 by gun FE003A99 (smg, Jakobs) pellet: magnitude 6.2 x power 1.15 = 7.1 damage -> 0.71 XP"), every level-up with the held gun's
+  total multipliers, a 30 s summary.
+* **Cost** of level n -> n+1: `ProfBase` 20 + `ProfStep` 10 x n XP, no cap, no scaling by player level (later-game guns and enemies fill it faster: intended). Totals:
+  level 1 = 20 XP (200 damage), level 10 = 650 XP (6,500 damage), level 25 = 3,500 XP (35,000), level 50 = 13,250 XP (132,500), level 100 = 51,500 XP (515,000).
 
 ### 3.3 Proficiency bonuses (stage 2 for types, stage 3 for makers)
 * **The six stats** (type tracks): damage %, accuracy % (less spread), reload speed %, fire rate %, magazine %, bonus projectile chance (points of percent).
-* **Ordinary levels** give 2 stats, in a fixed rotation so every stat comes up every 3 levels: (damage + accuracy), (reload + fire rate), (magazine + bonus projectiles), ...
-  (the user said 1-2: two per level is the default, `ProfStatsPerLevel` 1 or 2).
-* **Milestones** `ProfMilestones` = 10, 25, 50, 75, 100, then every 50: 4 stats (the two of the rotation plus the next two), each `ProfMilestoneMult` 3x the current step.
+* **Ordinary levels** give **1 stat** (the user's pick), in a fixed rotation so every stat comes up every 6 levels: damage, accuracy, reload, fire rate, magazine, bonus projectiles, ...
+* **Milestones** `ProfMilestones` = 10, 25, 50, 75, 100, then every 50: 4 stats (the rotation's stat for that level plus the next three), each `ProfMilestoneMult` 3x the current step.
 * **Shrinking step:** the step of a stat at a level = max(floor, start x `ProfDecay` 0.75 ^ milestones passed). Starts / floors (*design*): damage 2 % / 0.5 %, accuracy 2 % / 0.5 %,
   reload 2 % / 0.5 %, fire rate 2 % / **0.5 %** (the user's minimum), magazine 3 % / 1 %, bonus projectiles 4 / 1 points of percent.
-  Example, fire rate on the SMG track: levels 2, 5, 8 give +2 % each, milestone 10 +6 %, then +1.5 % every third level, milestone 25 +4.5 %, then +1.1 %, ... never below +0.5 %.
-  At level 10 the track has about damage +12 %, fire rate +12 %; at level 25 about +22.5 % / +24 % (the exact table is generated by `tools/gen.py` into the sheet and tested).
+  Totals of one type track (worked out from these defaults): level 10: damage +10 %, accuracy +4 %, reload +4 %, fire rate +8 %, magazine +12 %, bonus projectiles +16 points;
+  level 25: +17.5 / +11.5 / +11.5 / +15.5 / +18.8 % / +25 points; level 50: +22 / +19.4 / +19.4 / +23.4 / +30.6 % / +34 points (the exact table is generated by `tools/gen.py` into the sheet and tested).
 * **Manufacturer tracks** use the same points and levels but raise only that maker's signature stats (*design*, from BL2's manufacturer styles): Jakobs damage, Maliwan damage
   (elemental guns; the elemental effect chance does not exist in Skylands yet) and accuracy, Dahl accuracy and reload, Vladof fire rate and magazine, Tediore reload and magazine,
   Torgue damage and bonus projectiles, Bandit magazine and fire rate, Hyperion accuracy and damage. A level gives 1 of its two stats (alternating), milestones both at 3x.
-* **The user's rule:** every gun gets **25 %** (`ProfOtherMakers` 0.25) of the bonuses of every OTHER maker's track and **100 %** of its own maker's track (default: own = 1.0x,
-  not 1.0x + the quarter = 1.25x; question 2 in section 6).
+* **The user's rule:** every gun gets **25 %** (`ProfOtherMakers` 0.25) of the bonuses of every OTHER maker's track and **100 %** of its own maker's track (the user: full bonus only,
+  1.0x, not 1.25x).
 * **Applied in the plugin, per shot, on top of relics:** fire interval / (relic rate x prof rate), reload / (relic x prof), spread / (relic x prof), clip x relic x prof, power x relic x prof
   (damage), extra projectiles. Nothing goes through actor values (no clash with relics, nothing for a load to drop).
 * **Bonus projectiles:** chance c (percent): each shot fires floor(c / 100) extra projectiles plus one more with probability (c mod 100) / 100; a shotgun applies it **per pellet**
   (each pellet can split), every other gun per shot; extras use one round (BL2's "consumes 1 ammo"), go in their own random place in the spread and use the same damage.
-  Launchers get extra rockets the same way (strong: `ProfLauncherProjectiles` 0.5 halves their chance; say if launchers should get none).
+  Launchers get extra rockets the same way at **half** the chance (`ProfLauncherProjectiles` 0.5, the user's pick).
 
 ### 3.4 Display (stage 2 notices, stage 3 HUD)
 * Notices (`ShowHUDMessage`): "SMG proficiency 4: +2% reload, +2% fire rate", "Jakobs proficiency 10 (milestone): +6% damage, +6% accuracy", "Level up! Open the Skills menu" (3.1).
@@ -128,9 +143,15 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 ### 3.5 Saving and settings
 * Co-save record **'PROF' version 1**, per character: for each of 6 types and 8 makers: level, points into the level, total points, legendary count (0; reserved for 3.6); plus the
   kill XP counters for the log. Revert clears everything (new game = 0). An older save without the record starts at 0.
-* Ini block `[Progression]` from `sheets/progression.json`: `KillXP` 1, `KillXPScale` 1.0, `KillXPKillsPerLevel` 20, `KillXPWindow` 3, `KillXPMaxShare` 0.5, `KillXPBadass/Super/Ultimate/Boss`,
-  `Prof` 1, `ProfBase` 5, `ProfStep` 2, `ProfStatsPerLevel` 2, `ProfDecay` 0.75, `ProfMilestoneMult` 3, `ProfOtherMakers` 0.25, `ProfHud` 1, the starts/floors, `ProfLog` 1. New keys take
-  defaults; the user's values are kept (`merge_ini`).
+* Ini block `[Progression]` from `sheets/progression.json`:
+  - kill XP: `KillXP` 1, `KillXPScale` 1.0, `KillXPKillsPerLevel` 30, `KillXPWindow` 3, `KillXPMaxShare` 0.5, `KillXPNoKiller` 1, `KillXPNonHostile` 0, `KillXPBadass` / `KillXPSuper` /
+    `KillXPUltimate` / `KillXPBoss` (BL2's from the report, else 3 / 5 / 10 / 5);
+  - proficiency XP: `Prof` 1, `ProfXPScale` 0.1, `ProfBase` 20, `ProfStep` 10, `ProfBatchMs` 250, `ProfLogHits` 30, `ProfCorpseSeconds` 0 (0 = hits on a body count for ever, the user's rule;
+    N = only for N s after death: an opt-in guard against farming, section 5);
+  - bonuses: `ProfStatsPerLevel` 1, `ProfMilestoneMult` 3, `ProfDecay` 0.75, `ProfOtherMakers` 0.25, `ProfOwnMaker` 1.0, `ProfLauncherProjectiles` 0.5, the per-stat starts and floors
+    (`ProfDamageStart` 2 / `ProfDamageFloor` 0.5, ... `ProfProjectileStart` 4 / `ProfProjectileFloor` 1);
+  - display: `ProfHud` 1, `ProfNotices` 1, `ProfLog` 1.
+  Gone from the first draft: `ProfWindow`, `ProfHitCap` (no measured damage any more). New keys take defaults; the user's values are kept (`merge_ini`).
 
 ### 3.6 LATER (jotted down by the user, not built until asked): Legendary proficiencies
 * A track can be made Legendary when it reaches its cap: 100 the first time, +10 for each Legendary after (110, 120, ...). Making it Legendary resets the track to level 0 (its level
@@ -161,7 +182,7 @@ survey report replaces where BL2 has one (the user's rule: BL2 file values repla
 |---|---|---|---|
 | 0 | BL2 survey: XP formulas, level curve, challenges, Badass Rank (`Check-BL2-Progress.bat`) | python, **built: 0.53.2 / TestBuild-166** | class/group names guessed wrong (found by name, so the report says what it found) |
 | 1 | Kill XP into character level; hit-source log; gun-kill test | plugin | direct `xp` write does not offer the level-up |
-| 2 | Type proficiencies: damage measurement, points, levels, the 6 stats (projectiles excluded), notices, co-save 'PROF' v1, maker keyword records | plugin + python (keywords) | damage booked to the wrong gun; form ids moving |
+| 2 | Type proficiencies: damage XP from hits, levels, the stats (bonus projectiles excluded), notices, co-save 'PROF' v1, maker keyword records | plugin + python (keywords) | hit events missing per pellet or doubled for explosions; form ids moving |
 | 3 | Manufacturer tracks and their quarter/full bonuses, bonus projectiles, HUD line | plugin | extra launches per pellet cost frame time |
 | 4 | Badass Rank: challenge counters, rank points, shared file | plugin + python (challenge table) | the shared file across saves of different characters |
 | 5 | Tokens: "pick one of five", stats applied | plugin + one power | message box from the plugin on 1.7.104 |
@@ -174,19 +195,28 @@ After the survey report: the numbers go into `sheets/progression.json` (`source:
   if the menu does not offer it, the next try is calling the game's own level-up check (address to be found; not guessed now).
 * **Kill attribution:** `actorKiller` may be empty for spell kills or kills by an explosion (rockets, elemental blasts are explosions); the 3 s gun-hit window covers a kill whose
   killer is missing (`KillXPNoKiller` 1 = count it when the player's gun hit it last and nobody else is named). The hit event's `source` for the player's bullets is logged in stage 1.
-* **Damage measurement:** a follower's or another enemy's damage within 1 s of the player's hit is booked to the gun (capped, 3.2); regeneration hides a little damage; the shield's
-  recharge is a rise, not a drop, so it is ignored. Good enough for a progression meter; stage 2 logs the first 30 booked hits next to their nominal damage.
-* **Farming:** points need hostile targets' Health to drop; a pet or a summon the player beats on gives none (not hostile); a creature that keeps regenerating (trolls) gives points
-  for damage it heals back. Capped at max Health per target in total.
+* **The hit event** (UNCONFIRMED): that every pellet raises its own `TESHitEvent`, that `cause` is the player and `source` the gun for the player's plugin-launched bullets, and how an
+  explosion's hit names its source. Stage 2 logs the first 30 hits and pellets launched against hits booked.
+* **What farming is still possible under the new rule** (by design: no caps, overkill and damage after death count):
+  - **Shooting a body.** A hostile enemy's corpse keeps giving XP for every bullet, for ever: a magazine into a corpse is as good as one into a live enemy. This is the big one.
+    Guard: `ProfCorpseSeconds` (default 0 = your rule; e.g. 5 = only hits within 5 s of death count). Say if you want it on by default.
+  - **Unkillable or tanky hostiles:** a Badass giant, a regenerating troll, a dragon on a perch, an enemy stuck behind a wall that cannot reach you: damage keeps flowing as long as you have
+    ammo (ammo is the only limit: rounds come out of the pack).
+  - **Making someone hostile:** attacking a townsperson or guard makes them hostile, and from then on their damage counts (they are excluded only while not hostile). Essential and
+    protected ones never count.
+  - **High fire rate, big magazines and damage bonuses** fill tracks faster per second (intended: relic and proficiency damage count, and a stronger gun levels faster).
+  - **Shotguns** book every pellet that hits (intended; point-blank shots land all pellets).
+  - Not farmable: walls, the ground, friendly or neutral actors, summons, followers, missed shots (only hits count).
+* **Kill XP** cannot be farmed this way (a body counts once, 60 s; only gun kills of hostile actors).
 * **Balance:** compounding bonuses on the type track, the maker track, the other makers' quarters, relics and later tokens; the ini scales each, and stage 2's log prints the
   held gun's total multipliers every time a level changes.
 * **Ids:** new records (maker keywords, later the power) go LAST in the second plugin; `Skylands.esp` stays byte-identical (tested). No Papyrus property changes are planned (no ghost scripts).
   Natives keep no String parameters. No lock is taken while holding another (0.43.0). Scaleform only from `AddUITask` inside `Guarded` (0.48.1).
 * **Other mods:** none in the user's setup; an XP mod that hooks the same `xp` value would add to ours (ini `KillXP` 0 turns ours off).
 
-## 6. Questions still open for you (defaults in brackets; nothing blocks the survey)
-1. Kill XP pace: **20 same-level kills per level** [20]; Badass / Super / Ultimate / boss multipliers [BL2's from the report, else 3 / 5 / 10 / 5].
-2. A gun's own maker: full bonus only [yes, 1.0x], or full + the quarter everyone gets (1.25x)?
-3. Launchers and the bonus projectile chance: half [0.5], full, or none?
-4. Two stats per ordinary level [2] or one?
-5. Points needed per level: `5 + 2 x level` enemies' worth of damage [as written]: level 10 after ~140 enemies, 25 after ~725.
+## 6. Questions still open for you (defaults in brackets)
+Answered in round 2: pace 30, own maker full bonus only, launchers half, 1 stat per level, the new damage XP rule (section 3.2). Still open:
+1. **Shooting bodies:** keep "damage after death counts" with no limit [as you asked: `ProfCorpseSeconds` 0], or count only the first few seconds after death (e.g. 5)?
+2. **Character level:** I kept kill XP (3.1) and dropped the "damage x KillXPDamageScale into character XP" option, because kills already reward fighting and damage already feeds the
+   proficiencies; say if you want the other one instead.
+3. **Hits on Badass, Super and Ultimate enemies:** the same XP per damage as anyone [yes: their extra health already means more damage]?

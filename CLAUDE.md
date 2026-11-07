@@ -759,7 +759,7 @@ Other commands:
   down, milestone levels (10, 25, 50, ...) give 3-4 bigger bonuses, the step shrinks after each milestone to a floor (fire rate 0.5 %); level-up notices + a HUD line under the ammo; per character (co-save). LATER: "Legendary" reset
   (cap 100, +10 each time, flat bonus to every stat), Badass Rank (BL2's challenges adapted, tokens "pick one of five", SHARED across characters with an ini switch). Survey `progressprobe.py` (`python -m skylands_setup bl2progress`,
   `Check-BL2-Progress.bat`, writes `work\bl2-progress-report.txt`): P0 name tables, P1 experience groups + GD_Globals, P2 challenge groups, P3 badass rank objects, P4 Default__ objects; all by name, packages opened once
-  (`badassprobe.objects_in_groups`). NEXT: the user's approval of the roadmap (section 6 has 5 small questions) and the report; then stage 1 (kill XP).
+  (`badassprobe.objects_in_groups`). Round 2 (pace 30, own maker full only, launchers half, 1 stat a level, proficiency XP = bullet damage x 0.1, level cost 20 + 10n, no caps, damage after death counts) is in the roadmap; NEXT: approval of the revised roadmap (section 6: 3 questions) and the report; then stage 1 (kill XP).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
