@@ -22,7 +22,7 @@ from .skyrim.esm import read_plugin
 from .bl2 import extract
 from .steam import find
 
-VERSION = "0.54.0"
+VERSION = "0.54.1"
 OLD_SCRIPTS = ("SkylandsWatcher.pex", "SkylandsClassQuest.pex", "SkylandsRespawn.pex")
 
 

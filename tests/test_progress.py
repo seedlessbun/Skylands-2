@@ -33,3 +33,13 @@ def test_plugin_wires_kill_xp_without_strings_or_nested_locks():
     tier = prog.index("badass::TierOf(actor->GetFormID())")
     assert tier < prog.index("g_hits[actor->GetFormID()] = h")
     assert prog.rfind("std::lock_guard guard(g_lock)", 0, tier) < prog.index("class HitSink")
+
+
+def test_a_hit_is_traced_from_the_bullet_spell_back_to_its_gun():
+    # the 0.54.0 log: every player hit named the gun's ENCHANTMENT (a SkylandsGunModels.esp record) as its source, so a weapon-only lookup found no gun and no kill gave XP
+    main = (SRC / "main.cpp").read_text(encoding="utf-8")
+    body = main[main.index("RE::TESObjectWEAP* GunFromSource("):main.index("void CollectNamed(")]
+    assert "LookupByID<RE::TESObjectWEAP>(a_source)" in body and "formEnchanting->GetFormID()" in body and "baseEffect->GetFormID()" in body
+    assert 'HasKeywordString("SkylandsGun")' in body
+    assert "const auto weapon = GunFromSource(a_source);" in main.split("voices::g_elementOf")[1][:300]
+    assert "const auto weapon = GunFromSource(a_source);" in main.split("progress::g_isGun")[1][:300]

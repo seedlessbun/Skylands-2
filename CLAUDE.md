@@ -779,6 +779,10 @@ Other commands:
   the first 30 "kill xp: <id> (level .., tier, boss) killed with gun ..: N XP ..." / "no XP (why)", the first 10 "character XP a -> b (read back c), level, threshold; the game says it can level up: yes/no" (`PlayerSkills::CanLevelUp`),
   a 30 s summary. NO esp/pex change (no ids move, no ghost scripts). New game SUGGESTED for judging the pace (roadmap 3.9), not required. UNCONFIRMED in game: all of it (hit source for the player's bullets, killer for explosion kills,
   that a direct xp write offers the level-up in the Skills menu, the HUD notice).
+- 0.54.0 in game (user, SkylandsNative.log "SkylandsNative 396"): NO XP was given: every player hit was "source 070011B9 projectile 07001101: not a Skylands gun" while the held gun was FE003DA5: a hit by a PLUGIN-LAUNCHED bullet
+  names the gun's ENCHANTMENT (the bullet spell, a record of SkylandsGunModels.esp = load slot 07) as its source, NOT the weapon (so `voices::g_elementOf` never found the element for the player's bullets either). Every death was
+  "the player killed it" (the killer IS named). 0.54.1 (TestBuild-169, plugin 1.30.1 = "SkylandsNative 397"): `main.cpp` `GunFromSource(source)` = the weapon if the source is one, else a map built once from every WEAP with
+  `SkylandsGun` keyword: its `formEnchanting` id and each effect's `baseEffect` id -> the gun (log "hit sources: N Skylands guns mapped ..."); used by `progress::g_isGun` (now returns the gun's id, logged "Skylands gun <id>") and voices.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

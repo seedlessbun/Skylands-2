@@ -21,7 +21,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 396;  // 1.30.0
+	constexpr std::int32_t kVersion = 397;  // 1.30.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -447,6 +447,51 @@ namespace
 		g_guns[a_weapon->GetFormID()] = info;
 		a_out = info;
 		return info.clip > 0;
+	}
+
+	// 1.30.1: the gun a hit came from. The player's 0.54.0 log showed that a hit by a plugin-launched bullet names the gun's ENCHANTMENT (the bullet spell, a record of
+	// SkylandsGunModels.esp) as its source, not the weapon; so the source is looked up as a weapon first, then through a map of every Skylands gun's enchantment (and that
+	// enchantment's effects) to the gun, built once from the data (`SkylandsGun` keyword).
+	std::mutex                                 g_sourceLock;
+	std::unordered_map<RE::FormID, RE::FormID> g_gunOfSpell;
+	bool                                       g_gunOfSpellBuilt = false;
+
+	RE::TESObjectWEAP* GunFromSource(RE::FormID a_source)
+	{
+		if (!a_source) {
+			return nullptr;
+		}
+		if (const auto weapon = RE::TESForm::LookupByID<RE::TESObjectWEAP>(a_source)) {
+			return weapon;
+		}
+		RE::FormID gun = 0;
+		{
+			const std::lock_guard lock(g_sourceLock);
+			if (!g_gunOfSpellBuilt) {
+				g_gunOfSpellBuilt = true;
+				int guns = 0, effects = 0;
+				if (const auto handler = RE::TESDataHandler::GetSingleton()) {
+					for (const auto weapon : handler->GetFormArray<RE::TESObjectWEAP>()) {
+						if (!weapon || !weapon->formEnchanting || !weapon->HasKeywordString("SkylandsGun")) {
+							continue;
+						}
+						g_gunOfSpell.emplace(weapon->formEnchanting->GetFormID(), weapon->GetFormID());
+						++guns;
+						for (const auto effect : weapon->formEnchanting->effects) {
+							if (effect && effect->baseEffect) {
+								g_gunOfSpell.emplace(effect->baseEffect->GetFormID(), weapon->GetFormID());
+								++effects;
+							}
+						}
+					}
+				}
+				SKSE::log::info("hit sources: {} Skylands guns mapped from their enchantments ({} effects)", guns, effects);
+			}
+			if (const auto it = g_gunOfSpell.find(a_source); it != g_gunOfSpell.end()) {
+				gun = it->second;
+			}
+		}
+		return gun ? RE::TESForm::LookupByID<RE::TESObjectWEAP>(gun) : nullptr;
 	}
 
 	void CollectNamed(RE::NiAVObject* a_obj, std::string_view a_name, std::vector<RE::NiAVObject*>& a_out, int a_depth = 0)
@@ -2740,7 +2785,7 @@ namespace
 				// the Pandora bandits' Borderlands 2 voices (voices.h); a hit's element comes from the gun that made it
 				voices::g_elementOf = [](RE::FormID a_source) -> int {
 					GunInfo    info;
-					const auto weapon = RE::TESForm::LookupByID<RE::TESObjectWEAP>(a_source);
+					const auto weapon = GunFromSource(a_source);
 					return weapon && GunOf(weapon, info) ? info.element : 0;
 				};
 				voices::Load();
@@ -2750,10 +2795,10 @@ namespace
 				despawn::Start(holder);
 				badass::Start(holder);  // Badass enemies, stage 1: tiers and stats
 				// character progression, stage 1: kill XP into the level meter (progress.h)
-				progress::g_isGun = [](RE::FormID a_source) -> bool {
+				progress::g_isGun = [](RE::FormID a_source) -> RE::FormID {
 					GunInfo    info;
-					const auto weapon = RE::TESForm::LookupByID<RE::TESObjectWEAP>(a_source);
-					return weapon && GunOf(weapon, info);
+					const auto weapon = GunFromSource(a_source);
+					return weapon && GunOf(weapon, info) ? weapon->GetFormID() : 0;
 				};
 				progress::Start(holder);
 			}
@@ -2885,7 +2930,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 30, 0, 0 },
+	.Version = { 1, 30, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

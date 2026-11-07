@@ -33,8 +33,8 @@ namespace progress
 	inline float g_above[7] = { 1.0f, 1.0f, 1.03f, 1.06f, 1.09f, 1.12f, 1.15f };  // by levels above the player, 0..6+
 	inline float g_below[7] = { 1.0f, 0.9f, 0.7f, 0.4f, 0.15f, 0.05f, 0.01f };   // by levels below the player, 0..6+
 
-	// set by main.cpp: is this form one of the Skylands guns (GunOf)?
-	inline bool (*g_isGun)(RE::FormID) = nullptr;
+	// set by main.cpp: the Skylands gun a hit's source belongs to (the source is the gun's enchantment for plugin-launched bullets: the 0.54.0 log), 0 = none
+	inline RE::FormID (*g_isGun)(RE::FormID) = nullptr;
 
 	struct Hit
 	{
@@ -103,10 +103,11 @@ namespace progress
 			if (!actor || actor->IsPlayerRef()) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
-			const bool gun = g_isGun && g_isGun(a_event->source);
+			const RE::FormID gunId = g_isGun ? g_isGun(a_event->source) : 0;
+			const bool       gun = gunId != 0;
 			if (const int n = g_hitsSeen.fetch_add(1); n < 20) {
 				SKSE::log::info("kill xp: the player hit {:08X} (level {}, {}) with source {:08X} projectile {:08X}: {}", actor->GetFormID(), actor->GetLevel(), actor->IsDead() ? "dead" : "alive",
-					a_event->source, a_event->projectile, gun ? "a Skylands gun" : "not a Skylands gun");
+					a_event->source, a_event->projectile, gun ? fmt::format("Skylands gun {:08X}", gunId) : std::string("not a Skylands gun"));
 			}
 			if (!gun || actor->IsDead()) {
 				return RE::BSEventNotifyControl::kContinue;
@@ -118,7 +119,7 @@ namespace progress
 			h.boss = shielditems::IsBoss(actor) || badass::IsDragon(actor);
 			h.tier = badass::TierOf(actor->GetFormID());  // read before taking our own lock
 			h.level = actor->GetLevel();
-			h.gun = a_event->source;
+			h.gun = gunId;
 			const std::lock_guard guard(g_lock);
 			g_hits[actor->GetFormID()] = h;
 			return RE::BSEventNotifyControl::kContinue;
