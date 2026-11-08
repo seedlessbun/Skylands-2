@@ -23,6 +23,7 @@ namespace shop
 	inline constexpr const char* kKeys[kTypes] = { "SMG", "AR", "Pistol", "Shotgun", "Sniper", "Launcher" };
 
 	inline bool g_on = true;                                          // ini Shop=0: no merchant stocking
+	inline bool g_reset = true;                                       // ShopReset: do the game's due restock ourselves before stocking (0.59.1)
 	inline int  g_stock[kTypes] = { 80, 60, 100, 40, 30, 6 };         // ShopAmmo<Type>: rounds a merchant keeps of each kind
 	inline int  g_gear = 3;                                           // ShopGear: Skylands guns / shields / relics a merchant keeps
 	inline int  g_gearDays = 2;                                       // ShopGearDays: game days before the picks change
@@ -47,11 +48,43 @@ namespace shop
 
 	inline int StartOf(int a_type) { return a_type >= 0 && a_type < kTypes ? g_start[a_type] : g_start[0]; }
 
-	// game thread: top a merchant's chest up
-	inline void Stock(RE::TESObjectREFR* a_chest, RE::Actor* a_who)
+	inline int RespawnDays()
+	{
+		const auto settings = RE::GameSettingCollection::GetSingleton();
+		const auto s = settings ? settings->GetSetting("iDaysToRespawnVendor") : nullptr;
+		return s ? (std::max)(1, s->GetSInt()) : 2;
+	}
+
+	inline int Count(RE::TESObjectREFR* a_chest, RE::TESBoundObject* a_item)
+	{
+		const auto counts = a_chest->GetInventoryCounts();
+		const auto it = counts.find(a_item);
+		return it == counts.end() ? 0 : it->second;
+	}
+
+	// game thread: top a merchant's chest up. 0.59.1: the 0.59.0 log showed everything added at the dialogue was gone 2 s later when the barter menu opened
+	// ("0 Skylands items in it before" both times): the game restocks (resets) a vendor chest when bartering starts if the restock is due, and that wiped
+	// our items; what was added after the barter menu opened was not in the list it had already built. So at the dialogue, a due restock is done here first
+	// (ResetInventory, lastDayReset = today, as the game does), then the chest is topped up, and the barter menu finds no restock due.
+	inline void Stock(RE::TESObjectREFR* a_chest, RE::Actor* a_who, RE::TESFaction* a_faction, bool a_barter)
 	{
 		if (!a_chest) {
 			return;
+		}
+		const auto     calendar = RE::Calendar::GetSingleton();
+		const float    daysNow = calendar ? calendar->GetDaysPassed() : 0.0f;
+		const auto     today = static_cast<std::uint32_t>((std::max)(0.0f, daysNow));
+		std::string    resetNote;
+		if (a_faction) {
+			auto&      v = a_faction->vendorData;
+			const int  every = RespawnDays();
+			const bool due = v.lastDayReset == 0 || today >= v.lastDayReset + static_cast<std::uint32_t>(every);
+			resetNote = fmt::format("day {:.2f}, last restock day {}, every {} days: {}", daysNow, v.lastDayReset, every, due ? "a restock was due" : "no restock due");
+			if (due && g_reset && !a_barter) {
+				a_chest->ResetInventory(false);
+				v.lastDayReset = (std::max)(today, 1u);
+				resetNote += " - done now";
+			}
 		}
 		const auto player = RE::PlayerCharacter::GetSingleton();
 		const int  level = player ? player->GetLevel() : 1;
@@ -75,8 +108,7 @@ namespace shop
 				gear += n;
 			}
 		}
-		const auto     calendar = RE::Calendar::GetSingleton();
-		const auto     day = calendar ? static_cast<std::uint64_t>(calendar->GetDaysPassed()) : 0ULL;
+		const auto     day = static_cast<std::uint64_t>(today);
 		const auto     period = day / static_cast<std::uint64_t>((std::max)(1, g_gearDays));
 		badass::ReadGuns();
 		for (int k = gear; k < g_gear; ++k) {
@@ -87,13 +119,15 @@ namespace shop
 				added += fmt::format("{}\"{}\" ({} {})", added.empty() ? "" : ", ", item->GetName(), rarity, type == 0 ? "gun" : type == 1 ? "shield" : "relic");
 			}
 		}
-		if (g_told.fetch_add(1) < 40) {
-			SKSE::log::info("shop: {:08X} \"{}\" (merchant chest {:08X}, {} Skylands items in it before): {}", a_who ? a_who->GetFormID() : 0, a_who ? a_who->GetName() : "?", a_chest->GetFormID(), gear,
-				added.empty() ? std::string("already stocked") : "added " + added);
+		if (g_told.fetch_add(1) < 60) {
+			const auto first = g_ammo ? g_ammo(2) : nullptr;  // read back: does what was added stay in the chest?
+			SKSE::log::info("shop: {} {:08X} \"{}\" (merchant chest {:08X}; {}; {} Skylands items in it before): {}; pistol rounds now {}", a_barter ? "barter with" : "talking to",
+				a_who ? a_who->GetFormID() : 0, a_who ? a_who->GetName() : "?", a_chest->GetFormID(), resetNote, gear, added.empty() ? std::string("already stocked") : "added " + added,
+				first ? Count(a_chest, first) : -1);
 		}
 	}
 
-	inline void StockSpeaker()
+	inline void StockSpeaker(bool a_barter)
 	{
 		const auto topics = RE::MenuTopicManager::GetSingleton();
 		if (!topics) {
@@ -116,7 +150,7 @@ namespace shop
 			}
 			return;
 		}
-		Stock(chest, actor);
+		Stock(chest, actor, faction, a_barter);
 	}
 
 	class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
@@ -134,7 +168,7 @@ namespace shop
 				const bool barter = a_event->menuName == RE::BarterMenu::MENU_NAME;
 				shield::Queue([barter]() {
 					shield::g_stage = barter ? "shop: barter" : "shop: dialogue";
-					StockSpeaker();
+					StockSpeaker(barter);
 				});
 			}
 			return RE::BSEventNotifyControl::kContinue;
@@ -185,7 +219,9 @@ namespace shop
 			return -1;
 		};
 		try {
-			if (a_key == "Shop") {
+			if (a_key == "ShopReset") {
+				g_reset = std::stof(a_value) != 0.0f;
+			} else if (a_key == "Shop") {
 				g_on = std::stof(a_value) != 0.0f;
 			} else if (a_key == "ShopGear") {
 				g_gear = std::clamp(std::stoi(a_value), 0, 20);

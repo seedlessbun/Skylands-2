@@ -816,6 +816,11 @@ Other commands:
   Skylands items (`badass::PickDrop` tier 0 at the player's level, new picks every `ShopGearDays` 2); every vendor. (3) ammo amounts by gold value: body's own gun `AmmoDrop<Type>=min-max` (Pistol 12-28, SMG 10-24, AR 8-18, Shotgun 5-12, Sniper 3-8, Launcher 1-2),
   extra random kind `AmmoBonus<Type>` (about half), first stock `StartAmmo<Type>` (120/100/80/40/30/6; `StartAmmo`=0 switches it off; it was 300 of any kind). Log "shop: on ...", "shop: <id> \"name\" (merchant chest ..): added ..". UNCONFIRMED in game: all of it
   (that MenuTopicManager's speaker is set when the Dialogue Menu opens, that items added to a merchant chest show in the barter menu, gear prices).
+- 0.59.0 in game (user, SkylandsNative.log 3d1bae24 "SkylandsNative 402"): 3 shops visited, only one weapon seen, no ammo. Log: every merchant was found and stocked TWICE (dialogue, then barter 2 s later) and BOTH times
+  "0 Skylands items in it before": what was added at the dialogue was gone when the barter menu opened. Reading (UNPROVEN): the game restocks (resets) a due vendor chest when bartering starts (first barter: lastDayReset 0), wiping
+  the dialogue stock, and the barter-time stock came after the menu built its list. 0.59.1 (TestBuild-175, plugin 1.35.1 = "SkylandsNative 403"): at the dialogue, a due restock (`lastDayReset == 0` or today >= last + `iDaysToRespawnVendor`)
+  is done first (`chest->ResetInventory(false)`, `lastDayReset = today`, ini `ShopReset` 1), then the top-up; the log line now gives day / last restock / due / done and reads the pistol rounds back. If the read-back is 0 right after
+  adding, `AddObjectToContainer` on an unloaded merchant chest does not stick (then try `GetInventoryChanges()` / a Papyrus AddItem path).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
