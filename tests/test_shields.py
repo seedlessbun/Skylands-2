@@ -170,7 +170,7 @@ def test_shields_turn_up_in_boss_chests_at_merchants_and_in_the_beam_list(tmp_pa
     rep = generate.generate(bl2, fake_skyrim.build_full(tmp_path / "sky"), tmp_path / "out", gun_models="proxy", shooting="staff", shield_slot=60)
     loot = rep["shield_loot"]
     assert loot["chest_entries"] >= 1 and loot["beams"] == rep["shields"]["items"]
-    assert sorted(loot["vendors"]) == ["RiverwoodGeneralStoreVendorChest", "WhiterunBlacksmithVendorChest"]  # smiths, armorers and general stores; not the alchemist, not a private chest
+    assert loot["vendors"] == [] and not any(r.edid.endswith("VendorChest") for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"CONT"})[1]["CONT"])  # 0.59.0: the plugin stocks merchants at run time (merchants.h), no chest overrides by name
     _, recs = read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"LVLI", "FLST", "CONT", "ARMO", "KYWD"})
     lists = {r.edid: r for r in recs["LVLI"]}
     assert {"SkylandsShieldsAny", "SkylandsShieldsGood", "SkylandsShieldStock", "SkylandsShieldTier_1", "SkylandsShieldTier_4"} <= set(lists)

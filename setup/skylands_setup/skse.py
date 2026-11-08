@@ -44,8 +44,38 @@ ReloadKey=47
 ReloadMouse=-1
 ; short ammo messages on the screen: reloading, magazine full, low ammo (1 on, 0 off)
 AmmoText=1
-; ammo: a player with none of a gun's ammo is given this many rounds when the gun is first taken up in a run of the game, and enemies that die with a gun carry some
+; ammo: a player with none of a gun's ammo is given a first stock when the gun is first taken up in a run of the game (StartAmmo=0: none; the amounts are StartAmmo<Type> below)
 StartAmmo=300
+; ammo by type, sized by the gold value of a round (pistol 5, SMG 8, rifle 10, shotgun 10, sniper 15, rocket 50): the first stock, what a body carries of its own gun's ammo
+; (min-max), the extra random kind some bodies carry (min-max), and what every merchant keeps in stock (topped up when you talk to them)
+StartAmmoPistol=120
+StartAmmoSMG=100
+StartAmmoAR=80
+StartAmmoShotgun=40
+StartAmmoSniper=30
+StartAmmoLauncher=6
+AmmoDropPistol=12-28
+AmmoDropSMG=10-24
+AmmoDropAR=8-18
+AmmoDropShotgun=5-12
+AmmoDropSniper=3-8
+AmmoDropLauncher=1-2
+AmmoBonusPistol=6-14
+AmmoBonusSMG=5-12
+AmmoBonusAR=4-10
+AmmoBonusShotgun=3-6
+AmmoBonusSniper=2-4
+AmmoBonusLauncher=1-1
+; merchants (1 on): every vendor keeps this many rounds of each kind and ShopGear Skylands guns / shields / relics (new picks every ShopGearDays game days)
+Shop=1
+ShopAmmoPistol=100
+ShopAmmoSMG=80
+ShopAmmoAR=60
+ShopAmmoShotgun=40
+ShopAmmoSniper=30
+ShopAmmoLauncher=6
+ShopGear=3
+ShopGearDays=2
 ; the Borderlands-style display at the bottom right (1 on, 0 off: the plain messages come back); where its right edge and bottom line are, in a 1280 x 720 HUD
 Hud=1
 HudRight=70

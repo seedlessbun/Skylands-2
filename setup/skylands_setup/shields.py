@@ -427,7 +427,8 @@ def gated_list(view: esp.Plugin, edid: str, entries: list[tuple[int, int, int]],
     return r
 
 
-def loot(view: esp.Plugin, m, ids_by_level: dict[int, list[int]], sheet: dict, beam_list, chest_list, report: dict, say, extra: list[tuple[str, dict[int, list[int]], float]] | None = None) -> dict:
+def loot(view: esp.Plugin, m, ids_by_level: dict[int, list[int]], sheet: dict, beam_list, chest_list, report: dict, say, extra: list[tuple[str, dict[int, list[int]], float]] | None = None,
+         vendors_by_name: bool = True) -> dict:
     """Where shields turn up besides the people who wear them (the user's choices): boss chests (a share of the chest ammo list), merchants' stock (the vendor chests of smiths,
     armorers and general stores), and the rarity beams (the shields join the form list the quest scans for guns lying loose; Skylands.esp is not touched, these are overrides).
     `extra` adds other item kinds to the same places, each (label, ids by rarity level, share of the chest/stock chances): the relics. One override per container holds all stocks."""
@@ -472,6 +473,9 @@ def loot(view: esp.Plugin, m, ids_by_level: dict[int, list[int]], sheet: dict, b
         view.override(lst)
         vendors.append(rec.edid)
 
+    if not vendors_by_name:  # 0.59.0: the plugin stocks every merchant at run time (merchants.h); the chests' names never matched a real install
+        containers = []
+        say("shield loot: merchant chests are stocked by the SKSE plugin when the player talks to a merchant (not by name here)")
     for rec in containers:  # smiths, armorers and general stores first
         if len(vendors) < VENDOR_LIMIT and VENDOR_CHEST.search(rec.edid) and VENDOR_KIND.search(rec.edid):
             stock_into(rec)
@@ -479,7 +483,7 @@ def loot(view: esp.Plugin, m, ids_by_level: dict[int, list[int]], sheet: dict, b
         for rec in containers:
             if len(vendors) < VENDOR_LIMIT and VENDOR_CHEST.search(rec.edid):
                 stock_into(rec)
-    if not vendors:  # still none: the log lists what the containers are called, so the pattern can be corrected
+    if not vendors and vendors_by_name:  # still none: the log lists what the containers are called, so the pattern can be corrected
         near = [r.edid for r in containers if re.search(r"merchant|store|shop|trader|smith|armou?r|general|vendor", r.edid, re.I)]
         say(f"shield loot: none of the {len(containers)} containers read from Skyrim.esm looks like a merchant's chest by name; those with a shop-like word in it: {near[:80]}")
     out["vendors"] = vendors
@@ -573,7 +577,7 @@ def build(view: esp.Plugin, m, out_data: Path, rarity_keywords: dict[int, int], 
         relic_ids = relics_fn(view)
         if relic_ids:
             extra.append(("Relic", relic_ids, 0.5))
-    loot(view, m, ids_by_level, shields_sheet, beam_list, chest_list, report, say, extra)
+    loot(view, m, ids_by_level, shields_sheet, beam_list, chest_list, report, say, extra, vendors_by_name=False)
     summary = {"items": made["items"], "with_resist": made["with_resist"], "slot": slot, "families": by_family, "meshes": dict(models.stats), "textures": len(models.textures),
                "tables_replaced": t.replaced, "tables_read": t.read, "tables_wanted": t.wanted, "keywords": len(numbers)}
     report["shields"] = summary

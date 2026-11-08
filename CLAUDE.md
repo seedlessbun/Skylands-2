@@ -810,6 +810,12 @@ Other commands:
 - 0.58.0 (TestBuild-173, plugin 1.34.0 = "SkylandsNative 401"): SKYRIM-STYLE PROFICIENCIES behind ini `ProfSkyrimStyle` (default 1; 0 = the 0.57.0 system), the user's poll: a gun type level n gives n x `ProfSkyrimCharXP` 0.5 character XP
   (`g_charPending`, `prof::TakeCharXP` added in `progress::Apply`), maker levels x `ProfSkyrimMakerXP` 0, kill XP x `ProfSkyrimKillXP` 0, `Cost` = 0.291 x n^1.95 + 20 (same total at 100 as the plain curve). Our HUD stays; Skyrim's own notices LATER.
   Log: "prof: Skyrim style ON: ...", "prof: SMG 12 gives 6.0 character XP", "kill xp: .. and N XP from proficiency levels: character XP a -> b". UNCONFIRMED in game.
+- 0.59.0 (TestBuild-174, plugin 1.35.0 = "SkylandsNative 402"), the user's request (ammo economy for early-game playthroughs): (1) ammo gold values `generate.STAFF_AMMO_VALUE` pistol 5, SMG 8, AR 10, shotgun 10, sniper 15, rocket 50 (AMMO DATA value;
+  merchants sell at Skyrim's barter markup on top). (2) MERCHANTS: the old `shields.loot` vendor-chest-by-name override NEVER matched a real install (no shields/guns ever seen at merchants), now off (`vendors_by_name=False`); `native/skse/src/merchants.h`
+  (namespace `shop`): on Dialogue/Barter menu open, the speaker's `GetVendorFaction()->vendorData.merchantContainer` is TOPPED UP to `ShopAmmo<Type>` (Pistol 100, SMG 80, AR 60, Shotgun 40, Sniper 30, Launcher 6) and `ShopGear` 3
+  Skylands items (`badass::PickDrop` tier 0 at the player's level, new picks every `ShopGearDays` 2); every vendor. (3) ammo amounts by gold value: body's own gun `AmmoDrop<Type>=min-max` (Pistol 12-28, SMG 10-24, AR 8-18, Shotgun 5-12, Sniper 3-8, Launcher 1-2),
+  extra random kind `AmmoBonus<Type>` (about half), first stock `StartAmmo<Type>` (120/100/80/40/30/6; `StartAmmo`=0 switches it off; it was 300 of any kind). Log "shop: on ...", "shop: <id> \"name\" (merchant chest ..): added ..". UNCONFIRMED in game: all of it
+  (that MenuTopicManager's speaker is set when the Dialogue Menu opens, that items added to a merchant chest show in the barter menu, gear prices).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

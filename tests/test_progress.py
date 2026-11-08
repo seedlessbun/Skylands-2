@@ -165,3 +165,17 @@ def test_skyrim_style_proficiencies_feed_the_character_level_behind_an_ini_switc
     ini = skse.progression_ini()
     for key in ("ProfSkyrimStyle=1", "ProfSkyrimCharXP=0.5", "ProfSkyrimMakerXP=0", "ProfSkyrimKillXP=0", "ProfSkyrimCurveExp=1.95"):
         assert key in ini, key
+
+
+def test_merchants_are_stocked_by_the_plugin_and_ammo_amounts_follow_the_gold_value():
+    shop = (SRC / "merchants.h").read_text(encoding="utf-8")
+    main = (SRC / "main.cpp").read_text(encoding="utf-8")
+    for text in ("faction->vendorData.merchantContainer", "RE::DialogueMenu::MENU_NAME", "badass::PickDrop(seed, 0, 1, level, rarity, type)", "g_stock[i] - have",
+                 "g_dropMin[kTypes] = { 10, 8, 12, 5, 3, 1 }", "g_start[kTypes] = { 100, 80, 120, 40, 30, 6 }"):
+        assert text in shop, text
+    assert "shop::Pick(info.type, false, rng)" in main and "shop::StartOf(info.type)" in main and "shop::Start();" in main and "shop::Config(" in main
+    from skylands_setup import generate, skse
+    assert generate.STAFF_AMMO_VALUE == {"smg": 8, "assault_rifle": 10, "pistol": 5, "shotgun": 10, "sniper": 15, "launcher": 50}
+    ini = skse.default_ini()
+    for key in ("ShopAmmoLauncher=6", "AmmoDropLauncher=1-2", "AmmoDropPistol=12-28", "StartAmmoLauncher=6", "ShopGear=3"):
+        assert key in ini, key

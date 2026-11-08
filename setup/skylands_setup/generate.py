@@ -584,6 +584,7 @@ MGEF_RESIST_AT = 16
 PROJ_MUZZLE_LIGHT_AT, PROJ_MUZZLE_DURATION_AT = 20, 44
 STAFF_FLASH_LENGTH, STAFF_FLASH_WIDTH, STAFF_FLASH_SECONDS = 26.0, 6.0, 0.05  # the muzzle flash: a short glowing burst ahead of the barrel
 STAFF_FLASH_PERCENT = {"smg": 75, "assault_rifle": 90, "pistol": 60, "shotgun": 130, "sniper": 100, "launcher": 150}  # the muzzle flash's size by gun type, in percent of the first flash (the user asked for 25% and 10% smaller)
+STAFF_AMMO_VALUE = {"smg": 8, "assault_rifle": 10, "pistol": 5, "shotgun": 10, "sniper": 15, "launcher": 50}  # gold value of one round (the user, 0.59.0)
 STAFF_AMMO_NAMES = {"smg": "SMG Ammo", "assault_rifle": "Assault Rifle Ammo", "pistol": "Pistol Ammo", "shotgun": "Shotgun Shells", "sniper": "Sniper Ammo", "launcher": "Rocket"}  # the inventory items that are the guns' reserve (the plugin takes a reload's rounds from them)
 STAFF_ZOOM = {"smg": 13, "assault_rifle": 16, "pistol": 12, "shotgun": 12, "sniper": 30, "launcher": 14}  # the magnification when aimed down the sights, in tenths (the user chose 1.3x and 1.6x)
 RELOAD_PARTS = ("out", "in", "end")  # the magazine comes out, a new one goes in, the gun is made ready (bl2/audio.py RELOAD_PARTS)
@@ -974,7 +975,7 @@ class Armory:
             am = esp.Rec("AMMO", self.ammo_ids[kind], [("EDID", esp.zstr(f"SkylandsAmmo_{kind}")), *keep])
             am.add("FULL", esp.zstr(STAFF_AMMO_NAMES[kind]))
             am.subs.sort(key=lambda sd: ["EDID", "OBND", "FULL", "MODL", "YNAM", "ZNAM"].index(sd[0]))
-            am.add("DATA", struct.pack("<IIfI", 0, 0, 1.0, 2))
+            am.add("DATA", struct.pack("<IIfI", 0, 0, 1.0, STAFF_AMMO_VALUE[kind]))
             self.view.override(am)
             self.log.append(f"Staff guns: ammo item {STAFF_AMMO_NAMES[kind]} ({am.form_id:08X}); guns of that type use it from the player's pack")
         gifts = [self.gifts.get(kind) or self.first_of.get(kind) or next(iter(self.first_of.values())) for kind in STAFF_KINDS]

@@ -18,10 +18,11 @@
 #include "despawn.h"
 #include "badass.h"
 #include "progress.h"
+#include "merchants.h"
 
 namespace
 {
-	constexpr std::int32_t kVersion = 401;  // 1.34.0
+	constexpr std::int32_t kVersion = 402;  // 1.35.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -146,7 +147,7 @@ namespace
 			} else if (key == "HideHands" || key == "Casings" || key == "Rockets") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "HideHands" ? g_hideHands : key == "Casings" ? g_fxCasing : g_fxRocket) = on;
-			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1)) || toss::Config(key, line.substr(eq + 1)) || progress::Config(key, line.substr(eq + 1)) || prof::Config(key, line.substr(eq + 1))) {
+			} else if (shield::Config(key, line.substr(eq + 1)) || shieldhud::Config(key, line.substr(eq + 1)) || shieldaura::Config(key, line.substr(eq + 1)) || relic::Config(key, line.substr(eq + 1)) || shielditems::Config(key, line.substr(eq + 1)) || voices::Config(key, line.substr(eq + 1)) || despawn::Config(key, line.substr(eq + 1)) || badass::Config(key, line.substr(eq + 1)) || toss::Config(key, line.substr(eq + 1)) || progress::Config(key, line.substr(eq + 1)) || prof::Config(key, line.substr(eq + 1)) || shop::Config(key, line.substr(eq + 1))) {
 				// a shield setting (shield.h) or one of the shield display's (shieldhud.h)
 			} else if (key == "Convergence") {
 				try {
@@ -819,13 +820,14 @@ namespace
 			const auto weapon = HeldGun(dying, info);
 			std::vector<std::pair<RE::FormID, int>> loot;  // what the body will carry: the ammo of its gun, and sometimes a few of any other kind
 			if (const auto ammo = AmmoOf(weapon, info)) {
-				loot.emplace_back(ammo->GetFormID(), std::uniform_int_distribution<int>(10, 30)(rng));
+				loot.emplace_back(ammo->GetFormID(), shop::Pick(info.type, false, rng));  // 0.59.0: by the ammo's gold value (merchants.h AmmoDrop<Type>)
 			}
 			const auto race = dying->GetRace();
 			if (!g_ammoLocals.empty() && race && race->HasKeywordString("ActorTypeNPC") && std::uniform_int_distribution<int>(1, 100)(rng) <= (weapon ? 30 : 60)) {
-				const std::uint32_t local = g_ammoLocals[std::uniform_int_distribution<std::size_t>(0, g_ammoLocals.size() - 1)(rng)];
+				const std::size_t   kind = std::uniform_int_distribution<std::size_t>(0, g_ammoLocals.size() - 1)(rng);
+				const std::uint32_t local = g_ammoLocals[kind];
 				const RE::FormID    id = (g_ammoEnch >> 24) == 0xFE ? ((g_ammoEnch & 0xFFFFF000u) | (local & 0xFFFu)) : ((g_ammoEnch & 0xFF000000u) | (local & 0xFFFFFFu));
-				loot.emplace_back(id, std::uniform_int_distribution<int>(6, 20)(rng));
+				loot.emplace_back(id, shop::Pick(static_cast<int>(kind), true, rng));  // 0.59.0: AmmoBonus<Type>
 			}
 			if (!loot.empty()) {
 				// not inside the death event (changing a body's pack while the game is still killing it is a known way to crash): a moment later, from the game thread,
@@ -2360,8 +2362,11 @@ namespace
 				static std::unordered_map<RE::FormID, bool> given;
 				if (!given[g_gun.ammo->GetFormID()]) {
 					given[g_gun.ammo->GetFormID()] = true;
-					player->AddObjectToContainer(g_gun.ammo, nullptr, g_startAmmo, nullptr);
-					SKSE::log::info("ammo: {} of {:08X} given to a player with none", g_startAmmo, g_gun.ammo->GetFormID());
+					const int first = shop::StartOf(info.type);  // 0.59.0: StartAmmo<Type>, by the ammo's gold value
+					if (first > 0) {
+						player->AddObjectToContainer(g_gun.ammo, nullptr, first, nullptr);
+					}
+					SKSE::log::info("ammo: {} of {:08X} given to a player with none", first, g_gun.ammo->GetFormID());
 				}
 			}
 			if (g_gun.mag <= 0) {
@@ -2936,6 +2941,27 @@ namespace
 				};
 				progress::Start(holder);
 			}
+			// 0.59.0: merchants stock Skylands ammo and gear (merchants.h)
+			shop::g_ammo = [](int a_type) -> RE::TESBoundObject* {
+				if (g_ammoLocals.empty()) {  // read from any Skylands gun's keywords (normally done when a gun is first looked at)
+					if (const auto handler = RE::TESDataHandler::GetSingleton()) {
+						for (const auto weapon : handler->GetFormArray<RE::TESObjectWEAP>()) {
+							GunInfo info;
+							if (weapon && weapon->HasKeywordString("SkylandsGun") && GunOf(weapon, info) && !g_ammoLocals.empty()) {
+								break;
+							}
+						}
+					}
+				}
+				if (a_type < 0 || static_cast<std::size_t>(a_type) >= g_ammoLocals.size()) {
+					return nullptr;
+				}
+				const std::uint32_t local = g_ammoLocals[static_cast<std::size_t>(a_type)];
+				const RE::FormID    id = (g_ammoEnch >> 24) == 0xFE ? ((g_ammoEnch & 0xFFFFF000u) | (local & 0xFFFu)) : ((g_ammoEnch & 0xFF000000u) | (local & 0xFFFFFFu));
+				const auto          form = RE::TESForm::LookupByID(id);
+				return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
+			};
+			shop::Start();
 		}
 		if (a_message->type == SKSE::MessagingInterface::kInputLoaded) {
 			if (const auto input = RE::BSInputDeviceManager::GetSingleton()) {
@@ -3064,7 +3090,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 34, 0, 0 },
+	.Version = { 1, 35, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

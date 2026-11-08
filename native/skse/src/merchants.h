@@ -1,0 +1,209 @@
+#pragma once
+
+// Merchants and ammo amounts (0.59.0, the user's request).
+//
+// The installer's old way (overriding vendor chests found by editor-id name) never matched a Skyrim chest, so merchants are now stocked here, at run time:
+// when the player starts talking to someone (the Dialogue Menu opens) whose vendor faction has a merchant chest, the chest is topped up to `ShopAmmo<Type>`
+// rounds of each Skylands ammo and to `ShopGear` Skylands guns / shields / relics (picked like a Badass drop with no tier: the guns' rarity weights and the
+// level gates at the player's level; a new pick every `ShopGearDays` game days). It is a top-up, so talking again or reloading never piles items up, and when
+// the game restocks the chest (every 48 game hours) the next talk fills it again. Every vendor gets it.
+//
+// The amounts a body carries and the first stock a player gets are per ammo type here too, sized by the ammo's gold value (pistol 5, SMG 8, rifle 10,
+// shotgun 10, sniper 15, rocket 50): a body's ammo is worth about 75-135 gold whatever the type.
+
+#include "PCH.h"
+#include "badass.h"
+#include "despawn.h"
+#include "shield.h"
+#include "shielditems.h"
+
+namespace shop
+{
+	constexpr int kTypes = 6;  // generate.STAFF_KINDS order = the gun keyword's ammo list: smg, assault_rifle, pistol, shotgun, sniper, launcher
+	inline constexpr const char* kKeys[kTypes] = { "SMG", "AR", "Pistol", "Shotgun", "Sniper", "Launcher" };
+
+	inline bool g_on = true;                                          // ini Shop=0: no merchant stocking
+	inline int  g_stock[kTypes] = { 80, 60, 100, 40, 30, 6 };         // ShopAmmo<Type>: rounds a merchant keeps of each kind
+	inline int  g_gear = 3;                                           // ShopGear: Skylands guns / shields / relics a merchant keeps
+	inline int  g_gearDays = 2;                                       // ShopGearDays: game days before the picks change
+	inline int  g_dropMin[kTypes] = { 10, 8, 12, 5, 3, 1 };           // AmmoDrop<Type>=min-max: rounds of the held gun's ammo on a body
+	inline int  g_dropMax[kTypes] = { 24, 18, 28, 12, 8, 2 };
+	inline int  g_bonusMin[kTypes] = { 5, 4, 6, 3, 2, 1 };            // AmmoBonus<Type>=min-max: the extra random kind some bodies carry
+	inline int  g_bonusMax[kTypes] = { 12, 10, 14, 6, 4, 1 };
+	inline int  g_start[kTypes] = { 100, 80, 120, 40, 30, 6 };        // StartAmmo<Type>: the first stock of a kind a player with none gets (StartAmmo=0 turns it off)
+
+	inline std::function<RE::TESBoundObject*(int)> g_ammo;  // main.cpp: the ammo item of a type
+	inline std::atomic_int g_told{ 0 };
+
+	inline int Pick(int a_type, bool a_bonus, std::mt19937& a_rng)
+	{
+		if (a_type < 0 || a_type >= kTypes) {
+			a_type = 0;
+		}
+		const int lo = a_bonus ? g_bonusMin[a_type] : g_dropMin[a_type];
+		const int hi = (std::max)(lo, a_bonus ? g_bonusMax[a_type] : g_dropMax[a_type]);
+		return std::uniform_int_distribution<int>(lo, hi)(a_rng);
+	}
+
+	inline int StartOf(int a_type) { return a_type >= 0 && a_type < kTypes ? g_start[a_type] : g_start[0]; }
+
+	// game thread: top a merchant's chest up
+	inline void Stock(RE::TESObjectREFR* a_chest, RE::Actor* a_who)
+	{
+		if (!a_chest) {
+			return;
+		}
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		const int  level = player ? player->GetLevel() : 1;
+		auto       counts = a_chest->GetInventoryCounts();
+		std::string added;
+		for (int i = 0; i < kTypes; ++i) {
+			const auto ammo = g_ammo ? g_ammo(i) : nullptr;
+			if (!ammo || g_stock[i] <= 0) {
+				continue;
+			}
+			const auto it = counts.find(ammo);
+			const int  have = it == counts.end() ? 0 : it->second;
+			if (have < g_stock[i]) {
+				a_chest->AddObjectToContainer(ammo, nullptr, g_stock[i] - have, nullptr);
+				added += fmt::format("{}{} {}", added.empty() ? "" : ", ", g_stock[i] - have, kKeys[i]);
+			}
+		}
+		int gear = 0;
+		for (const auto& [obj, n] : counts) {
+			if (obj && n > 0 && despawn::RarityOf(obj) > 0) {
+				gear += n;
+			}
+		}
+		const auto     calendar = RE::Calendar::GetSingleton();
+		const auto     day = calendar ? static_cast<std::uint64_t>(calendar->GetDaysPassed()) : 0ULL;
+		const auto     period = day / static_cast<std::uint64_t>((std::max)(1, g_gearDays));
+		badass::ReadGuns();
+		for (int k = gear; k < g_gear; ++k) {
+			int        rarity = 0, type = 0;
+			const auto seed = static_cast<std::uint64_t>(a_chest->GetFormID()) ^ (period << 24) ^ (static_cast<std::uint64_t>(k) * 0x9E3779B97F4A7C15ULL);
+			if (const auto item = badass::PickDrop(seed, 0, 1, level, rarity, type)) {
+				a_chest->AddObjectToContainer(item, nullptr, 1, nullptr);
+				added += fmt::format("{}\"{}\" ({} {})", added.empty() ? "" : ", ", item->GetName(), rarity, type == 0 ? "gun" : type == 1 ? "shield" : "relic");
+			}
+		}
+		if (g_told.fetch_add(1) < 40) {
+			SKSE::log::info("shop: {:08X} \"{}\" (merchant chest {:08X}, {} Skylands items in it before): {}", a_who ? a_who->GetFormID() : 0, a_who ? a_who->GetName() : "?", a_chest->GetFormID(), gear,
+				added.empty() ? std::string("already stocked") : "added " + added);
+		}
+	}
+
+	inline void StockSpeaker()
+	{
+		const auto topics = RE::MenuTopicManager::GetSingleton();
+		if (!topics) {
+			return;
+		}
+		auto ref = topics->speaker.get();
+		if (!ref) {
+			ref = topics->lastSpeaker.get();
+		}
+		const auto actor = ref ? ref->As<RE::Actor>() : nullptr;
+		if (!actor) {
+			return;
+		}
+		const auto faction = actor->GetVendorFaction();
+		const auto chest = faction ? faction->vendorData.merchantContainer : nullptr;
+		static std::atomic_int notVendor{ 0 };
+		if (!chest) {
+			if (notVendor.fetch_add(1) < 10) {
+				SKSE::log::info("shop: talking to {:08X} \"{}\": {}", actor->GetFormID(), actor->GetName(), faction ? "a vendor faction with no merchant chest" : "not a merchant");
+			}
+			return;
+		}
+		Stock(chest, actor);
+	}
+
+	class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		static MenuSink* Get()
+		{
+			static MenuSink sink;
+			return std::addressof(sink);
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+		{
+			if (a_event && a_event->opening && (a_event->menuName == RE::DialogueMenu::MENU_NAME || a_event->menuName == RE::BarterMenu::MENU_NAME)) {
+				const bool barter = a_event->menuName == RE::BarterMenu::MENU_NAME;
+				shield::Queue([barter]() {
+					shield::g_stage = barter ? "shop: barter" : "shop: dialogue";
+					StockSpeaker();
+				});
+			}
+			return RE::BSEventNotifyControl::kContinue;
+		}
+	};
+
+	inline void Start()
+	{
+		if (!g_on) {
+			SKSE::log::info("shop: off (Shop=0)");
+			return;
+		}
+		if (const auto ui = RE::UI::GetSingleton()) {
+			ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::Get());
+		}
+		std::string stock, drops;
+		for (int i = 0; i < kTypes; ++i) {
+			stock += fmt::format("{}{} {}", stock.empty() ? "" : ", ", kKeys[i], g_stock[i]);
+			drops += fmt::format("{}{} {}-{} (+{}-{})", drops.empty() ? "" : ", ", kKeys[i], g_dropMin[i], g_dropMax[i], g_bonusMin[i], g_bonusMax[i]);
+		}
+		SKSE::log::info("shop: on; merchants keep {} rounds and {} Skylands items (new picks every {} game days); bodies carry {}", stock, g_gear, g_gearDays, drops);
+	}
+
+	inline bool Range(const std::string& a_value, int& a_lo, int& a_hi)
+	{
+		try {
+			const auto dash = a_value.find('-', 1);
+			a_lo = std::clamp(std::stoi(a_value.substr(0, dash)), 0, 100000);
+			a_hi = dash == std::string::npos ? a_lo : std::clamp(std::stoi(a_value.substr(dash + 1)), a_lo, 100000);
+			return true;
+		} catch (...) {
+			return false;
+		}
+	}
+
+	inline bool Config(const std::string& a_key, const std::string& a_value)
+	{
+		const auto typeOf = [&](std::string_view a_prefix) -> int {
+			if (!a_key.starts_with(a_prefix)) {
+				return -1;
+			}
+			const std::string_view rest = std::string_view(a_key).substr(a_prefix.size());
+			for (int i = 0; i < kTypes; ++i) {
+				if (rest == kKeys[i]) {
+					return i;
+				}
+			}
+			return -1;
+		};
+		try {
+			if (a_key == "Shop") {
+				g_on = std::stof(a_value) != 0.0f;
+			} else if (a_key == "ShopGear") {
+				g_gear = std::clamp(std::stoi(a_value), 0, 20);
+			} else if (a_key == "ShopGearDays") {
+				g_gearDays = std::clamp(std::stoi(a_value), 1, 1000);
+			} else if (const int a = typeOf("ShopAmmo"); a >= 0) {
+				g_stock[a] = std::clamp(std::stoi(a_value), 0, 100000);
+			} else if (const int b = typeOf("StartAmmo"); b >= 0) {
+				g_start[b] = std::clamp(std::stoi(a_value), 0, 100000);
+			} else if (const int c = typeOf("AmmoDrop"); c >= 0) {
+				Range(a_value, g_dropMin[c], g_dropMax[c]);
+			} else if (const int d = typeOf("AmmoBonus"); d >= 0) {
+				Range(a_value, g_bonusMin[d], g_bonusMax[d]);
+			} else {
+				return false;
+			}
+		} catch (...) {
+		}
+		return true;
+	}
+}
