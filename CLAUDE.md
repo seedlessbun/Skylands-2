@@ -825,6 +825,10 @@ Other commands:
   (0 on day 0.79), wiping what the dialogue added; 0.59.1 treated only 0 as due and, when it did restock, wrote max(today,1) = 1, a day AHEAD of the game's 0, which the game's unsigned today - last again took as due. 0.59.2 (TestBuild-176,
   plugin 1.35.2 = "SkylandsNative 404"): due = last 0xFFFFFFFF or today < last or today - last >= `iDaysToRespawnVendor`; our restock writes `lastDayReset = today`. The barter-time top-up (after the menu built its list) never shows; it is the fallback.
   Note: the user reloads the same save (day 0.79) between tests; stock added in one session is gone after a reload.
+- 0.59.2 in game (user, SkylandsNative.log 235fbdea "SkylandsNative 404"): the restock fix WORKS (dialogue "a restock was due - done now ... pistol rounds now 100", barter "no restock due; 3 Skylands items in it before"; the user opened the chest and saw the ammo),
+  but the BARTER MENU still showed none of it. Cause (Skyrim rule): a merchant shows only chest items carrying a keyword of its vendor list (`vendorData.vendorSellBuyList`; `notBuySell` inverts it). 0.59.3 (TestBuild-177, plugin 1.35.3 =
+  "SkylandsNative 405"): `shop::Fit` gives every stocked Skylands item (ammo, gear in the chest) the vendor list's FIRST keyword at run time (`BGSKeywordForm::AddKeyword`, not saved: redone at each stocking; ini `ShopKeywords` 1); log
+  "shop: <id>'s vendor list .. (N keywords, deals only in these / all BUT these): Skylands items already matches / given the vendor's keyword / ..." and "gave <item> the vendor keyword ..". UNCONFIRMED in game.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

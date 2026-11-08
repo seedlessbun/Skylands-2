@@ -78,6 +78,8 @@ ShopGear=3
 ShopGearDays=2
 ; 1: when a merchant's restock is due, Skylands does it as you start talking (as the game would at the barter) so the restock does not wipe the Skylands stock
 ShopReset=1
+; 1: Skylands items in a merchant's chest are given that merchant's trade keyword, so the barter menu shows them (merchants only show what they deal in)
+ShopKeywords=1
 ; the Borderlands-style display at the bottom right (1 on, 0 off: the plain messages come back); where its right edge and bottom line are, in a 1280 x 720 HUD
 Hud=1
 HudRight=70

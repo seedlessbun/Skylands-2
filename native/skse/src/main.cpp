@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 404;  // 1.35.2
+	constexpr std::int32_t kVersion = 405;  // 1.35.3
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -3090,7 +3090,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 35, 2, 0 },
+	.Version = { 1, 35, 3, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

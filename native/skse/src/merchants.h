@@ -48,6 +48,50 @@ namespace shop
 
 	inline int StartOf(int a_type) { return a_type >= 0 && a_type < kTypes ? g_start[a_type] : g_start[0]; }
 
+	// 0.59.3, from the 0.59.2 log + the user (the chest held the ammo, the barter list did not show it): a merchant only shows the chest's items that carry a keyword of
+	// its vendor list (VEND; with notBuySell the list is the ones it will NOT deal in). Skylands items lack those keywords, so the vendor's first listed keyword is given
+	// to the item's base form at run time (not saved: done again at every stocking). ini ShopKeywords=0 turns it off.
+	inline bool g_fitKeywords = true;
+	inline std::atomic_int g_fitTold{ 0 };
+
+	inline const char* Fit(RE::TESBoundObject* a_item, RE::TESFaction* a_faction)
+	{
+		const auto kwForm = a_item ? a_item->As<RE::BGSKeywordForm>() : nullptr;
+		const auto list = a_faction ? a_faction->vendorData.vendorSellBuyList : nullptr;
+		if (!kwForm || !list) {
+			return "no vendor list";
+		}
+		bool                matches = false;
+		RE::BGSKeyword*     first = nullptr;
+		list->ForEachForm([&](RE::TESForm* a_form) {
+			if (const auto kw = a_form ? a_form->As<RE::BGSKeyword>() : nullptr) {
+				if (!first) {
+					first = kw;
+				}
+				if (kwForm->HasKeyword(kw)) {
+					matches = true;
+					return RE::BSContainer::ForEachResult::kStop;
+				}
+			}
+			return RE::BSContainer::ForEachResult::kContinue;
+		});
+		if (a_faction->vendorData.vendorValues.notBuySell) {
+			return matches ? "excluded by the vendor's list" : "allowed (the list excludes others)";
+		}
+		if (matches) {
+			return "already matches";
+		}
+		if (!first || !g_fitKeywords) {
+			return "does not match, nothing to give";
+		}
+		kwForm->AddKeyword(first);
+		if (g_fitTold.fetch_add(1) < 30) {
+			SKSE::log::info("shop: gave {:08X} "{}" the vendor keyword {:08X} "{}" so the barter menu shows it", a_item->GetFormID(), a_item->GetName(), first->GetFormID(),
+				first->formEditorID.c_str() ? first->formEditorID.c_str() : "");
+		}
+		return "given the vendor's keyword";
+	}
+
 	inline int RespawnDays()
 	{
 		const auto settings = RE::GameSettingCollection::GetSingleton();
@@ -71,6 +115,7 @@ namespace shop
 		if (!a_chest) {
 			return;
 		}
+		std::vector<RE::TESBoundObject*> ours;  // every Skylands item that ends up in the chest, to be fitted to the vendor's list
 		const auto     calendar = RE::Calendar::GetSingleton();
 		const float    daysNow = calendar ? calendar->GetDaysPassed() : 0.0f;
 		const auto     today = static_cast<std::uint32_t>((std::max)(0.0f, daysNow));
@@ -97,6 +142,7 @@ namespace shop
 			if (!ammo || g_stock[i] <= 0) {
 				continue;
 			}
+			ours.push_back(ammo);
 			const auto it = counts.find(ammo);
 			const int  have = it == counts.end() ? 0 : it->second;
 			if (have < g_stock[i]) {
@@ -108,6 +154,7 @@ namespace shop
 		for (const auto& [obj, n] : counts) {
 			if (obj && n > 0 && despawn::RarityOf(obj) > 0) {
 				gear += n;
+				ours.push_back(obj);
 			}
 		}
 		const auto     day = static_cast<std::uint64_t>(today);
@@ -118,10 +165,21 @@ namespace shop
 			const auto seed = static_cast<std::uint64_t>(a_chest->GetFormID()) ^ (period << 24) ^ (static_cast<std::uint64_t>(k) * 0x9E3779B97F4A7C15ULL);
 			if (const auto item = badass::PickDrop(seed, 0, 1, level, rarity, type)) {
 				a_chest->AddObjectToContainer(item, nullptr, 1, nullptr);
+				ours.push_back(item);
 				added += fmt::format("{}\"{}\" ({} {})", added.empty() ? "" : ", ", item->GetName(), rarity, type == 0 ? "gun" : type == 1 ? "shield" : "relic");
 			}
 		}
+		std::string fitted;
+		for (const auto item : ours) {
+			const char* how = Fit(item, a_faction);
+			if (fitted.find(how) == std::string::npos) {
+				fitted += fmt::format("{}{}", fitted.empty() ? "" : ", ", how);
+			}
+		}
 		if (g_told.fetch_add(1) < 60) {
+			const auto list = a_faction ? a_faction->vendorData.vendorSellBuyList : nullptr;
+			SKSE::log::info("shop: {:08X}'s vendor list {:08X} ({} keywords, {}): Skylands items {}", a_who ? a_who->GetFormID() : 0, list ? list->GetFormID() : 0, list ? list->forms.size() : 0,
+				a_faction && a_faction->vendorData.vendorValues.notBuySell ? "deals in all BUT these" : "deals only in these", fitted.empty() ? std::string("none") : fitted);
 			const auto first = g_ammo ? g_ammo(2) : nullptr;  // read back: does what was added stay in the chest?
 			SKSE::log::info("shop: {} {:08X} \"{}\" (merchant chest {:08X}; {}; {} Skylands items in it before): {}; pistol rounds now {}", a_barter ? "barter with" : "talking to",
 				a_who ? a_who->GetFormID() : 0, a_who ? a_who->GetName() : "?", a_chest->GetFormID(), resetNote, gear, added.empty() ? std::string("already stocked") : "added " + added,
@@ -221,7 +279,9 @@ namespace shop
 			return -1;
 		};
 		try {
-			if (a_key == "ShopReset") {
+			if (a_key == "ShopKeywords") {
+				g_fitKeywords = std::stof(a_value) != 0.0f;
+			} else if (a_key == "ShopReset") {
 				g_reset = std::stof(a_value) != 0.0f;
 			} else if (a_key == "Shop") {
 				g_on = std::stof(a_value) != 0.0f;
