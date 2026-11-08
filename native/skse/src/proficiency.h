@@ -18,7 +18,8 @@ namespace prof
 {
 	using Clock = std::chrono::steady_clock;
 
-	constexpr int kTypes = 6, kMakers = 8, kStats = 6;
+	// 1.36.0: kStats = the 6 gun stats + 3 shield stats (the manufacturers' second stat, the user's choice); gun type tracks only ever rotate over the first kGunStats
+	constexpr int kTypes = 6, kMakers = 8, kGunStats = 6, kStats = 9;
 	enum Stat : int
 	{
 		kDamage = 0,
@@ -26,27 +27,38 @@ namespace prof
 		kReload,
 		kRate,
 		kMag,
-		kProj
+		kProj,
+		kShieldCap,    // shield capacity, percent
+		kShieldRate,   // shield recharge rate, percent
+		kShieldDelay   // shield recharge delay, percent shorter
 	};
 	inline constexpr const char* kTypeNames[kTypes] = { "SMG", "Assault Rifle", "Pistol", "Shotgun", "Sniper", "Launcher" };  // generate.STAFF_KINDS order (the ammo list)
 	inline constexpr const char* kTypeShort[kTypes] = { "SMG", "AR", "Pistol", "Shotgun", "Sniper", "Launcher" };  // the HUD line
 	inline constexpr const char* kMakerNames[kMakers] = { "Bandit", "Dahl", "Hyperion", "Jakobs", "Maliwan", "Tediore", "Torgue", "Vladof" };  // sheets/manufacturers.json order
-	inline constexpr const char* kStatNames[kStats] = { "damage", "accuracy", "reload speed", "fire rate", "magazine size", "bonus projectile chance" };
+	inline constexpr const char* kStatNames[kStats] = { "damage", "accuracy", "reload speed", "fire rate", "magazine size", "bonus projectile chance", "shield capacity",
+		"shield recharge rate", "shield recharge delay" };
 	// each maker's two signature stats (roadmap 3.3; Jakobs' second, fire rate, is a choice: "fire as fast as you can pull the trigger")
-	inline constexpr int kMakerStats[kMakers][2] = { { kMag, kRate }, { kAccuracy, kReload }, { kAccuracy, kDamage }, { kDamage, kRate },
-		{ kDamage, kAccuracy }, { kReload, kMag }, { kDamage, kProj }, { kRate, kMag } };
+	// 1.36.0 (the user): a maker's PRIMARY is a gun stat (its own guns full, every other gun a quarter); its SECONDARY is a shield stat that ALWAYS applies, whatever gun is
+	// held or shield worn. Bandit / Jakobs / Torgue capacity, Vladof / Hyperion / Maliwan recharge rate, Tediore / Dahl shorter delay (BL2: Bandit big shields, Tediore quick
+	// delay, Vladof quick refill; the rest my pick). Five of them (Torgue, Maliwan, Jakobs, Dahl, Hyperion) are meant to move to grenade stats when grenades exist.
+	inline constexpr int kMakerStats[kMakers][2] = { { kMag, kShieldCap }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap },
+		{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kShieldCap }, { kRate, kShieldRate } };
 	constexpr int kLauncher = 5, kShotgun = 3;
 
 	// ---- settings (ini Prof...) ----
 	inline bool  g_on = true;
-	inline float g_xpScale = 0.1f, g_base = 50.0f, g_step = 15.0f, g_killGrace = 0.25f;
+	// 1.36.0: every pace setting is per system (Borderlands 2 style / Skyrim style) and per track kind (gun type / manufacturer)
+	inline float g_killGrace = 0.25f;
+	inline float g_bl2XPScale = 0.1f, g_bl2TypeRate = 1.0f, g_bl2MakerRate = 1.0f, g_bl2TypeBase = 50.0f, g_bl2TypeStep = 15.0f, g_bl2MakerBase = 50.0f, g_bl2MakerStep = 15.0f;
+	inline float g_skyXPScale = 0.1f, g_skyTypeRate = 1.0f, g_skyMakerRate = 1.0f;
+	inline float g_skyTypeMult = 0.291f, g_skyTypeExp = 1.95f, g_skyTypeBase = 20.0f, g_skyMakerMult = 0.291f, g_skyMakerExp = 1.95f, g_skyMakerBase = 20.0f;
 	inline int   g_statsPerLevel = 1;
 	inline float g_milestoneMult = 3.0f, g_decay = 0.75f, g_otherMakers = 0.25f, g_ownMaker = 1.0f, g_launcherProj = 0.5f;
 	inline float g_secondary = 0.5f;
 	// 1.33.0 maker curve (the user): a fifth of the type track's steps, GROWING x ProfMakerGrowth at each milestone (no floor): Bandit magazine +5 % at level 10, +50 % at level 100
 	inline float g_makerStartScale = 0.208333f, g_makerGrowth = 1.105f;
 	// 1.33.0 the rough rate knobs (the user): XP multipliers per kind of track, and multipliers on every bonus a level gives
-	inline float g_typeRate = 1.0f, g_makerRate = 1.0f, g_typeBonusScale = 1.0f, g_makerBonusScale = 1.0f;
+	inline float g_typeBonusScale = 1.0f, g_makerBonusScale = 1.0f;
 	// 1.33.0 Legendary (gun type tracks only; maker tracks never cap or reset): cap 100 + 10 a Legendary, the falloff restarts every 100 levels, a Legendary keeps 10 % of the round
 	inline bool  g_legOn = true;
 	inline int   g_legCap = 100, g_legCapStep = 10, g_testLevels = 0;
@@ -56,11 +68,10 @@ namespace prof
 	// sized so level 100 costs the same in all as the plain curve), and kill XP is times ProfSkyrimKillXP (0 = off). Off: the 0.57.0 system as it was.
 	inline bool  g_skyrim = true;
 	inline float g_skyCharXP = 0.5f, g_skyMakerXP = 0.0f, g_skyKill = 0.0f;
-	inline float g_skyMult = 0.291f, g_skyExp = 1.95f, g_skyBase = 20.0f;
 	inline float g_charPending = 0.0f;  // character XP from proficiency levels, waiting for progress.h's Apply (under g_lock)
 	inline std::atomic_int g_charTold{ 0 };  // a maker's second stat grows at this share of the first (the user: half, a secondary bonus)
-	inline float g_start[kStats] = { 2.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f };
-	inline float g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f };
+	inline float g_start[kStats] = { 2.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f, 3.0f, 3.0f, 3.0f };  // the shield stats: maker steps only (x MakerStartScale, x SecondaryShare)
+	inline float g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
 	inline bool  g_hud = true, g_notices = true;
 	inline int   g_logHits = 30;
 
@@ -81,13 +92,17 @@ namespace prof
 	inline std::atomic_int g_hitsBooked{ 0 };
 
 	inline bool Milestone(int a_n) { return a_n == 10 || a_n == 25 || a_n == 50 || a_n == 75 || a_n == 100 || (a_n > 100 && a_n % 50 == 0); }
-	inline float Cost(int a_level)
+	inline float Cost(int a_level, bool a_maker)
 	{
+		const float n = static_cast<float>((std::max)(0, a_level));
 		if (g_skyrim) {
-			return (std::max)(1.0f, g_skyMult * std::pow(static_cast<float>((std::max)(0, a_level)), g_skyExp) + g_skyBase);
+			return a_maker ? (std::max)(1.0f, g_skyMakerMult * std::pow(n, g_skyMakerExp) + g_skyMakerBase) : (std::max)(1.0f, g_skyTypeMult * std::pow(n, g_skyTypeExp) + g_skyTypeBase);
 		}
-		return (std::max)(1.0f, g_base + g_step * static_cast<float>(a_level));
+		return a_maker ? (std::max)(1.0f, g_bl2MakerBase + g_bl2MakerStep * n) : (std::max)(1.0f, g_bl2TypeBase + g_bl2TypeStep * n);
 	}
+	inline float XPScale() { return g_skyrim ? g_skyXPScale : g_bl2XPScale; }
+	inline float TypeRate() { return g_skyrim ? g_skyTypeRate : g_bl2TypeRate; }
+	inline float MakerRate() { return g_skyrim ? g_skyMakerRate : g_bl2MakerRate; }
 	inline float StepOf(int a_stat, int a_passed) { return (std::max)(g_floor[a_stat], g_start[a_stat] * std::pow(g_decay, static_cast<float>(a_passed))); }
 	inline float MakerStepOf(int a_stat, int a_passed) { return g_start[a_stat] * g_makerStartScale * std::pow(g_makerGrowth, static_cast<float>((std::min)(a_passed, 200))); }
 	inline int   CapOf(const Track& a_t) { return g_legCap + g_legCapStep * (std::max)(0, a_t.legendary); }
@@ -117,11 +132,11 @@ namespace prof
 			}
 			return;
 		}
-		const int per = std::clamp(g_statsPerLevel, 1, kStats);
-		const int first = ((n - 1) * per) % kStats;
+		const int per = std::clamp(g_statsPerLevel, 1, kGunStats);
+		const int first = ((n - 1) * per) % kGunStats;
 		const int count = milestone ? 4 : per;
 		for (int i = 0; i < count; ++i) {
-			const int s = (first + i) % kStats;
+			const int s = (first + i) % kGunStats;
 			a_out[s] += StepOf(s, passed) * (milestone ? g_milestoneMult : 1.0f) * g_typeBonusScale;
 		}
 	}
@@ -151,9 +166,17 @@ namespace prof
 				}
 			}
 		}
+		float shieldBonus[3]{};
 		for (int m = 0; m < kMakers; ++m) {
 			Recompute(m, g_maker[m].level, g_makerBonus[m]);
+			for (int i = 0; i < 3; ++i) {  // the makers' second stats: shield bonuses that always apply (handed to shield.h as plain numbers: no lock crosses)
+				shieldBonus[i] += g_makerBonus[m][kShieldCap + i] * g_ownMaker;
+			}
 		}
+		const bool on = g_on;
+		shield::g_profShieldCap = on ? shieldBonus[0] : 0.0f;
+		shield::g_profShieldRate = on ? shieldBonus[1] : 0.0f;
+		shield::g_profShieldDelay = on ? shieldBonus[2] : 0.0f;
 	}
 
 	// the bonuses a gun of this type and maker gets, in percent (a_type / a_maker < 0: unknown, that part left out; an unknown maker gets the quarter of every maker)
@@ -196,7 +219,7 @@ namespace prof
 		const std::lock_guard guard(g_lock);
 		if (a_type >= 0 && a_type < kTypes) {
 			v.typeLevel = g_type[a_type].level;
-			v.typeFrac = std::clamp(g_type[a_type].xp / Cost(g_type[a_type].level), 0.0f, 1.0f);
+			v.typeFrac = std::clamp(g_type[a_type].xp / Cost(g_type[a_type].level, false), 0.0f, 1.0f);
 			v.typeLegendary = g_type[a_type].legendary;
 			v.typeReady = Capped(a_type);
 			if (v.typeReady) {
@@ -205,7 +228,7 @@ namespace prof
 		}
 		if (a_maker >= 0 && a_maker < kMakers) {
 			v.makerLevel = g_maker[a_maker].level;
-			v.makerFrac = std::clamp(g_maker[a_maker].xp / Cost(g_maker[a_maker].level), 0.0f, 1.0f);
+			v.makerFrac = std::clamp(g_maker[a_maker].xp / Cost(g_maker[a_maker].level, true), 0.0f, 1.0f);
 		}
 		return v;
 	}
@@ -223,7 +246,7 @@ namespace prof
 		if (!g_on || !(a_damage > 0.0f) || a_damage > 1e7f) {
 			return;
 		}
-		const float xp = a_damage * g_xpScale;
+		const float xp = a_damage * XPScale();
 		bool        counted = a_alive;
 		{
 			const std::lock_guard guard(g_lock);
@@ -233,10 +256,10 @@ namespace prof
 			}
 			if (counted) {
 				if (a_type >= 0 && a_type < kTypes) {
-					g_pendType[a_type] += xp * g_typeRate;
+					g_pendType[a_type] += xp * TypeRate();
 				}
 				if (a_maker >= 0 && a_maker < kMakers) {
-					g_pendMaker[a_maker] += xp * g_makerRate;
+					g_pendMaker[a_maker] += xp * MakerRate();
 				}
 			}
 		}
@@ -271,7 +294,7 @@ namespace prof
 				}
 				const bool capped = a_maker < 0 && g_legOn;  // a type track stops at its cap until it goes Legendary (a level's worth of XP waits)
 				if (capped && a_t.level >= CapOf(a_t)) {
-					a_t.xp = (std::min)(a_t.xp + a_pend, Cost(a_t.level));
+					a_t.xp = (std::min)(a_t.xp + a_pend, Cost(a_t.level, a_maker >= 0));
 					a_t.total += a_pend;
 					a_pend = 0.0f;
 					return;
@@ -279,15 +302,15 @@ namespace prof
 				a_t.xp += a_pend;
 				a_t.total += a_pend;
 				a_pend = 0.0f;
-				for (int guard2 = 0; guard2 < 50 && a_t.xp >= Cost(a_t.level) && !(capped && a_t.level >= CapOf(a_t)); ++guard2) {
-					a_t.xp -= Cost(a_t.level);
+				for (int guard2 = 0; guard2 < 50 && a_t.xp >= Cost(a_t.level, a_maker >= 0) && !(capped && a_t.level >= CapOf(a_t)); ++guard2) {
+					a_t.xp -= Cost(a_t.level, a_maker >= 0);
 					++a_t.level;
 					changed = true;
 					float g[kStats];
 					Gains(a_maker, a_t.level, g);
 					const std::string text = fmt::format("{} proficiency {}{}: {}", a_name, a_t.level, Milestone(a_t.level) ? " (milestone)" : "", GainText(g));
 					notices.push_back(text);
-					SKSE::log::info("prof: {} (total XP {:.0f}, next level at {:.0f})", text, a_t.total, Cost(a_t.level));
+					SKSE::log::info("prof: {} (total XP {:.0f}, next level at {:.0f})", text, a_t.total, Cost(a_t.level, a_maker >= 0));
 					if (g_skyrim) {  // like a Skyrim skill: the new level is character XP
 						const float give = static_cast<float>(a_t.level) * g_skyCharXP * (a_maker >= 0 ? g_skyMakerXP : 1.0f);
 						if (give > 0.0f) {
@@ -484,15 +507,15 @@ namespace prof
 		shield::g_extraSave.push_back(&Save);
 		shield::g_extraLoad.push_back(&Load);
 		shield::g_extraRevert.push_back(&Revert);
-		SKSE::log::info("prof: {}; XP = damage x {:.2f}, level n costs {:.0f} + {:.0f} x n, {} stat(s) a level, milestones x{:.1f}, decay {:.2f}, other makers' primary stat x{:.2f}, own maker x{:.2f} (its second stat x{:.2f}), launchers' projectiles x{:.2f}",
-			g_on ? "on" : "off", g_xpScale, g_base, g_step, g_statsPerLevel, g_milestoneMult, g_decay, g_otherMakers, g_ownMaker, g_secondary, g_launcherProj);
-		SKSE::log::info("prof: rates - type XP x{:.2f}, maker XP x{:.2f}, type bonuses x{:.2f}, maker bonuses x{:.2f}; maker steps x{:.3f} of the type's, growing x{:.3f} a milestone; "
-						"Legendary {} (cap {} + {} each, keeps {:.0f}%, hold {:.1f} s), test levels {}",
-			g_typeRate, g_makerRate, g_typeBonusScale, g_makerBonusScale, g_makerStartScale, g_makerGrowth, g_legOn ? "on" : "off", g_legCap, g_legCapStep, g_legKeep * 100.0f, g_legHold, g_testLevels);
-		SKSE::log::info("prof: Skyrim style {}{}", g_skyrim ? "ON" : "off",
-			g_skyrim ? fmt::format(": a gun type level n gives n x {:.2f} character XP, maker levels x{:.2f} of that, level n costs {:.3f} x n^{:.2f} + {:.0f} (level 1 {:.0f}, 10 {:.0f}, 50 {:.0f}, 100 {:.0f}), kill XP x{:.2f}",
-							g_skyCharXP, g_skyMakerXP, g_skyMult, g_skyExp, g_skyBase, Cost(1), Cost(10), Cost(50), Cost(100), g_skyKill) :
-						std::string(" (the plain curve; kill XP as set)"));
+		SKSE::log::info("prof: {}; system {}; {} stat(s) a level, milestones x{:.1f}, decay {:.2f}, other makers' primary stat x{:.2f}, own maker x{:.2f}, second stat (shields, always) x{:.2f}, launchers' projectiles x{:.2f}",
+			g_on ? "on" : "off", g_skyrim ? "Skyrim style" : "Borderlands 2 style", g_statsPerLevel, g_milestoneMult, g_decay, g_otherMakers, g_ownMaker, g_secondary, g_launcherProj);
+		SKSE::log::info("prof: pace - XP = damage x {:.2f}, gun type XP x{:.2f}, maker XP x{:.2f}; gun type levels cost {:.0f} / {:.0f} / {:.0f} / {:.0f} (levels 1 / 10 / 50 / 100), maker levels {:.0f} / {:.0f} / {:.0f} / {:.0f}",
+			XPScale(), TypeRate(), MakerRate(), Cost(1, false), Cost(10, false), Cost(50, false), Cost(100, false), Cost(1, true), Cost(10, true), Cost(50, true), Cost(100, true));
+		SKSE::log::info("prof: bonuses x{:.2f} (types) / x{:.2f} (makers); maker steps x{:.3f} of the type's, growing x{:.3f} a milestone; Legendary {} (cap {} + {} each, keeps {:.0f}%, hold {:.1f} s), test levels {}",
+			g_typeBonusScale, g_makerBonusScale, g_makerStartScale, g_makerGrowth, g_legOn ? "on" : "off", g_legCap, g_legCapStep, g_legKeep * 100.0f, g_legHold, g_testLevels);
+		if (g_skyrim) {
+			SKSE::log::info("prof: Skyrim style: a gun type level n gives n x {:.2f} character XP, maker levels x{:.2f} of that, kill XP x{:.2f}", g_skyCharXP, g_skyMakerXP, g_skyKill);
+		}
 	}
 
 	inline bool Config(const std::string& a_key, const std::string& a_value)
@@ -507,7 +530,7 @@ namespace prof
 			return true;
 		}
 		const std::string_view k = std::string_view(a_key).substr(4);
-		static constexpr std::string_view statKeys[kStats] = { "Damage", "Accuracy", "Reload", "Rate", "Magazine", "Projectile" };
+		static constexpr std::string_view statKeys[kStats] = { "Damage", "Accuracy", "Reload", "Rate", "Magazine", "Projectile", "ShieldCapacity", "ShieldRecharge", "ShieldDelay" };
 		for (int s = 0; s < kStats; ++s) {
 			if (k == fmt::format("{}Start", statKeys[s])) {
 				g_start[s] = std::clamp(v, 0.0f, 100.0f);
@@ -520,16 +543,10 @@ namespace prof
 		}
 		if (k.empty()) {
 			g_on = v != 0.0f;
-		} else if (k == "XPScale") {
-			g_xpScale = std::clamp(v, 0.0f, 1000.0f);
-		} else if (k == "Base") {
-			g_base = std::clamp(v, 1.0f, 1e7f);
-		} else if (k == "Step") {
-			g_step = std::clamp(v, 0.0f, 1e7f);
 		} else if (k == "KillGrace") {
 			g_killGrace = std::clamp(v, 0.0f, 5.0f);
 		} else if (k == "StatsPerLevel") {
-			g_statsPerLevel = std::clamp(static_cast<int>(v), 1, kStats);
+			g_statsPerLevel = std::clamp(static_cast<int>(v), 1, kGunStats);
 		} else if (k == "MilestoneMult") {
 			g_milestoneMult = std::clamp(v, 0.0f, 100.0f);
 		} else if (k == "Decay") {
@@ -544,16 +561,38 @@ namespace prof
 			g_skyMakerXP = std::clamp(v, 0.0f, 100.0f);
 		} else if (k == "SkyrimKillXP") {
 			g_skyKill = std::clamp(v, 0.0f, 100.0f);
-		} else if (k == "SkyrimCurveMult") {
-			g_skyMult = std::clamp(v, 0.0f, 1e6f);
-		} else if (k == "SkyrimCurveExp") {
-			g_skyExp = std::clamp(v, 0.0f, 4.0f);
-		} else if (k == "SkyrimCurveBase") {
-			g_skyBase = std::clamp(v, 0.0f, 1e7f);
-		} else if (k == "TypeRate") {
-			g_typeRate = std::clamp(v, 0.0f, 1000.0f);
-		} else if (k == "MakerRate") {
-			g_makerRate = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "BL2XPScale") {
+			g_bl2XPScale = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "BL2TypeRate") {
+			g_bl2TypeRate = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "BL2MakerRate") {
+			g_bl2MakerRate = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "BL2TypeBase") {
+			g_bl2TypeBase = std::clamp(v, 1.0f, 1e7f);
+		} else if (k == "BL2TypeStep") {
+			g_bl2TypeStep = std::clamp(v, 0.0f, 1e7f);
+		} else if (k == "BL2MakerBase") {
+			g_bl2MakerBase = std::clamp(v, 1.0f, 1e7f);
+		} else if (k == "BL2MakerStep") {
+			g_bl2MakerStep = std::clamp(v, 0.0f, 1e7f);
+		} else if (k == "SkyrimXPScale") {
+			g_skyXPScale = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "SkyrimTypeRate") {
+			g_skyTypeRate = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "SkyrimMakerRate") {
+			g_skyMakerRate = std::clamp(v, 0.0f, 1000.0f);
+		} else if (k == "SkyrimTypeCurveMult") {
+			g_skyTypeMult = std::clamp(v, 0.0f, 1e6f);
+		} else if (k == "SkyrimTypeCurveExp") {
+			g_skyTypeExp = std::clamp(v, 0.0f, 4.0f);
+		} else if (k == "SkyrimTypeCurveBase") {
+			g_skyTypeBase = std::clamp(v, 0.0f, 1e7f);
+		} else if (k == "SkyrimMakerCurveMult") {
+			g_skyMakerMult = std::clamp(v, 0.0f, 1e6f);
+		} else if (k == "SkyrimMakerCurveExp") {
+			g_skyMakerExp = std::clamp(v, 0.0f, 4.0f);
+		} else if (k == "SkyrimMakerCurveBase") {
+			g_skyMakerBase = std::clamp(v, 0.0f, 1e7f);
 		} else if (k == "TypeBonus") {
 			g_typeBonusScale = std::clamp(v, 0.0f, 100.0f);
 		} else if (k == "MakerBonus") {

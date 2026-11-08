@@ -19,6 +19,9 @@
 
 namespace shield
 {
+	// 1.36.0: the manufacturer proficiencies' shield bonuses in percent (capacity, recharge rate, shorter delay), written by proficiency.h, read here (the player's shield)
+	inline std::atomic<float> g_profShieldCap{ 0.0f }, g_profShieldRate{ 0.0f }, g_profShieldDelay{ 0.0f };
+
 	using Clock = std::chrono::steady_clock;
 
 	// settings (SkylandsNative.ini; the installer writes them from the shields sheet, replaced by values read from Borderlands 2)
@@ -327,8 +330,8 @@ namespace shield
 		float delaySeconds = s.delay > 0.0f ? s.delay : g_delay, rateShare = s.rate > 0.0f ? s.rate : g_rate;
 		if (s.player) {  // relic bonuses in percent: Variable02 recharge rate, Variable03 shorter delay before the recharge (console: player.modav variable02 50)
 			const auto ao = a_actor->AsActorValueOwner();
-			rateShare *= (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable02) * 0.01f);
-			delaySeconds /= (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable03) * 0.01f);
+			rateShare *= (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable02) * 0.01f) * (1.0f + g_profShieldRate.load() * 0.01f);  // 1.36.0: + maker proficiencies
+			delaySeconds /= (std::max)(0.2f, 1.0f + ao->GetActorValue(RE::ActorValue::kVariable03) * 0.01f) * (1.0f + g_profShieldDelay.load() * 0.01f);
 		}
 		if (s.shield < s.capacity && a_now - s.lastHit >= std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(delaySeconds))) {
 			if (!s.recharging) {
@@ -633,7 +636,7 @@ namespace shield
 					continue;
 				}
 				if (s.player) {  // Variable01: capacity bonus in percent. A change takes the old bonus off and puts the new one on (the shield starts full)
-					const float want = s.baseFrac * (std::max)(0.2f, 1.0f + actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kVariable01) * 0.01f);
+					const float want = s.baseFrac * (std::max)(0.2f, 1.0f + actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kVariable01) * 0.01f) * (1.0f + g_profShieldCap.load() * 0.01f);
 					if (s.baseFrac > 0.0f && std::abs(want - s.frac) > 0.004f * (std::max)(s.frac, 0.05f)) {
 						SKSE::log::info("shield: the player's capacity bonus (Variable01) changes the shield from {:.1f}% to {:.1f}% of max health", s.frac * 100.0f, want * 100.0f);
 						Strip(actor, s.capacity, s.shield);

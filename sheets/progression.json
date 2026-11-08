@@ -94,25 +94,53 @@
    "note": "1 = weapon proficiencies on; 0 = off"
   },
   {
-   "id": "ProfXPScale",
+   "id": "ProfBL2XPScale",
    "value": 0.1,
    "source": "design",
    "bl2_object": "-",
-   "note": "proficiency XP = each bullet's damage x this (to the gun's type track AND its maker track)"
+   "note": "BORDERLANDS 2 STYLE (ProfSkyrimStyle=0): proficiency XP per point of bullet damage on a living enemy"
   },
   {
-   "id": "ProfBase",
+   "id": "ProfBL2TypeRate",
+   "value": 1.0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "BL2 style: gun type tracks' XP times this"
+  },
+  {
+   "id": "ProfBL2MakerRate",
+   "value": 1.0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "BL2 style: manufacturer tracks' XP times this"
+  },
+  {
+   "id": "ProfBL2TypeBase",
    "value": 50,
    "source": "design",
    "bl2_object": "-",
-   "note": "XP for proficiency level n -> n+1 = ProfBase + ProfStep x n (the user: 50)"
+   "note": "BL2 style: a gun type level n costs Base + Step x n XP"
   },
   {
-   "id": "ProfStep",
+   "id": "ProfBL2TypeStep",
    "value": 15,
    "source": "design",
    "bl2_object": "-",
-   "note": "(the user: 15); no cap"
+   "note": "BL2 style: (gun type) step"
+  },
+  {
+   "id": "ProfBL2MakerBase",
+   "value": 50,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "BL2 style: a manufacturer level n costs Base + Step x n XP (set apart from the gun types)"
+  },
+  {
+   "id": "ProfBL2MakerStep",
+   "value": 15,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "BL2 style: (manufacturer) step"
   },
   {
    "id": "ProfKillGrace",
@@ -255,6 +283,27 @@
    "note": "projectile floor"
   },
   {
+   "id": "ProfShieldCapacityStart",
+   "value": 3,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "manufacturers' second stat (shields, always on): capacity step in percent (x ProfMakerStartScale, x ProfSecondaryShare)"
+  },
+  {
+   "id": "ProfShieldRechargeStart",
+   "value": 3,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "... recharge rate step"
+  },
+  {
+   "id": "ProfShieldDelayStart",
+   "value": 3,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "... shorter recharge delay step"
+  },
+  {
    "id": "ProfHud",
    "value": 1,
    "source": "design",
@@ -274,20 +323,6 @@
    "source": "design",
    "bl2_object": "-",
    "note": "the first N proficiency hits are written to SkylandsNative.log"
-  },
-  {
-   "id": "ProfTypeRate",
-   "value": 1.0,
-   "source": "design",
-   "bl2_object": "-",
-   "note": "ROUGH RATE: gun type tracks' XP times this (2 = levels twice as fast, 0.5 = half)"
-  },
-  {
-   "id": "ProfMakerRate",
-   "value": 1.0,
-   "source": "design",
-   "bl2_object": "-",
-   "note": "ROUGH RATE: manufacturer tracks' XP times this"
   },
   {
    "id": "ProfTypeBonus",
@@ -364,7 +399,70 @@
    "value": 1,
    "source": "design",
    "bl2_object": "-",
-   "note": "SKYRIM STYLE (1 = on, 0 = the plain system): proficiency levels act like Skyrim skills and feed your character level"
+   "note": "WHICH SYSTEM: 1 = Skyrim style (proficiency levels feed your character level), 0 = Borderlands 2 style (kills feed it: the KillXP keys)"
+  },
+  {
+   "id": "ProfSkyrimXPScale",
+   "value": 0.1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "SKYRIM STYLE (ProfSkyrimStyle=1): proficiency XP per point of bullet damage on a living enemy"
+  },
+  {
+   "id": "ProfSkyrimTypeRate",
+   "value": 1.0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: gun type tracks' XP times this"
+  },
+  {
+   "id": "ProfSkyrimMakerRate",
+   "value": 1.0,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: manufacturer tracks' XP times this"
+  },
+  {
+   "id": "ProfSkyrimTypeCurveMult",
+   "value": 0.291,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: a gun type level n costs Mult x n ^ Exp + Base XP (Skyrim's skill curve shape)"
+  },
+  {
+   "id": "ProfSkyrimTypeCurveExp",
+   "value": 1.95,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: (gun type) power"
+  },
+  {
+   "id": "ProfSkyrimTypeCurveBase",
+   "value": 20,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: (gun type) flat part"
+  },
+  {
+   "id": "ProfSkyrimMakerCurveMult",
+   "value": 0.291,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: a manufacturer level n costs Mult x n ^ Exp + Base XP (set apart from the gun types)"
+  },
+  {
+   "id": "ProfSkyrimMakerCurveExp",
+   "value": 1.95,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: (manufacturer) power"
+  },
+  {
+   "id": "ProfSkyrimMakerCurveBase",
+   "value": 20,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Skyrim style: (manufacturer) flat part"
   },
   {
    "id": "ProfSkyrimCharXP",
@@ -386,27 +484,6 @@
    "source": "design",
    "bl2_object": "-",
    "note": "Skyrim style: kill XP times this (the user: 0 = off, levels come from proficiencies only)"
-  },
-  {
-   "id": "ProfSkyrimCurveMult",
-   "value": 0.291,
-   "source": "design",
-   "bl2_object": "-",
-   "note": "Skyrim style: level n costs Mult x n ^ Exp + Base proficiency XP (fast early, slow late; level 100 costs the same in all as the plain curve)"
-  },
-  {
-   "id": "ProfSkyrimCurveExp",
-   "value": 1.95,
-   "source": "design",
-   "bl2_object": "-",
-   "note": "Skyrim style: the curve's power (Skyrim's skill use curve is 1.95)"
-  },
-  {
-   "id": "ProfSkyrimCurveBase",
-   "value": 20,
-   "source": "design",
-   "bl2_object": "-",
-   "note": "Skyrim style: the curve's flat part"
   }
  ]
 }

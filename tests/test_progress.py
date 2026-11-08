@@ -56,8 +56,8 @@ def test_proficiencies_are_wired_into_the_hits_the_shots_the_hud_and_the_save():
         assert check in book, check
     assert "facts.magnitude * facts.power, !actor->IsDead()" in prog and "effect->effectItem.magnitude" in main
     # the user's numbers
-    for text in ("g_base = 50.0f", "g_step = 15.0f", "g_killGrace = 0.25f", "g_statsPerLevel = 1", "g_otherMakers = 0.25f", "g_ownMaker = 1.0f", "g_launcherProj = 0.5f",
-                 "g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f }", "0x464F5250"):
+    for text in ("g_bl2TypeBase = 50.0f", "g_bl2TypeStep = 15.0f", "g_bl2MakerBase = 50.0f", "g_bl2MakerStep = 15.0f", "g_killGrace = 0.25f", "g_statsPerLevel = 1", "g_otherMakers = 0.25f", "g_ownMaker = 1.0f", "g_launcherProj = 0.5f",
+                 "g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }", "0x464F5250"):
         assert text in prof, text
     # the bonuses act per shot on top of the relics, and the HUD shows both levels
     assert "prof::BonusFor(g_gun.info.type, g_gun.info.maker, pb)" in main and "* (1.0f + pb[prof::kRate] * 0.01f)" in main and "* (1.0f + pb[prof::kDamage] * 0.01f)" in main
@@ -68,7 +68,7 @@ def test_proficiencies_are_wired_into_the_hits_the_shots_the_hud_and_the_save():
 
 def _gains(maker, n, stats_per_level=1):
     # a Python copy of proficiency.h's Gains with the default numbers, to pin the bonus tables the roadmap shows
-    start, floor, mult, decay = [2, 2, 2, 2, 3, 4], [0.5, 0.5, 0.5, 0.5, 1, 1], 3.0, 0.75
+    start, floor, mult, decay = [2, 2, 2, 2, 3, 4, 3, 3, 3], [0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1, 1], 3.0, 0.75
     mile = lambda k: k in (10, 25, 50, 75, 100) or (k > 100 and k % 50 == 0)  # noqa: E731
     if maker is None:
         n = (n - 1) % 100 + 1  # the type track's falloff starts again every 100 levels (Legendary)
@@ -76,9 +76,9 @@ def _gains(maker, n, stats_per_level=1):
     step = lambda s: max(floor[s], start[s] * decay ** passed)  # noqa: E731
     if maker is not None:
         step = lambda s: start[s] * 0.208333 * 1.105 ** passed  # noqa: E731  (maker tracks grow)
-    out = [0.0] * 6
+    out = [0.0] * 9  # 6 gun stats + shield capacity / recharge rate / shorter delay (the makers' second stats, 1.36.0)
     if maker is not None:
-        pair = [(4, 3), (1, 2), (1, 0), (0, 3), (0, 1), (2, 4), (0, 5), (3, 4)][maker]
+        pair = [(4, 6), (1, 8), (1, 7), (0, 6), (0, 7), (2, 8), (0, 6), (3, 7)][maker]
         for i in ((0, 1) if mile(n) else ((n - 1) % 2,)):
             s = pair[i]
             out[s] += step(s) * (mult if mile(n) else 1) * (1.0 if i == 0 else 0.5)
@@ -91,23 +91,24 @@ def _gains(maker, n, stats_per_level=1):
 
 
 def test_the_type_track_bonus_table_matches_the_roadmap():
-    total = [0.0] * 6
+    total = [0.0] * 9
     for n in range(1, 11):
         total = [a + b for a, b in zip(total, _gains(None, n))]
-    assert [round(x, 1) for x in total] == [10.0, 4.0, 4.0, 8.0, 12.0, 16.0]
+    assert [round(x, 1) for x in total] == [10.0, 4.0, 4.0, 8.0, 12.0, 16.0, 0, 0, 0]  # type tracks never touch the shield stats
     for n in range(11, 26):
         total = [a + b for a, b in zip(total, _gains(None, n))]
-    assert [round(x, 1) for x in total] == [17.5, 11.5, 11.5, 15.5, 18.8, 25.0]
+    assert [round(x, 1) for x in total] == [17.5, 11.5, 11.5, 15.5, 18.8, 25.0, 0, 0, 0]
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
-    assert "{ kMag, kRate }, { kAccuracy, kReload }, { kAccuracy, kDamage }, { kDamage, kRate }" in prof and "{ kDamage, kAccuracy }, { kReload, kMag }, { kDamage, kProj }, { kRate, kMag }" in prof
+    assert "{ kMag, kShieldCap }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap }" in prof
+    assert "{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kShieldCap }, { kRate, kShieldRate }" in prof and "% kGunStats" in prof
 
 
 def test_a_makers_second_stat_is_half_and_only_its_own_guns_get_it():
     # Jakobs (3): damage first, fire rate second; level 10 = 5 ordinary levels of damage (2 %), 4 of fire rate at half (1 %), the milestone both x3 (fire rate at half)
-    total = [0.0] * 6
+    total = [0.0] * 9
     for n in range(1, 11):
         total = [a + b for a, b in zip(total, _gains(3, n))]
-    assert [round(x, 2) for x in total] == [3.33, 0, 0, 1.46, 0, 0]  # 1.33.0: the growing maker curve (a fifth of the old steps)
+    assert [round(x, 2) for x in total] == [3.33, 0, 0, 0, 0, 0, 2.19, 0, 0]  # Jakobs: damage first, shield capacity second (1.36.0)
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
     assert "(i == 0 ? 1.0f : g_secondary)" in prof and "g_secondary = 0.5f" in prof and 'k == "SecondaryShare"' in prof
     # every other gun: only the maker's PRIMARY stat, at the quarter
@@ -117,7 +118,7 @@ def test_a_makers_second_stat_is_half_and_only_its_own_guns_get_it():
 
 
 def _track(maker, level):
-    total = [0.0] * 6
+    total = [0.0] * 9
     for n in range(1, level + 1):
         total = [a + b for a, b in zip(total, _gains(maker, n))]
     return total
@@ -126,34 +127,34 @@ def _track(maker, level):
 def test_the_maker_curve_grows_to_the_users_numbers():
     # the user: Bandit's magazine about +5 % at level 10 and +50 % at level 100
     assert round(_track(0, 10)[4], 1) == 5.0 and round(_track(0, 100)[4], 1) == 50.0
-    assert round(_track(0, 100)[3], 1) == 16.5  # its secondary, fire rate
+    assert round(_track(0, 100)[6], 1) == 24.7  # its secondary, shield capacity (start 3 at half)
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
     assert "g_makerStartScale = 0.208333f, g_makerGrowth = 1.105f" in prof and "MakerStepOf(s, passed)" in prof
 
 
 def test_legendary_keeps_a_tenth_of_each_round_and_the_falloff_restarts():
-    assert [round(x, 1) for x in _track(None, 100)] == [29.8, 25.3, 27.8, 33.7, 46.4, 54.7]
-    assert [round(x, 1) for x in _track(None, 110)] == [39.8, 29.3, 31.8, 41.7, 58.4, 70.7]  # 101-110 = 1-10 again
+    assert [round(x, 1) for x in _track(None, 100)][:6] == [29.8, 25.3, 27.8, 33.7, 46.4, 54.7]
+    assert [round(x, 1) for x in _track(None, 110)][:6] == [39.8, 29.3, 31.8, 41.7, 58.4, 70.7]  # 101-110 = 1-10 again
     kept = [0.0] * 6
     for r in range(3):
-        kept = [k + 0.1 * b for k, b in zip(kept, _track(None, 100 + 10 * r))]
+        kept = [k + 0.1 * b for k, b in zip(kept, _track(None, 100 + 10 * r)[:6])]
     assert [round(x, 1) for x in kept] == [11.2, 8.7, 9.3, 11.9, 16.8, 20.2]
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
     main = (SRC / "main.cpp").read_text(encoding="utf-8")
     for text in ("((a_n - 1) % g_legCap) + 1", "Recompute(-1, g_legCap + g_legCapStep * r, round)", "round[s] * g_legKeep", "g_typeBonus[a_type][s] + g_typeKept[a_type][s]",
-                 "inline bool MakeLegendary(int a_type)", "xp * g_typeRate", "xp * g_makerRate", 'k == "TestLevels"'):
+                 "inline bool MakeLegendary(int a_type)", "xp * TypeRate()", "xp * MakerRate()", 'k == "TestLevels"'):
         assert text in prof, text
     assert "prof::MakeLegendary(g_gun.info.type)" in main and "button->HeldDuration()" in main and '" MAX"' in main
     from skylands_setup import skse
     ini = skse.progression_ini()
-    for key in ("ProfTypeRate=1", "ProfMakerRate=1", "ProfTypeBonus=1", "ProfMakerBonus=1", "ProfLegendaryCap=100", "ProfLegendaryKeep=0.1", "ProfTestLevels=0"):
+    for key in ("ProfBL2TypeRate=1", "ProfSkyrimMakerRate=1", "ProfTypeBonus=1", "ProfMakerBonus=1", "ProfLegendaryCap=100", "ProfLegendaryKeep=0.1", "ProfTestLevels=0"):
         assert key in ini, key
 
 
 def test_skyrim_style_proficiencies_feed_the_character_level_behind_an_ini_switch():
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
     progress = (SRC / "progress.h").read_text(encoding="utf-8")
-    for text in ('k == "SkyrimStyle"', "g_skyMult * std::pow(static_cast<float>((std::max)(0, a_level)), g_skyExp) + g_skyBase",
+    for text in ('k == "SkyrimStyle"', "g_skyMakerMult * std::pow(n, g_skyMakerExp) + g_skyMakerBase", "g_skyTypeMult * std::pow(n, g_skyTypeExp) + g_skyTypeBase", "g_bl2MakerBase + g_bl2MakerStep * n",
                  "static_cast<float>(a_t.level) * g_skyCharXP * (a_maker >= 0 ? g_skyMakerXP : 1.0f)", "inline float TakeCharXP()"):
         assert text in prof, text
     assert "const float fromProf = prof::TakeCharXP();" in progress and "(prof::g_skyrim ? prof::g_skyKill : 1.0f)" in progress
@@ -163,7 +164,8 @@ def test_skyrim_style_proficiencies_feed_the_character_level_behind_an_ini_switc
     assert abs(sky - plain) / plain < 0.01 and sum(0.291 * n ** 1.95 + 20 for n in range(10)) < 300
     from skylands_setup import skse
     ini = skse.progression_ini()
-    for key in ("ProfSkyrimStyle=1", "ProfSkyrimCharXP=0.5", "ProfSkyrimMakerXP=0", "ProfSkyrimKillXP=0", "ProfSkyrimCurveExp=1.95"):
+    for key in ("ProfSkyrimStyle=1", "ProfSkyrimCharXP=0.5", "ProfSkyrimMakerXP=0", "ProfSkyrimKillXP=0", "ProfSkyrimTypeCurveExp=1.95", "ProfSkyrimMakerCurveExp=1.95",
+                "ProfBL2XPScale=0.1", "ProfBL2MakerBase=50", "ProfBL2MakerStep=15", "ProfSkyrimXPScale=0.1", "ProfSkyrimMakerRate=1", "ProfShieldCapacityStart=3"):
         assert key in ini, key
 
 
@@ -179,3 +181,13 @@ def test_merchants_are_stocked_by_the_plugin_and_ammo_amounts_follow_the_gold_va
     ini = skse.default_ini()
     for key in ("ShopAmmoLauncher=6", "AmmoDropLauncher=1-2", "AmmoDropPistol=12-28", "StartAmmoLauncher=6", "ShopGear=3"):
         assert key in ini, key
+
+
+def test_makers_second_stats_are_shield_bonuses_handed_to_the_shield():
+    prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
+    shield = (SRC / "shield.h").read_text(encoding="utf-8")
+    assert "shield::g_profShieldCap = on ? shieldBonus[0] : 0.0f;" in prof and "g_makerBonus[m][kShieldCap + i] * g_ownMaker" in prof
+    assert "(1.0f + g_profShieldRate.load() * 0.01f)" in shield and "(1.0f + g_profShieldDelay.load() * 0.01f)" in shield and "(1.0f + g_profShieldCap.load() * 0.01f)" in shield
+    assert shield.index("g_profShieldCap{") < shield.index("g_profShieldRate.load()")  # declared before use
+    for old in ('k == "XPScale"', 'k == "Base"', 'k == "Step"', 'k == "TypeRate"', 'k == "MakerRate"', 'k == "SkyrimCurveMult"'):
+        assert old not in prof, old

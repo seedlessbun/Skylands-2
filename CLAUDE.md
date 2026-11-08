@@ -829,6 +829,13 @@ Other commands:
   but the BARTER MENU still showed none of it. Cause (Skyrim rule): a merchant shows only chest items carrying a keyword of its vendor list (`vendorData.vendorSellBuyList`; `notBuySell` inverts it). 0.59.3 (TestBuild-177, plugin 1.35.3 =
   "SkylandsNative 405"): `shop::Fit` gives every stocked Skylands item (ammo, gear in the chest) the vendor list's FIRST keyword at run time (`BGSKeywordForm::AddKeyword`, not saved: redone at each stocking; ini `ShopKeywords` 1); log
   "shop: <id>'s vendor list .. (N keywords, deals only in these / all BUT these): Skylands items already matches / given the vendor's keyword / ..." and "gave <item> the vendor keyword ..". UNCONFIRMED in game.
+- 0.59.3 in game (user, SkylandsNative.log 5f0ba64b "SkylandsNative 405"): ammo shows in shops. The keyword given is the vendor list's FIRST one (Ulfberth: VendorItemAnimalHide); `Fit` said "no vendor list" for the AMMO items (no keyword form?)
+  but the user saw ammo; Belethor's list is notBuySell. Tidy later only if asked (the user said: no changes while planning).
+- 0.60.0 (TestBuild-178, plugin 1.36.0 = "SkylandsNative 406"), the user's request: (1) the ini keeps each progression system's PACE apart and the makers apart from the gun types: BL2 style `ProfBL2XPScale/TypeRate/MakerRate/TypeBase/TypeStep/MakerBase/MakerStep`,
+  Skyrim style `ProfSkyrimXPScale/TypeRate/MakerRate/TypeCurveMult/Exp/Base/MakerCurveMult/Exp/Base` (`Cost(level, maker)`, `XPScale()/TypeRate()/MakerRate()` by `g_skyrim`); the old shared `ProfXPScale/ProfBase/ProfStep/ProfTypeRate/ProfMakerRate/ProfSkyrimCurve*`
+  are GONE (not read). Bonus/Legendary settings stay shared (the user). (2) the makers' SECOND stat is a SHIELD stat that ALWAYS applies (`kStats` 9 = 6 gun + `kShieldCap/Rate/Delay`, type tracks rotate over `kGunStats` 6): Bandit/Jakobs/Torgue capacity,
+  Vladof/Hyperion/Maliwan recharge rate, Tediore/Dahl shorter delay (starts `ProfShieldCapacityStart/RechargeStart/DelayStart` 3, x MakerStartScale, x SecondaryShare); `RecomputeAllLocked` hands the totals to `shield::g_profShieldCap/Rate/Delay` (atomics, no lock crosses),
+  which multiply the player's shield capacity / recharge rate / delay on top of the relics. Torgue/Maliwan/Jakobs/Dahl/Hyperion move to GRENADE stats when grenades exist (the user). UNCONFIRMED in game.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
