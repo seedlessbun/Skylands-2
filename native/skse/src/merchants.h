@@ -52,7 +52,7 @@ namespace shop
 	{
 		const auto settings = RE::GameSettingCollection::GetSingleton();
 		const auto s = settings ? settings->GetSetting("iDaysToRespawnVendor") : nullptr;
-		return s ? (std::max)(1, s->GetSInt()) : 2;
+		return s ? (std::max)(1, s->GetInteger()) : 2;
 	}
 
 	inline int Count(RE::TESObjectREFR* a_chest, RE::TESBoundObject* a_item)
