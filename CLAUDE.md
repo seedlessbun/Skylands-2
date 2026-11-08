@@ -821,6 +821,10 @@ Other commands:
   the dialogue stock, and the barter-time stock came after the menu built its list. 0.59.1 (TestBuild-175, plugin 1.35.1 = "SkylandsNative 403"): at the dialogue, a due restock (`lastDayReset == 0` or today >= last + `iDaysToRespawnVendor`)
   is done first (`chest->ResetInventory(false)`, `lastDayReset = today`, ini `ShopReset` 1), then the top-up; the log line now gives day / last restock / due / done and reads the pistol rounds back. If the read-back is 0 right after
   adding, `AddObjectToContainer` on an unloaded merchant chest does not stick (then try `GetInventoryChanges()` / a Papyrus AddItem path).
+- 0.59.1 in game (user, SkylandsNative.log 659bb737 "SkylandsNative 403"): still nothing at merchants. LOG READ: a never-restocked vendor has `lastDayReset` 0xFFFFFFFF (not 0); the barter open then restocks and writes floor(days passed)
+  (0 on day 0.79), wiping what the dialogue added; 0.59.1 treated only 0 as due and, when it did restock, wrote max(today,1) = 1, a day AHEAD of the game's 0, which the game's unsigned today - last again took as due. 0.59.2 (TestBuild-176,
+  plugin 1.35.2 = "SkylandsNative 404"): due = last 0xFFFFFFFF or today < last or today - last >= `iDaysToRespawnVendor`; our restock writes `lastDayReset = today`. The barter-time top-up (after the menu built its list) never shows; it is the fallback.
+  Note: the user reloads the same save (day 0.79) between tests; stock added in one session is gone after a reload.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

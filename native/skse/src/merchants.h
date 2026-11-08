@@ -78,11 +78,13 @@ namespace shop
 		if (a_faction) {
 			auto&      v = a_faction->vendorData;
 			const int  every = RespawnDays();
-			const bool due = v.lastDayReset == 0 || today >= v.lastDayReset + static_cast<std::uint32_t>(every);
+			// 0.59.2, from the 0.59.1 log: a merchant never restocked has lastDayReset 0xFFFFFFFF; the game writes floor(days passed) when it restocks (0 on day 0.79)
+			// and restocks again at the barter when today - last (unsigned) is at least the period, so a last day AHEAD of today (0.59.1 wrote 1 on day 0) is due too
+			const bool due = v.lastDayReset == 0xFFFFFFFFu || today < v.lastDayReset || today - v.lastDayReset >= static_cast<std::uint32_t>(every);
 			resetNote = fmt::format("day {:.2f}, last restock day {}, every {} days: {}", daysNow, v.lastDayReset, every, due ? "a restock was due" : "no restock due");
 			if (due && g_reset && !a_barter) {
 				a_chest->ResetInventory(false);
-				v.lastDayReset = (std::max)(today, 1u);
+				v.lastDayReset = today;
 				resetNote += " - done now";
 			}
 		}
