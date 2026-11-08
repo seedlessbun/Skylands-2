@@ -86,7 +86,7 @@ namespace shop
 		}
 		kwForm->AddKeyword(first);
 		if (g_fitTold.fetch_add(1) < 30) {
-			SKSE::log::info("shop: gave {:08X} "{}" the vendor keyword {:08X} "{}" so the barter menu shows it", a_item->GetFormID(), a_item->GetName(), first->GetFormID(),
+			SKSE::log::info("shop: gave {:08X} \"{}\" the vendor keyword {:08X} \"{}\" so the barter menu shows it", a_item->GetFormID(), a_item->GetName(), first->GetFormID(),
 				first->formEditorID.c_str() ? first->formEditorID.c_str() : "");
 		}
 		return "given the vendor's keyword";
