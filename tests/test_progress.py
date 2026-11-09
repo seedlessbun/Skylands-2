@@ -196,7 +196,7 @@ def test_makers_second_stats_are_shield_bonuses_handed_to_the_shield():
 def test_merchants_give_a_fitting_vendor_keyword_and_the_ammo_carries_the_arrow_one(tmp_path):
     shop = (SRC / "merchants.h").read_text(encoding="utf-8")
     for text in ('{ "VendorItemArrow", "VendorItemWeapon" }', '{ "VendorItemWeapon", "VendorItemStaff" }', '"VendorItemJewelry", "VendorItemClothing", "VendorItemArmor"',
-                 "a_item->As<RE::TESAmmo>()", "give = first;"):
+                 "ammo->AsKeywordForm()", "give = first;"):
         assert text in shop, text
     from skylands_setup import generate
     src = (Path(__file__).resolve().parents[1] / "setup" / "skylands_setup" / "generate.py").read_text(encoding="utf-8")

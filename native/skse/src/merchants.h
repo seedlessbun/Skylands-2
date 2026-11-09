@@ -63,7 +63,7 @@ namespace shop
 			return nullptr;
 		}
 		if (const auto ammo = a_item->As<RE::TESAmmo>()) {
-			return ammo;  // a plain upcast: the generic cast found no keyword part on the ammo items
+			return ammo->AsKeywordForm();  // the ammo's keyword part sits at a runtime-dependent offset (CommonLib multi-target): only this accessor finds it, the generic cast did not
 		}
 		if (const auto weap = a_item->As<RE::TESObjectWEAP>()) {
 			return weap;
