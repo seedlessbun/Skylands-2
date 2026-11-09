@@ -866,6 +866,11 @@ Other commands:
   `g_gunInHand` (set by the tick from `HeldGun`, cleared by `SetGunMode(false)`; log "attack handler: gun mode is on but no Skylands gun is in the hand .."); "a healing spell kept casting after the gun was
   drawn" = the button's RELEASE was swallowed: `g_gameSawDown[2]` remembers a press the game saw and passes its release even while swallowing (log "attack handler: the .. button came up after a gun was taken in
   hand: its release goes to the game"). UNCONFIRMED in game: all of it (whether the middle button has a game action, the staff + spell/shield animations with our gun, the arm popping back, that a passed release ends the cast).
+- 0.61.0 in game (user, SkylandsNative.log 5c6ec292 "SkylandsNative 409"): the middle click did NOTHING (no notice, no camera change) and the log has NO "left hand:" line at all, so `ToggleLeftHand`
+  was never called; the 30-press "button down" log was used up by wheel zooms (codes 8/9 'Zoom In/Out'), so what the middle click sent is unknown (possible: the user's `ReloadMouse` takes code 2 first, or the
+  mouse software remaps the wheel click). 0.61.1 (TestBuild-182, plugin 1.37.1 = "SkylandsNative 410"), the user chose middle + G: `LeftHandKey` default 34 (G), `LeftHandRev=2` makes `merge_ini` put
+  `LeftHandMouse`/`LeftHandKey` back to the defaults once; "mouse button down: code N event name '..'; Skylands takes it for: the reload / the left-hand toggle / nothing" for every mouse press but the wheel (first 60),
+  logged BEFORE the reload check. READ those lines next.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 409;  // 1.37.0
+	constexpr std::int32_t kVersion = 410;  // 1.37.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -35,7 +35,7 @@ namespace
 	std::atomic_bool g_leftHand{ false };
 	bool             g_leftHandFeature = true;  // ini LeftHand=0 switches the toggle off altogether
 	int              g_leftHandMouse = 2;       // ini LeftHandMouse: a mouse button (2 = middle; -1 none)
-	int              g_leftHandKey = -1;        // ini LeftHandKey: a keyboard scan code as well (-1 none)
+	int              g_leftHandKey = 34;        // ini LeftHandKey: a keyboard scan code as well (34 = G; -1 none). 1.37.1: G added, the middle click did nothing in 1.37.0
 	// 1.37.0: a Skylands gun is really in the hand (set by the tick, which runs only in gun mode). The attack handler swallows the buttons only then: gun mode
 	// left on after the gun went away kept spells from casting (the user's report).
 	std::atomic_bool g_gunInHand{ false };
@@ -266,6 +266,18 @@ namespace
 				const auto button = e->AsButtonEvent();
 				if (!button) {
 					continue;
+				}
+				if (button->GetDevice() == RE::INPUT_DEVICE::kMouse && button->IsDown()) {
+					// 1.37.1: every mouse-button press but the wheel (codes 8, 9), first 60, with what Skylands takes it for: 1.37.0's log of the first thirty
+					// presses was used up by wheel zooms, so a middle click never showed
+					const int code = static_cast<int>(button->GetIDCode());
+					static std::atomic_int told{ 0 };
+					if (code != 8 && code != 9 && code != 264 && code != 265 && told.fetch_add(1) < 60) {
+						const bool reload = g_reloadMouse >= 0 && (code == g_reloadMouse || code == 256 + g_reloadMouse);
+						const bool toggle = g_leftHandFeature && g_leftHandMouse >= 0 && (code == g_leftHandMouse || code == 256 + g_leftHandMouse);
+						SKSE::log::info("mouse button down: code {} event name '{}'; Skylands takes it for: {}", code, button->QUserEvent().c_str(),
+							reload ? "the reload (ReloadMouse)" : toggle ? "the left-hand toggle (LeftHandMouse)" : "nothing");
+					}
 				}
 				if ((button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == g_reloadKey) ||
 					(g_reloadMouse >= 0 && button->GetDevice() == RE::INPUT_DEVICE::kMouse &&
@@ -3340,7 +3352,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 37, 0, 0 },
+	.Version = { 1, 37, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

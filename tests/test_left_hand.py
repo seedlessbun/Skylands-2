@@ -38,8 +38,17 @@ def test_the_settings_file_carries_the_left_hand_keys():
     ini = skse.default_ini() if hasattr(skse, "default_ini") else ""
     text = ini if isinstance(ini, str) else ""
     src = (HERE.parent / "setup" / "skylands_setup" / "skse.py").read_text(encoding="utf-8")
-    for key in ("LeftHand=1", "LeftHandMouse=2", "LeftHandKey=-1"):
+    for key in ("LeftHand=1", "LeftHandMouse=2", "LeftHandKey=34", "LeftHandRev=2"):
         assert key in src or key in text
     main = _main()
     for key in ('"LeftHand"', '"LeftHandMouse"', '"LeftHandKey"'):
         assert key in main
+
+
+def test_an_old_settings_file_gets_the_new_left_hand_keys_once():
+    old = "IniVersion=X\nLeftHand=1\nLeftHandMouse=2\nLeftHandKey=-1\n"
+    default = "IniVersion=X\nLeftHand=1\nLeftHandMouse=2\nLeftHandKey=34\nLeftHandRev=2\n"
+    text, kept = skse.merge_ini(default, old)
+    assert kept and "LeftHandKey=34" in text
+    again, _ = skse.merge_ini(default, text.replace("LeftHandKey=34", "LeftHandKey=20"))
+    assert "LeftHandKey=20" in again  # the player's own choice is kept once the rev matches
