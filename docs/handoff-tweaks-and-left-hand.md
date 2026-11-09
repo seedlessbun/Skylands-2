@@ -7,7 +7,7 @@ every entry there was checked against code or a log.
 - The latest work is on branch `claude/eager-archimedes-xtu69b` (commit "SkylandsNative.dll built by CI from 79dc8aa..."). A new session is usually
   given a different branch: check it is not behind this one (`git fetch origin claude/eager-archimedes-xtu69b` and compare). If it is, fast-forward
   or reset your branch to it BEFORE any work (it happened once: a session's branch started at 0.13.11).
-- Last build sent: TestBuild-179 = 0.60.1. The user has not reported on 0.60.0 or 0.60.1 yet.
+- Last build sent: TestBuild-180 = 0.60.2 (ammo co-save + enemy shield bar fix, CLAUDE.md 0.60.2). The user reports on 0.60.0, 0.60.1 and 0.60.2 together.
 
 ## 2. Build routine (every build)
 1. Bump `VERSION` in `setup/skylands_setup/build.py` and the TestBuild number in `tools/package_testkit.py`.

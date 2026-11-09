@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 407;  // 1.36.1
+	constexpr std::int32_t kVersion = 408;  // 1.36.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -1111,6 +1111,124 @@ namespace
 	std::atomic_int          g_spreadNowTenths{ 0 };
 	std::atomic<RE::FormID>  g_shotSound{ 0 };
 	std::atomic<RE::FormID>  g_reloadSound[3]{ 0, 0, 0 };  // the three parts of a reload: magazine out, magazine in, gun made ready
+
+	// ---- the magazines in the co-save (0.60.2) ----
+	//
+	// Until 0.60.1 the rounds left in each gun lived only in the plugin's memory: a load kept the magazines of the game that was running (a gun emptied after the
+	// save stayed empty, a magazine reloaded after the save stayed full while the pack got its rounds back from the save), and the first load after starting
+	// Skyrim had every gun full. The first stock of each ammo kind (StartAmmo<Type>) was also once per run of Skyrim, not once per character. Now both are in
+	// the co-save (record 'SMAG'), and a load or a new game forgets the old game's (Revert).
+	constexpr std::uint32_t            kMagRecord = 0x47414D53;  // 'SMAG'
+	std::unordered_set<RE::FormID>     g_startGiven;             // ammo kinds whose first stock this character was given
+	bool                               g_magsLoaded = false;     // the loaded game had an 'SMAG' record (false: an older save, or a new game)
+	bool                               g_magsAfterLoad = false;  // the first gun taken up after a load is logged in full
+	int                                g_packSeen = -1;          // rounds of the held gun's ammo in the pack when last looked at (-1: not looked at yet)
+	RE::FormID                         g_packAmmo = 0;
+	Clock::time_point                  g_packAt{};
+
+	void MagSave(SKSE::SerializationInterface* a_intfc)
+	{
+		auto mags = g_gun.mags;
+		if (g_gun.weapon) {
+			mags[g_gun.weapon] = g_gun.mag;
+		}
+		if (!a_intfc->OpenRecord(kMagRecord, 1)) {
+			SKSE::log::info("ammo: save - could not open the magazine record");
+			return;
+		}
+		a_intfc->WriteRecordData(static_cast<std::uint32_t>(mags.size()));
+		for (const auto& [id, mag] : mags) {
+			a_intfc->WriteRecordData(id);
+			a_intfc->WriteRecordData(static_cast<std::int32_t>(mag));
+		}
+		a_intfc->WriteRecordData(static_cast<std::uint32_t>(g_startGiven.size()));
+		for (const auto id : g_startGiven) {
+			a_intfc->WriteRecordData(id);
+		}
+		SKSE::log::info("ammo: save - {} magazines (the gun in hand {:08X}: {} rounds{}), first stock given for {} ammo kinds", mags.size(), g_gun.weapon, g_gun.mag,
+			g_gun.reloading ? ", saved in the middle of a reload: the reload is not finished in the save" : "", g_startGiven.size());
+	}
+
+	bool MagLoad(SKSE::SerializationInterface* a_intfc, std::uint32_t a_type, std::uint32_t a_version)
+	{
+		if (a_type != kMagRecord) {
+			return false;
+		}
+		if (a_version != 1) {
+			return true;
+		}
+		std::uint32_t n = 0;
+		a_intfc->ReadRecordData(n);
+		int dropped = 0;
+		for (std::uint32_t i = 0; i < n && i < 4000; ++i) {
+			std::uint32_t id = 0, newId = 0;
+			std::int32_t  mag = 0;
+			a_intfc->ReadRecordData(id);
+			a_intfc->ReadRecordData(mag);
+			if (a_intfc->ResolveFormID(id, newId)) {
+				g_gun.mags[newId] = std::clamp(static_cast<int>(mag), 0, 100000);
+			} else {
+				++dropped;
+			}
+		}
+		std::uint32_t m = 0;
+		a_intfc->ReadRecordData(m);
+		for (std::uint32_t i = 0; i < m && i < 64; ++i) {
+			std::uint32_t id = 0, newId = 0;
+			a_intfc->ReadRecordData(id);
+			if (a_intfc->ResolveFormID(id, newId)) {
+				g_startGiven.insert(newId);
+			}
+		}
+		g_magsLoaded = true;
+		SKSE::log::info("ammo: load - {} magazines from the save ({} of guns no longer in the game), first stock already given for {} ammo kinds", g_gun.mags.size(), dropped, g_startGiven.size());
+		return true;
+	}
+
+	void MagRevert()
+	{
+		SKSE::log::info("ammo: the running game is replaced (load or new game): forgetting its {} magazines (the gun in hand {:08X} had {} rounds{})", g_gun.mags.size() + (g_gun.weapon ? 1 : 0),
+			g_gun.weapon, g_gun.mag, g_gun.reloading ? ", in the middle of a reload: cancelled" : "");
+		g_gun.mags.clear();
+		g_gun.weapon = 0;
+		g_gun.mag = 0;
+		g_gun.reloading = false;
+		g_gun.chambered = false;
+		g_gun.reloadPart = 3;
+		g_gun.ammo = nullptr;
+		g_reloading = false;
+		g_startGiven.clear();
+		g_magsLoaded = false;
+		g_magsAfterLoad = true;
+		g_packSeen = -1;
+		g_packAmmo = 0;
+	}
+
+	// About once a second: the held gun's ammo in the pack, compared with the last look. A change not made by our own reload is logged (first 40), so a
+	// fluctuating stock shows where it comes from (picked up, bought, sold, given, a load).
+	void WatchPack(RE::PlayerCharacter* a_player, Clock::time_point a_now)
+	{
+		if (!g_gun.ammo) {
+			return;
+		}
+		if (g_gun.ammo->GetFormID() != g_packAmmo) {
+			g_packAmmo = g_gun.ammo->GetFormID();
+			g_packSeen = CountOf(a_player, g_gun.ammo);
+			g_packAt = a_now + std::chrono::milliseconds(1000);
+			return;
+		}
+		if (a_now < g_packAt) {
+			return;
+		}
+		g_packAt = a_now + std::chrono::milliseconds(1000);
+		const int count = CountOf(a_player, g_gun.ammo);
+		static int told = 0;
+		if (g_packSeen >= 0 && count != g_packSeen && told < 40) {
+			++told;
+			SKSE::log::info("ammo: {:08X} in the pack {} -> {} ({:+d}) outside a reload (picked up, bought, sold, given or taken by something else)", g_packAmmo, g_packSeen, count, count - g_packSeen);
+		}
+		g_packSeen = count;
+	}
 
 	// ---- aiming down sights ----------------------------------------------------------------------------------------
 	//
@@ -2349,7 +2467,9 @@ namespace
 			g_gun.info = info;
 			g_gun.baseClip = info.clip;
 			const auto kept = g_gun.mags.find(g_gun.weapon);
-			g_gun.mag = kept != g_gun.mags.end() ? kept->second : info.clip;
+			const bool fromMemory = kept != g_gun.mags.end();
+			g_gun.mag = fromMemory ? kept->second : info.clip;
+			g_gun.chambered = false;
 			g_gun.reloading = false;
 			g_gun.reloadPart = 3;
 			g_gun.ammo = AmmoOf(weapon, info);
@@ -2359,9 +2479,7 @@ namespace
 			g_gun.nameUntil = now + std::chrono::milliseconds(4500);
 			g_gun.reserveAt = now;
 			if (g_gun.ammo && g_startAmmo > 0 && CountOf(player, g_gun.ammo) <= 0) {  // none of its ammo: a first stock, once for each kind in a run of the game
-				static std::unordered_map<RE::FormID, bool> given;
-				if (!given[g_gun.ammo->GetFormID()]) {
-					given[g_gun.ammo->GetFormID()] = true;
+				if (g_startGiven.insert(g_gun.ammo->GetFormID()).second) {  // 0.60.2: once per character (co-save 'SMAG'), was once per run of Skyrim
 					const int first = shop::StartOf(info.type);  // 0.59.0: StartAmmo<Type>, by the ammo's gold value
 					if (first > 0) {
 						player->AddObjectToContainer(g_gun.ammo, nullptr, first, nullptr);
@@ -2375,8 +2493,13 @@ namespace
 			g_gun.nextShot = now;
 			g_gun.wasHeld = false;
 			SetBar(player, g_gun.mag);
-			SKSE::log::info("player gun {:08X}: magazine {} of {}, interval {:.3f}, reload {:.1f}, spread {:.1f}", g_gun.weapon, g_gun.mag, info.clip,
+			SKSE::log::info("player gun {:08X}: magazine {} of {} ({}), interval {:.3f}, reload {:.1f}, spread {:.1f}", g_gun.weapon, g_gun.mag, info.clip,
+				fromMemory ? (g_magsAfterLoad ? "as the save had it" : "as it was put away") : (g_magsAfterLoad && g_magsLoaded ? "not in the save: full" : (g_magsAfterLoad ? "the save has no magazine record (older save or new game): full" : "first time in hand: full")),
 				info.interval, info.reload, info.spread);
+			if (g_magsAfterLoad) {
+				g_magsAfterLoad = false;
+				SKSE::log::info("ammo: first gun in hand after the load: {:08X} magazine {}, its ammo in the pack {}", g_gun.weapon, g_gun.mag, g_gun.ammo ? CountOf(player, g_gun.ammo) : -1);
+			}
 		}
 		// 1.31.0: the weapon proficiencies of this gun's type and maker (proficiency.h), on top of the relics (each its own multiplier)
 		float pb[prof::kStats];
@@ -2429,6 +2552,7 @@ namespace
 		const float gap = g_gun.info.interval / rate;
 		g_rateTenths = static_cast<int>(10.0f / gap + 0.5f);
 		g_reloadMs = static_cast<int>(g_gun.info.reload / quick * 1000.0f + 0.5f);
+		WatchPack(player, now);
 		RecoilFrame(player, now);
 		UpdateAim(player, g_gun.info, now);
 		HideLeftArm(player);
@@ -2451,8 +2575,15 @@ namespace
 					left = CountOf(player, g_gun.ammo);
 					g_gun.reserve = left;
 				}
+				{
+					static int told = 0;
+					if (told++ < 40) {
+						SKSE::log::info("ammo: reload of {:08X} done: magazine {} + {} (wanted {}), the pack {} -> {}", g_gun.weapon, g_gun.mag, (std::max)(0, got), want, left >= 0 ? left + (std::max)(0, got) : -1, left);
+					}
+				}
 				g_gun.mag += (std::max)(0, got);
 				g_gun.chambered = false;
+				g_packSeen = left;
 				g_gun.lowTold = false;
 				AmmoText("Magazine " + std::to_string(g_gun.mag) + " / " + std::to_string(g_gun.info.clip) + (left >= 0 ? "   Ammo " + std::to_string(left) : std::string()));
 				SetBar(player, g_gun.mag);
@@ -2916,6 +3047,9 @@ namespace
 				// loose drops go when the player is far from them (despawn.h); their beams with them
 				despawn::g_onRemoved = &DropBeamOf;
 				despawn::Start(holder);
+				shield::g_extraSave.push_back(&MagSave);  // 0.60.2: the magazines and the first-stock marks in the co-save ('SMAG')
+				shield::g_extraLoad.push_back(&MagLoad);
+				shield::g_extraRevert.push_back(&MagRevert);
 				badass::Start(holder);  // Badass enemies, stage 1: tiers and stats
 				// character progression, stage 1: kill XP into the level meter (progress.h)
 				progress::g_gunFacts = [](RE::FormID a_source, progress::GunFacts& a_out) -> bool {
@@ -3090,7 +3224,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 36, 1, 0 },
+	.Version = { 1, 36, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

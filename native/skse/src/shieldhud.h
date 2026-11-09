@@ -514,29 +514,71 @@ inline float g_insetX = 0.09f, g_insetY = 0.28f;  // ShieldHudInsetX/Y: how much
 		return a_fade.level;
 	}
 
-	// the person the game's enemy bar is about: the one in the crosshair, kept while the crosshair is on nobody (the game keeps its bar up a moment)
-	inline RE::FormID g_enemyId = 0;
+	// the person the game's enemy bar is about. 0.60.2: only an actor that is HOSTILE to the player (or fighting it) counts. The crosshair decides first: on a
+	// hostile with a shield it is that one; on a hostile WITHOUT one the bar is cleared (the game's bar is now about that enemy); on a friendly or neutral person it
+	// is ignored (0.60.1 showed a friendly person's shield and kept it until another shielded hostile was looked at). With nobody hostile in the crosshair the
+	// shielded hostile hit last (4 s) is shown; the one chosen is kept only `kKeepS` seconds after it was last in the crosshair or hit, and never once it is dead,
+	// gone or no longer hostile.
+	inline RE::FormID        g_enemyId = 0;
+	inline Clock::time_point g_enemySeen{};  // when the chosen one was last in the crosshair or hit
+	constexpr float          kKeepS = 4.0f;
+
+	inline bool HostileTo(RE::Actor* a_actor, RE::PlayerCharacter* a_player)
+	{
+		if (!a_actor || a_actor->IsDead() || a_actor->IsPlayerTeammate()) {
+			return false;
+		}
+		if (a_actor->IsHostileToActor(a_player)) {
+			return true;
+		}
+		const auto target = a_actor->GetActorRuntimeData().currentCombatTarget.get();
+		return target && target.get() == static_cast<RE::Actor*>(a_player);
+	}
+
+	inline void Choose(RE::FormID a_id, const char* a_why, Clock::time_point a_now)
+	{
+		static int told = 0;
+		if (a_id != g_enemyId && told < 40) {
+			++told;
+			Say("enemy bar: now about {:08X} ({}; was {:08X})", a_id, a_why, g_enemyId);
+		}
+		g_enemyId = a_id;
+		g_enemySeen = a_now;
+	}
 
 	inline RE::Actor* EnemyActor(RE::PlayerCharacter* a_player)
 	{
-		// the game's enemy bar is about the crosshair's target, or else the enemy last hit: the crosshair counts when its actor has a shield, else the enemy whose shield was hit last
-		// (0.40.0: the crosshair alone missed every enemy the bullets hit while the crosshair was elsewhere or on something without a shield)
-		RE::FormID cross = 0;
+		const auto now = Clock::now();
+		RE::Actor* cross = nullptr;
 		if (const auto pick = RE::CrosshairPickData::GetSingleton()) {
 			if (const auto ref = pick->GetActiveTarget().get()) {
-				if (const auto actor = ref->As<RE::Actor>()) {
-					if (actor != a_player) {
-						cross = actor->GetFormID();
-					}
+				if (const auto actor = ref->As<RE::Actor>(); actor && actor != a_player && HostileTo(actor, a_player)) {
+					cross = actor;
 				}
 			}
 		}
-		if (cross && shield::ViewOf(cross).has) {
-			g_enemyId = cross;
-		} else if (const auto hit = shield::RecentlyHit(4.0f)) {
-			g_enemyId = hit;
+		if (cross) {
+			if (shield::ViewOf(cross->GetFormID()).has) {
+				Choose(cross->GetFormID(), "a shielded hostile in the crosshair", now);
+			} else if (g_enemyId) {
+				Choose(0, "a hostile with no shield in the crosshair", now);
+			}
+		} else if (const auto hit = shield::RecentlyHit(4.0f); hit && HostileTo(RE::TESForm::LookupByID<RE::Actor>(hit), a_player)) {
+			Choose(hit, "the shielded hostile hit last", now);
 		}
-		return g_enemyId ? RE::TESForm::LookupByID<RE::Actor>(g_enemyId) : nullptr;
+		if (!g_enemyId) {
+			return nullptr;
+		}
+		const auto actor = RE::TESForm::LookupByID<RE::Actor>(g_enemyId);
+		if (!actor || !HostileTo(actor, a_player)) {
+			Choose(0, "dead, gone or no longer hostile", now);
+			return nullptr;
+		}
+		if (std::chrono::duration<float>(now - g_enemySeen).count() > kKeepS) {
+			Choose(0, "not in the crosshair or hit for a while", now);
+			return nullptr;
+		}
+		return actor;
 	}
 
 	// Game thread, at the end of every shield update (33 ms).

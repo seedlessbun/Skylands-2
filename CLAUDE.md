@@ -840,6 +840,19 @@ Other commands:
   through `KeywordsOf` (ammo: `TESAmmo::AsKeywordForm()`, its keyword part is at a runtime-dependent offset in the multi-target CommonLib, so neither `As<BGSKeywordForm>` nor an upcast reaches it: that was the 0.59.3 "no vendor list") and, for an include-only vendor list without a match, gives the keyword that FITS the kind when the list has it
   (ammo: Arrow, Weapon; guns: Weapon, Staff; relics: Jewelry, Clothing, Armor; shields: Armor, Clothing, Jewelry), else the list's first keyword (the user's choice: every shop shows every kind). Log "shop: gave the <kind> ..
   the vendor keyword .. (fits the item / nothing fitting in the list: its first keyword)". UNCONFIRMED in game.
+- 0.60.2 (TestBuild-180, plugin 1.36.2 = "SkylandsNative 408"; the session's tweaks, built together with no report on 0.60.0/0.60.1 yet). (1) AMMO ACROSS LOADS, the user: "ammo fluctuates
+  when saves are loaded, guns with no ammo have a full magazine when I load". Cause (code): the rounds left in each gun (`g_gun.mag`, `g_gun.mags`) lived ONLY in plugin memory, never in the co-save and never
+  reset on a load: a load kept the magazines of the game that was running (shots fired after the save stayed spent; a reload after the save stayed full while the pack got its rounds back = free rounds), the
+  first load after starting Skyrim had every gun full, a reload running at the load finished into the loaded game; the first stock (`StartAmmo<Type>`) was a static map, once per RUN of Skyrim, so a restart gave a
+  player with none of a kind a new stock. Fix: co-save record 'SMAG' v1 (`MagSave/MagLoad/MagRevert` through `shield::g_extraSave/Load/Revert`): every gun's magazine (the gun in hand included) and the
+  ammo kinds already given a first stock (`g_startGiven`, now per character); Revert clears the magazines, the gun in hand and a running reload. An older save has no record: the first load gives full guns once.
+  Log: "ammo: save - N magazines (the gun in hand ..)", "ammo: the running game is replaced ...", "ammo: load - N magazines from the save ...", "player gun ..: magazine a of b (as the save had it / not in the
+  save: full / the save has no magazine record ...)", "ammo: first gun in hand after the load: .. magazine n, its ammo in the pack m", "ammo: reload of .. done: magazine a + b, the pack x -> y" (first 40),
+  `WatchPack`: "ammo: <id> in the pack a -> b outside a reload" (first 40, once a second). Note: magazines are kept per gun BASE record, so two copies of one gun share a magazine (as before).
+  (2) ENEMY SHIELD BAR, the user: it did not always clear on a new target, and showed a FRIENDLY person's shield until another shielded hostile was looked at. `shieldhud::EnemyActor`: only `HostileTo`
+  (`IsHostileToActor(player)` or `currentCombatTarget` = player, alive, not a teammate) counts; a hostile with no shield in the crosshair clears the bar; a friendly/neutral one in the crosshair is ignored; else
+  the shielded hostile hit last (4 s); the choice is dropped when dead/gone/not hostile or after `kKeepS` 4 s without being in the crosshair or hit. Log "shield hud: enemy bar: now about <id> (why; was <id>)"
+  (first 40). UNCONFIRMED in game: all of it (the co-save round trip, that `IsHostileToActor` is false for a friendly person who is merely in the crosshair).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
