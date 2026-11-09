@@ -646,6 +646,8 @@ def test_every_gun_type_is_a_staff_gun_and_no_crossbow_is_left(tmp_path):
     assert rockets and all(st.unpack_from("<H", pj.first("DATA"), 0)[0] & 0x2 for pj in rockets), "every rocket explodes"
     ammo = {r.edid for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"AMMO"})[1]["AMMO"] if r.edid.startswith("SkylandsAmmo_")}
     assert ammo == {f"SkylandsAmmo_{k}" for k in generate.STAFF_KINDS}
+    ammo_recs = [r for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"AMMO"})[1]["AMMO"] if r.edid.startswith("SkylandsAmmo_")]
+    assert all(r.first("KWDA") == st.pack("<I", 0x6301) for r in ammo_recs), "every ammo item carries the fake Skyrim.esm's VendorItemArrow (merchants show it)"
 
 
 def test_rockets_are_bigger_and_slower_in_three_looks_and_shotguns_scatter_their_pellets(tmp_path):

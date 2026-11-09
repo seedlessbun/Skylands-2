@@ -836,6 +836,10 @@ Other commands:
   are GONE (not read). Bonus/Legendary settings stay shared (the user). (2) the makers' SECOND stat is a SHIELD stat that ALWAYS applies (`kStats` 9 = 6 gun + `kShieldCap/Rate/Delay`, type tracks rotate over `kGunStats` 6): Bandit/Jakobs/Torgue capacity,
   Vladof/Hyperion/Maliwan recharge rate, Tediore/Dahl shorter delay (starts `ProfShieldCapacityStart/RechargeStart/DelayStart` 3, x MakerStartScale, x SecondaryShare); `RecomputeAllLocked` hands the totals to `shield::g_profShieldCap/Rate/Delay` (atomics, no lock crosses),
   which multiply the player's shield capacity / recharge rate / delay on top of the relics. Torgue/Maliwan/Jakobs/Dahl/Hyperion move to GRENADE stats when grenades exist (the user). UNCONFIRMED in game.
+- 0.60.1 (TestBuild-179, plugin 1.36.1 = "SkylandsNative 407"): merchant keywords. The six AMMO records carry the vanilla `VendorItemArrow` (KSIZ/KWDA, no id moves); `shop::Fit` finds the item's keyword part
+  by a plain upcast (`KeywordsOf`: TESAmmo/WEAP/ARMO; the generic cast said "no vendor list" for ammo) and, for an include-only vendor list without a match, gives the keyword that FITS the kind when the list has it
+  (ammo: Arrow, Weapon; guns: Weapon, Staff; relics: Jewelry, Clothing, Armor; shields: Armor, Clothing, Jewelry), else the list's first keyword (the user's choice: every shop shows every kind). Log "shop: gave the <kind> ..
+  the vendor keyword .. (fits the item / nothing fitting in the list: its first keyword)". UNCONFIRMED in game.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

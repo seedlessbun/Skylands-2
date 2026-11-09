@@ -191,3 +191,14 @@ def test_makers_second_stats_are_shield_bonuses_handed_to_the_shield():
     assert shield.index("g_profShieldCap{") < shield.index("g_profShieldRate.load()")  # declared before use
     for old in ('k == "XPScale"', 'k == "Base"', 'k == "Step"', 'k == "TypeRate"', 'k == "MakerRate"', 'k == "SkyrimCurveMult"'):
         assert old not in prof, old
+
+
+def test_merchants_give_a_fitting_vendor_keyword_and_the_ammo_carries_the_arrow_one(tmp_path):
+    shop = (SRC / "merchants.h").read_text(encoding="utf-8")
+    for text in ('{ "VendorItemArrow", "VendorItemWeapon" }', '{ "VendorItemWeapon", "VendorItemStaff" }', '"VendorItemJewelry", "VendorItemClothing", "VendorItemArmor"',
+                 "a_item->As<RE::TESAmmo>()", "give = first;"):
+        assert text in shop, text
+    from skylands_setup import generate
+    src = (Path(__file__).resolve().parents[1] / "setup" / "skylands_setup" / "generate.py").read_text(encoding="utf-8")
+    assert 'm.find("KYWD", "VendorItemArrow")' in src and 'am.add("KSIZ", esp.u32(1)).add("KWDA", esp.u32(arrow_kw.form_id))' in src
+    assert generate.STAFF_AMMO_VALUE["pistol"] == 5

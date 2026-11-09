@@ -970,11 +970,14 @@ class Armory:
                 for part in RELOAD_PARTS:
                     reload_ids[part].append(0)
         bolts = self.rounds.bolts  # the vanilla bolt record the Borderlands rounds are built on (ammo items are built from scratch the same way)
+        arrow_kw = m.find("KYWD", "VendorItemArrow")  # 0.60.1: merchants who deal in arrows show and buy the ammo (the barter list needs a vendor keyword)
         for kind in STAFF_KINDS:
             keep = [(sig, d) for sig, d in bolts.subrecords if sig in ("OBND", "MODL", "YNAM", "ZNAM")]
             am = esp.Rec("AMMO", self.ammo_ids[kind], [("EDID", esp.zstr(f"SkylandsAmmo_{kind}")), *keep])
             am.add("FULL", esp.zstr(STAFF_AMMO_NAMES[kind]))
             am.subs.sort(key=lambda sd: ["EDID", "OBND", "FULL", "MODL", "YNAM", "ZNAM"].index(sd[0]))
+            if arrow_kw is not None:
+                am.add("KSIZ", esp.u32(1)).add("KWDA", esp.u32(arrow_kw.form_id))
             am.add("DATA", struct.pack("<IIfI", 0, 0, 1.0, STAFF_AMMO_VALUE[kind]))
             self.view.override(am)
             self.log.append(f"Staff guns: ammo item {STAFF_AMMO_NAMES[kind]} ({am.form_id:08X}); guns of that type use it from the player's pack")
