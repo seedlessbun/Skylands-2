@@ -853,6 +853,10 @@ Other commands:
   (`IsHostileToActor(player)` or `currentCombatTarget` = player, alive, not a teammate) counts; a hostile with no shield in the crosshair clears the bar; a friendly/neutral one in the crosshair is ignored; else
   the shielded hostile hit last (4 s); the choice is dropped when dead/gone/not hostile or after `kKeepS` 4 s without being in the crosshair or hit. Log "shield hud: enemy bar: now about <id> (why; was <id>)"
   (first 40). UNCONFIRMED in game: all of it (the co-save round trip, that `IsHostileToActor` is false for a friendly person who is merely in the crosshair).
+- LEFT HAND, PHASE 1 (after 0.60.2, docs only): interview done, `docs/left-hand-roadmap.md` WRITTEN, AWAITING APPROVAL (no feature code). Answers: spells + shields in the
+  left hand, a HOTKEY (default middle mouse) that only switches the mode (equipment untouched), no ADS while ON, gun and left hand usable at once, first-person left
+  arm shown while ON, player only. The user keeps the shared magazine per gun base record. Open: roadmap section 6 (the user's left-hand/weapon-switching issues,
+  keeping the state in the save, HUD tag).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
