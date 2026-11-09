@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 408;  // 1.36.2
+	constexpr std::int32_t kVersion = 409;  // 1.37.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -30,6 +30,18 @@ namespace
 	std::atomic<float> g_reloadHeldS{ 0.0f };  // 1.33.0: how long the reload key has been held (0 when up): a Legendary is made by holding it
 	std::atomic_bool g_aimHeld{ false };  // the aim button ("Left Attack/Block": right mouse by default) is down
 	std::atomic_bool g_latch{ false };  // set by a button going down, cleared when Papyrus asks: a tap shorter than a poll is still seen
+	// 1.37.0: the left-hand toggle (docs/left-hand-roadmap.md). While ON the left attack button goes to the game (a spell or a shield in the left hand) and
+	// there is no aiming down the sights; OFF at start and after every load or new game. The key only switches the mode: equipment is never touched.
+	std::atomic_bool g_leftHand{ false };
+	bool             g_leftHandFeature = true;  // ini LeftHand=0 switches the toggle off altogether
+	int              g_leftHandMouse = 2;       // ini LeftHandMouse: a mouse button (2 = middle; -1 none)
+	int              g_leftHandKey = -1;        // ini LeftHandKey: a keyboard scan code as well (-1 none)
+	// 1.37.0: a Skylands gun is really in the hand (set by the tick, which runs only in gun mode). The attack handler swallows the buttons only then: gun mode
+	// left on after the gun went away kept spells from casting (the user's report).
+	std::atomic_bool g_gunInHand{ false };
+	// 1.37.0: the game saw this button go down (right 0, left 1), so it also gets its release even if the buttons became ours meanwhile: a spell being cast
+	// when a gun was drawn never heard the button come up and went on casting (the user's report).
+	std::atomic_bool g_gameSawDown[2]{ false, false };
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
 	std::atomic<const char*> g_stage{ "start" };  // where the plugin last was (told by the crash handler)
@@ -113,6 +125,13 @@ namespace
 				}
 			} else if (key == "AimPredict") {
 				g_aimPredict = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "LeftHand") {
+				g_leftHandFeature = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "LeftHandMouse" || key == "LeftHandKey") {
+				try {
+					(key == "LeftHandMouse" ? g_leftHandMouse : g_leftHandKey) = std::clamp(std::stoi(line.substr(eq + 1)), -1, key == "LeftHandMouse" ? 9 : 255);
+				} catch (...) {
+				}
 			} else if (key == "ReloadMouse") {
 				try {
 					g_reloadMouse = std::clamp(std::stoi(line.substr(eq + 1)), -1, 9);
@@ -183,6 +202,47 @@ namespace
 		return IsAction(a_button, a_events->leftAttack);
 	}
 
+	bool MenuOpen();
+
+	// what the player holds in the left hand, for the log
+	std::string LeftHandText()
+	{
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		const auto form = player ? player->GetEquippedObject(true) : nullptr;
+		if (!form) {
+			return "nothing";
+		}
+		const char* kind = form->Is(RE::FormType::Spell) ? "spell" : form->Is(RE::FormType::Armor) ? "shield" : form->Is(RE::FormType::Weapon) ? "weapon" :
+		                   form->Is(RE::FormType::Light) ? "torch" : "something";
+		const char* name = form->GetName();
+		return fmt::format("{} {:08X} \"{}\"", kind, form->GetFormID(), name ? name : "");
+	}
+
+	// 1.37.0: the left-hand key went down. Only with a gun in the hand and no menu open; a short notice on the screen says the new state (for testing).
+	void ToggleLeftHand(const RE::ButtonEvent* a_button)
+	{
+		static std::atomic_int told{ 0 };
+		const bool first = told.fetch_add(1) < 40;
+		if (!g_gunMode.load() || !g_gunInHand.load() || MenuOpen()) {
+			if (first) {
+				SKSE::log::info("left hand: toggle key pressed (device {} code {}, the game's event for it '{}') with no gun in hand or a menu open: nothing changed",
+					static_cast<int>(a_button->GetDevice()), static_cast<int>(a_button->GetIDCode()), a_button->QUserEvent().c_str());
+			}
+			return;
+		}
+		const bool on = !g_leftHand.load();
+		g_leftHand = on;
+		if (on) {
+			g_aimHeld = false;  // an aim in progress ends (the tick gives the walking speed back)
+		}
+		const auto held = LeftHandText();
+		if (first) {
+			SKSE::log::info("left hand: {} by the key (device {} code {}, the game's event for it '{}'); the left hand holds {}", on ? "ON" : "OFF",
+				static_cast<int>(a_button->GetDevice()), static_cast<int>(a_button->GetIDCode()), a_button->QUserEvent().c_str(), held);
+		}
+		RE::SendHUDMessage::ShowHUDMessage(on ? (held == "nothing" ? "Skylands: left hand ON (the left hand is empty)" : "Skylands: left hand ON") : "Skylands: left hand OFF (aim down sights)", nullptr, true);
+	}
+
 	// The attack button, from the game's own input events.
 	class InputSink : public RE::BSTEventSink<RE::InputEvent*>
 	{
@@ -222,8 +282,14 @@ namespace
 						SKSE::log::info("button down: device {} code {} event name '{}'", static_cast<int>(button->GetDevice()), static_cast<int>(button->GetIDCode()), button->QUserEvent().c_str());
 					}
 				}
+				if (g_leftHandFeature && button->IsDown() &&
+					((g_leftHandMouse >= 0 && button->GetDevice() == RE::INPUT_DEVICE::kMouse &&
+						 (static_cast<int>(button->GetIDCode()) == g_leftHandMouse || static_cast<int>(button->GetIDCode()) == 256 + g_leftHandMouse)) ||
+						(g_leftHandKey > 0 && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && static_cast<int>(button->GetIDCode()) == g_leftHandKey))) {
+					ToggleLeftHand(button);
+				}
 				if (IsAim(button, events)) {
-					g_aimHeld = button->IsPressed();
+					g_aimHeld = button->IsPressed() && !g_leftHand.load();  // no aiming while the left hand is in use
 					continue;
 				}
 				if (!IsAttack(button, events)) {
@@ -250,8 +316,44 @@ namespace
 	{
 		static void Thunk(RE::AttackBlockHandler* a_this, RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data)
 		{
-			if (g_gunMode.load() && a_event && (IsAttack(a_event, RE::UserEvents::GetSingleton()) || IsAim(a_event, RE::UserEvents::GetSingleton()))) {
-				return;  // the right button fires (the plugin), the left one aims (the plugin): neither blocks, bashes nor casts
+			const auto events = RE::UserEvents::GetSingleton();
+			const bool right = a_event && IsAttack(a_event, events);
+			const bool left = a_event && !right && IsAim(a_event, events);
+			if (!right && !left) {
+				Original(a_this, a_event, a_data);
+				return;
+			}
+			// the right button fires (the plugin), the left one aims (the plugin): neither blocks, bashes nor casts. 1.37.0: only while a gun is really in the
+			// hand, and the left one goes to the game while the left-hand toggle is ON.
+			const int  i = right ? 0 : 1;
+			const bool gun = g_gunMode.load() && g_gunInHand.load();
+			const bool swallow = gun && !(left && g_leftHand.load());
+			if (swallow) {
+				if (a_event->IsUp() && g_gameSawDown[i].exchange(false)) {
+					static std::atomic_int told{ 0 };
+					if (told.fetch_add(1) < 20) {
+						SKSE::log::info("attack handler: the {} button came up after a gun was taken in hand: its release goes to the game so a cast it started ends", right ? "right" : "left");
+					}
+					Original(a_this, a_event, a_data);
+				}
+				return;
+			}
+			if (a_event->IsUp()) {
+				g_gameSawDown[i] = false;
+			} else if (a_event->IsPressed()) {
+				g_gameSawDown[i] = true;
+			}
+			if (left && gun) {
+				static std::atomic_int told{ 0 };
+				if (a_event->IsDown() && told.fetch_add(1) < 20) {
+					SKSE::log::info("left hand: the left button went to the game (left hand holds {})", LeftHandText());
+				}
+			}
+			if (!gun && g_gunMode.load()) {
+				static std::atomic_int told{ 0 };
+				if (a_event->IsDown() && told.fetch_add(1) < 10) {
+					SKSE::log::info("attack handler: gun mode is on but no Skylands gun is in the hand: the {} button goes to the game", right ? "right" : "left");
+				}
 			}
 			Original(a_this, a_event, a_data);
 		}
@@ -308,6 +410,9 @@ namespace
 	bool SetGunMode(RE::StaticFunctionTag*, bool a_on)
 	{
 		g_gunMode = a_on;
+		if (!a_on) {
+			g_gunInHand = false;
+		}
 		SKSE::log::info("gun mode {}", a_on ? "on" : "off");
 		return true;
 	}
@@ -1200,6 +1305,9 @@ namespace
 		g_startGiven.clear();
 		g_magsLoaded = false;
 		g_magsAfterLoad = true;
+		if (g_leftHand.exchange(false)) {  // 1.37.0: the left-hand toggle starts OFF after every load or new game
+			SKSE::log::info("left hand: OFF (a load or a new game)");
+		}
 		g_packSeen = -1;
 		g_packAmmo = 0;
 	}
@@ -1672,6 +1780,10 @@ namespace
 	void HideLeftArm(RE::PlayerCharacter* a_player)
 	{
 		if (!g_hideLeft) {
+			return;
+		}
+		if (g_leftHand.load()) {  // 1.37.0: the left hand is in use: the arm is shown
+			RestoreLeftArm();
 			return;
 		}
 		const auto camera = RE::PlayerCamera::GetSingleton();
@@ -2439,6 +2551,9 @@ namespace
 		g_hudShow = false;
 		const bool tapped = g_latch.exchange(false);  // the trigger went down since the last tick (even if it is already up again)
 		const auto player = RE::PlayerCharacter::GetSingleton();
+		if (!g_gunMode.load() || !player || !player->Is3DLoaded()) {
+			g_gunInHand = false;
+		}
 		if (!g_gunMode.load() || !player || !player->Is3DLoaded() || MenuOpen()) {
 			g_gun.wasHeld = false;
 			ResetKick();
@@ -2450,6 +2565,7 @@ namespace
 		}
 		GunInfo    info{};
 		const auto weapon = HeldGun(player, info);
+		g_gunInHand = weapon != nullptr;
 		if (!weapon) {
 			g_gun.wasHeld = false;
 			ResetKick();
@@ -3224,7 +3340,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 36, 2, 0 },
+	.Version = { 1, 37, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

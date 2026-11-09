@@ -857,6 +857,15 @@ Other commands:
   left hand, a HOTKEY (default middle mouse) that only switches the mode (equipment untouched), no ADS while ON, gun and left hand usable at once, first-person left
   arm shown while ON, player only. The user keeps the shared magazine per gun base record. Open: roadmap section 6 (the user's left-hand/weapon-switching issues,
   keeping the state in the save, HUD tag).
+- LEFT HAND STAGE 1 = 0.61.0 (TestBuild-181, plugin 1.37.0 = "SkylandsNative 409"; the user APPROVED the roadmap, answers to its section 6: the toggle starts OFF after a load, no HUD tag, an
+  on-screen notice for testing; the user also reports the 0.60.2 ammo fix "seems to work", no log yet). (1) Toggle: `g_leftHand` (OFF at start, `MagRevert` sets it OFF on every load/new game), ini `LeftHand` 1,
+  `LeftHandMouse` 2 (middle; code n or 256+n like `ReloadMouse`), `LeftHandKey` -1; `InputSink` -> `ToggleLeftHand` (only with a gun really in hand, no menu): notice "Skylands: left hand ON / OFF (aim down sights)",
+  log "left hand: ON/OFF by the key (device, code, the game's event for it '..'); the left hand holds <spell/shield/weapon/torch/nothing> <id> "name"" (first 40; also when pressed with no gun: tells the middle
+  button's own game event). ON: `g_aimHeld` stays false (aim ends), `AttackHook` passes "Left Attack/Block" to the game (log "left hand: the left button went to the game ..", first 20), `HideLeftArm` restores
+  the arm. (2) The user's spell bugs: "after unequipping the gun spells sometimes refused to cast" = gun mode left on with no gun in hand, and the hook swallowed both buttons: now it swallows only while
+  `g_gunInHand` (set by the tick from `HeldGun`, cleared by `SetGunMode(false)`; log "attack handler: gun mode is on but no Skylands gun is in the hand .."); "a healing spell kept casting after the gun was
+  drawn" = the button's RELEASE was swallowed: `g_gameSawDown[2]` remembers a press the game saw and passes its release even while swallowing (log "attack handler: the .. button came up after a gun was taken in
+  hand: its release goes to the game"). UNCONFIRMED in game: all of it (whether the middle button has a game action, the staff + spell/shield animations with our gun, the arm popping back, that a passed release ends the cast).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

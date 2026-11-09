@@ -98,6 +98,11 @@ RecoilGun=1.0
 HideHands=1
 ; the first-person left arm is hidden while a gun is held in the right hand (1 on, 0 off)
 HideLeftHand=1
+; the left-hand toggle: while a gun is held, this button switches the left attack button between the left hand (a spell or a shield) and aiming down the sights
+; (1 on, 0 off); it starts OFF after every load. LeftHandMouse: a mouse button (2 = middle; -1 none); LeftHandKey: a keyboard scan code as well (-1 none)
+LeftHand=1
+LeftHandMouse=2
+LeftHandKey=-1
 Casings=1
 ; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
 Rockets=1

@@ -1,4 +1,4 @@
-# Left-hand toggle: roadmap (PHASE 1, awaiting the user's approval, no feature code yet)
+# Left-hand toggle: roadmap (APPROVED; stage 1 built as 0.61.0 / plugin 1.37.0)
 
 Written at 0.60.2 (TestBuild-180, plugin 1.36.2 = "SkylandsNative 408").
 
@@ -75,3 +75,9 @@ Written at 0.60.2 (TestBuild-180, plugin 1.36.2 = "SkylandsNative 408").
   own action, and the weapon-switching issues. Send `SkylandsNative.log`.
 - **Stage 2** (after the report): fixes from the log (a middle-button hook if needed, animation/arm problems, the switching issues), and anything the user
   adds (torches, keeping the state in the save, a pad button).
+
+## 8. The user's answers to section 6 (approval)
+1. Issues seen: after unequipping the gun to use spells, spells sometimes refused to cast; a healing spell cast before drawing the gun kept casting in the background. Stage 1 fixes both
+   in the attack hook (swallow only with a gun really in hand; pass the release of a press the game saw) and logs them.
+2. The toggle starts OFF after every load.
+3. No HUD tag; an on-screen notice on each press, for testing.
