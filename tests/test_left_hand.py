@@ -52,3 +52,13 @@ def test_an_old_settings_file_gets_the_new_left_hand_keys_once():
     assert kept and "LeftHandKey=34" in text
     again, _ = skse.merge_ini(default, text.replace("LeftHandKey=34", "LeftHandKey=20"))
     assert "LeftHandKey=20" in again  # the player's own choice is kept once the rev matches
+
+
+def test_the_middle_button_is_also_read_from_windows_and_a_gun_never_stays_in_the_left_hand():
+    main = _main()
+    poll = main[main.index("void PollToggleMouse()"):main.index("void KeepGunsRight(")]
+    assert "GetAsyncKeyState(vk)" in poll and "VK_MBUTTON" in poll and "GetCurrentProcessId()" in poll
+    keep = main[main.index("void KeepGunsRight("):main.index("void RestoreGun()")]
+    assert "if (g_dualGuns)" in keep and "UnequipObject(a_player, left" in keep and "0x00013F43" in keep
+    assert "PollToggleMouse();" in main and "KeepGunsRight(player);" in main
+    assert '"DualGuns"' in main

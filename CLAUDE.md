@@ -871,6 +871,15 @@ Other commands:
   mouse software remaps the wheel click). 0.61.1 (TestBuild-182, plugin 1.37.1 = "SkylandsNative 410"), the user chose middle + G: `LeftHandKey` default 34 (G), `LeftHandRev=2` makes `merge_ini` put
   `LeftHandMouse`/`LeftHandKey` back to the defaults once; "mouse button down: code N event name '..'; Skylands takes it for: the reload / the left-hand toggle / nothing" for every mouse press but the wheel (first 60),
   logged BEFORE the reload check. READ those lines next.
+- 0.61.1 in game (user, SkylandsNative.log 31f82f1d "SkylandsNative 410"): G WORKS (ON/OFF lines, "left hand holds spell 00012FCD Flames", "the left button went to the game"); the middle click still does
+  nothing and NO "mouse button down: code 2" line came in 14:19-14:22 (the 60 lines were spent on left/right clicks, codes 0/1, but code 2 never showed): the middle click does not reach the game's input
+  events on the user's setup. The user equipped a SECOND Skylands gun in the left hand ("left hand holds weapon FE0038E0 lite Revolver") and it broke both guns. User rules: left hand = Skyrim's one-handed
+  things only (spells, staffs, weapons, shields); two guns only later for the Gunzerker's action skill. 0.61.2 (TestBuild-183, plugin 1.37.2 = "SkylandsNative 411"): (1) `PollToggleMouse` (tick, gun in hand)
+  reads `LeftHandMouse` 2/3/4 = VK_MBUTTON/XBUTTON1/XBUTTON2 with `GetAsyncKeyState` while Skyrim's window is in front (log "left hand: mouse button N seen down by Windows"); `ToggleLeftHand(device, code, name)`
+  ignores a second call within 250 ms (`g_lastToggleMs`); `user32` linked. (2) `KeepGunsRight` (tick, every 1.5 s at most): a Skylands gun in the left hand that is not the same record as the right one is
+  unequipped from the left (`ActorEquipManager::UnequipObject`, slot `LookupByID<BGSEquipSlot>(0x13F43)` LeftHand) and, when the right holds no gun, equipped into the right (0x13F42); notice "Skylands: guns go in the
+  right hand only"; log "left hand: Skylands gun .. was in the left hand ..: moved to the right hand / taken out of the left hand"; ini `DualGuns=1` (not written, read if present) switches it off for the Gunzerker later.
+  (3) the mouse log skips codes 0/1 too. UNCONFIRMED in game: all of it (the poll, the equip moves; 0x13F43 = LeftHand is from memory of Skyrim.esm).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

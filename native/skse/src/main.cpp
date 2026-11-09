@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 410;  // 1.37.1
+	constexpr std::int32_t kVersion = 411;  // 1.37.2
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -39,6 +39,9 @@ namespace
 	// 1.37.0: a Skylands gun is really in the hand (set by the tick, which runs only in gun mode). The attack handler swallows the buttons only then: gun mode
 	// left on after the gun went away kept spells from casting (the user's report).
 	std::atomic_bool g_gunInHand{ false };
+	// 1.37.2: a Skylands gun in the player's LEFT hand is moved to the right one (two guns broke both, the user's report); ini DualGuns=1 allows two
+	// (kept for the Gunzerker's action skill, later)
+	bool             g_dualGuns = false;
 	// 1.37.0: the game saw this button go down (right 0, left 1), so it also gets its release even if the buttons became ours meanwhile: a spell being cast
 	// when a gun was drawn never heard the button come up and went on casting (the user's report).
 	std::atomic_bool g_gameSawDown[2]{ false, false };
@@ -125,6 +128,8 @@ namespace
 				}
 			} else if (key == "AimPredict") {
 				g_aimPredict = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "DualGuns") {
+				g_dualGuns = line.substr(eq + 1).find('1') != std::string::npos;
 			} else if (key == "LeftHand") {
 				g_leftHandFeature = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "LeftHandMouse" || key == "LeftHandKey") {
@@ -219,14 +224,25 @@ namespace
 	}
 
 	// 1.37.0: the left-hand key went down. Only with a gun in the hand and no menu open; a short notice on the screen says the new state (for testing).
-	void ToggleLeftHand(const RE::ButtonEvent* a_button)
+	// 1.37.2: by device / code / the game's event name, so the Windows poll of the middle button (below) can call it too. Two calls within 250 ms
+	// are one press (the game's event and the poll may both see it).
+	std::atomic<long long> g_lastToggleMs{ 0 };
+
+	void ToggleLeftHand(int a_device, int a_code, const char* a_event)
 	{
+		{
+			const long long nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+			if (nowMs - g_lastToggleMs.load() < 250) {
+				return;
+			}
+			g_lastToggleMs = nowMs;
+		}
 		static std::atomic_int told{ 0 };
 		const bool first = told.fetch_add(1) < 40;
 		if (!g_gunMode.load() || !g_gunInHand.load() || MenuOpen()) {
 			if (first) {
 				SKSE::log::info("left hand: toggle key pressed (device {} code {}, the game's event for it '{}') with no gun in hand or a menu open: nothing changed",
-					static_cast<int>(a_button->GetDevice()), static_cast<int>(a_button->GetIDCode()), a_button->QUserEvent().c_str());
+					a_device, a_code, a_event);
 			}
 			return;
 		}
@@ -238,7 +254,7 @@ namespace
 		const auto held = LeftHandText();
 		if (first) {
 			SKSE::log::info("left hand: {} by the key (device {} code {}, the game's event for it '{}'); the left hand holds {}", on ? "ON" : "OFF",
-				static_cast<int>(a_button->GetDevice()), static_cast<int>(a_button->GetIDCode()), a_button->QUserEvent().c_str(), held);
+				a_device, a_code, a_event, held);
 		}
 		RE::SendHUDMessage::ShowHUDMessage(on ? (held == "nothing" ? "Skylands: left hand ON (the left hand is empty)" : "Skylands: left hand ON") : "Skylands: left hand OFF (aim down sights)", nullptr, true);
 	}
@@ -272,7 +288,7 @@ namespace
 					// presses was used up by wheel zooms, so a middle click never showed
 					const int code = static_cast<int>(button->GetIDCode());
 					static std::atomic_int told{ 0 };
-					if (code != 8 && code != 9 && code != 264 && code != 265 && told.fetch_add(1) < 60) {
+					if (code > 1 && code != 8 && code != 9 && code != 256 && code != 257 && code != 264 && code != 265 && told.fetch_add(1) < 60) {  // 1.37.2: left/right clicks no longer use up the log
 						const bool reload = g_reloadMouse >= 0 && (code == g_reloadMouse || code == 256 + g_reloadMouse);
 						const bool toggle = g_leftHandFeature && g_leftHandMouse >= 0 && (code == g_leftHandMouse || code == 256 + g_leftHandMouse);
 						SKSE::log::info("mouse button down: code {} event name '{}'; Skylands takes it for: {}", code, button->QUserEvent().c_str(),
@@ -298,7 +314,7 @@ namespace
 					((g_leftHandMouse >= 0 && button->GetDevice() == RE::INPUT_DEVICE::kMouse &&
 						 (static_cast<int>(button->GetIDCode()) == g_leftHandMouse || static_cast<int>(button->GetIDCode()) == 256 + g_leftHandMouse)) ||
 						(g_leftHandKey > 0 && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && static_cast<int>(button->GetIDCode()) == g_leftHandKey))) {
-					ToggleLeftHand(button);
+					ToggleLeftHand(static_cast<int>(button->GetDevice()), static_cast<int>(button->GetIDCode()), button->QUserEvent().c_str());
 				}
 				if (IsAim(button, events)) {
 					g_aimHeld = button->IsPressed() && !g_leftHand.load();  // no aiming while the left hand is in use
@@ -1818,6 +1834,83 @@ namespace
 		g_leftArm.shrunk = true;
 	}
 
+	// 1.37.2: the left-hand toggle's mouse button read straight from Windows. In the user's game (1.37.1 log) a middle click never reached the game's
+	// input events at all (no "mouse button down: code 2" line while the toggle on G worked), so the game's event path alone cannot see it. Only while
+	// Skyrim's window is in front; once per press (the toggle's own 250 ms guard keeps a press seen both ways to one).
+	void PollToggleMouse()
+	{
+		static bool wasDown = false;
+		static int  told = 0;
+		int         vk = 0;
+		switch (g_leftHandMouse) {
+		case 2: vk = VK_MBUTTON; break;
+		case 3: vk = VK_XBUTTON1; break;
+		case 4: vk = VK_XBUTTON2; break;
+		default: break;
+		}
+		if (!g_leftHandFeature || !vk) {
+			wasDown = false;
+			return;
+		}
+		DWORD pid = 0;
+		const HWND front = GetForegroundWindow();
+		if (front) {
+			GetWindowThreadProcessId(front, &pid);
+		}
+		const bool down = pid == GetCurrentProcessId() && (GetAsyncKeyState(vk) & 0x8000) != 0;
+		if (down && !wasDown) {
+			if (told++ < 20) {
+				SKSE::log::info("left hand: mouse button {} seen down by Windows (GetAsyncKeyState)", g_leftHandMouse);
+			}
+			ToggleLeftHand(1, g_leftHandMouse, "(read from Windows)");
+		}
+		wasDown = down;
+	}
+
+	// 1.37.2: a Skylands gun in the player's LEFT hand goes to the right hand (or just out of the left one when the right holds another gun), unless
+	// DualGuns=1. Spells, staffs, shields, torches and Skyrim's one-handed weapons stay in the left hand.
+	void KeepGunsRight(RE::PlayerCharacter* a_player)
+	{
+		if (g_dualGuns) {
+			return;
+		}
+		static auto last = std::chrono::steady_clock::time_point{};
+		const auto  now = std::chrono::steady_clock::now();
+		if (now - last < std::chrono::milliseconds(1500)) {
+			return;
+		}
+		const auto leftForm = a_player->GetEquippedObject(true);
+		const auto left = leftForm ? leftForm->As<RE::TESObjectWEAP>() : nullptr;
+		GunInfo    info{};
+		if (!left || !left->formEnchanting || !GunOf(left, info)) {
+			return;
+		}
+		const auto rightForm = a_player->GetEquippedObject(false);
+		const auto right = rightForm ? rightForm->As<RE::TESObjectWEAP>() : nullptr;
+		GunInfo    rinfo{};
+		const bool rightGun = right && right->formEnchanting && GunOf(right, rinfo);
+		if (right == left) {  // the same record reported in both hands (how the engine shows a staff-type weapon to NPCs): nothing to move
+			return;
+		}
+		last = now;
+		const auto manager = RE::ActorEquipManager::GetSingleton();
+		const auto leftSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F43);   // Skyrim.esm LeftHand (by id: wingdi's GetObject macro clashes with the default-object lookup)
+		const auto rightSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42);  // Skyrim.esm RightHand (STAFF_EQUIP_SLOT)
+		if (!manager || !leftSlot) {
+			return;
+		}
+		manager->UnequipObject(a_player, left, nullptr, 1, leftSlot, true, false, false);
+		if (!rightGun && rightSlot) {
+			manager->EquipObject(a_player, left, nullptr, 1, rightSlot, true, false, false);
+		}
+		static int told = 0;
+		if (told++ < 20) {
+			SKSE::log::info("left hand: Skylands gun {:08X} was in the left hand (right hand {:08X}, {}): {}", left->GetFormID(), right ? right->GetFormID() : 0,
+				rightGun ? "a gun" : "no gun", rightGun ? "taken out of the left hand" : "moved to the right hand");
+		}
+		RE::SendHUDMessage::ShowHUDMessage("Skylands: guns go in the right hand only", nullptr, true);
+	}
+
 	void RestoreGun()
 	{
 		g_stage = "aim: gun back to the hand";
@@ -2578,6 +2671,10 @@ namespace
 		GunInfo    info{};
 		const auto weapon = HeldGun(player, info);
 		g_gunInHand = weapon != nullptr;
+		if (weapon) {
+			PollToggleMouse();
+			KeepGunsRight(player);
+		}
 		if (!weapon) {
 			g_gun.wasHeld = false;
 			ResetKick();
@@ -3352,7 +3449,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 37, 1, 0 },
+	.Version = { 1, 37, 2, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
