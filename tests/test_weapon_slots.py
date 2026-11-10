@@ -25,3 +25,12 @@ def test_the_zoom_and_the_hotkeys_are_swallowed_through_canprocess_slot_1_and_th
     ini = (ROOT / "setup" / "skylands_setup" / "skse.py").read_text(encoding="utf-8")
     for key in ("WeaponSlots=1", "SlotKey=56", "SlotHookZoom=1", "SlotHookHotkeys=1"):
         assert key in ini
+
+
+def test_the_wheel_stays_with_the_guns_while_a_swap_takes_the_new_gun_out():
+    main = (SRC / "main.cpp").read_text(encoding="utf-8")
+    want = main[main.index("bool SlotsWantWheel()\n"):main.index("void SlotAssign(int a_slot)")]
+    assert "g_lastSwapMs.load() + g_slotSwapGraceMs" in want
+    assert "GetWeaponState() != RE::WEAPON_STATE::kSheathed" in want and "HeldGun(player, info)" in want
+    assert "g_gunMode" not in want  # gun mode drops for a moment during a swap
+    assert "g_lastSwapMs = NowMs();" in main

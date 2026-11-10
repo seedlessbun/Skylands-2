@@ -112,6 +112,8 @@ WeaponSlots=1
 SlotKey=56
 SlotHookZoom=1
 SlotHookHotkeys=1
+; after a wheel switch the wheel stays with the guns this long (milliseconds), so the camera does not zoom while the new gun comes out
+SlotSwapGraceMs=1500
 Casings=1
 ; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
 Rockets=1

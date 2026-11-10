@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 413;  // 1.38.0
+	constexpr std::int32_t kVersion = 414;  // 1.38.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -54,6 +54,7 @@ namespace
 	std::atomic_bool        g_slotKeyHeld{ false };
 	std::atomic<RE::FormID> g_slots[4]{ 0, 0, 0, 0 };
 	std::atomic<long long>  g_swapUntilMs{ 0 };      // one switch at a time: wheel ticks before this are ignored
+	int                     g_slotSwapGraceMs = 1500;  // ini SlotSwapGraceMs: the wheel stays ours this long after a switch (1.38.1)
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
 	std::atomic<const char*> g_stage{ "start" };  // where the plugin last was (told by the crash handler)
@@ -140,6 +141,11 @@ namespace
 			} else if (key == "WeaponSlots" || key == "SlotHookZoom" || key == "SlotHookHotkeys") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "WeaponSlots" ? g_slotsOn : key == "SlotHookZoom" ? g_slotHookZoom : g_slotHookHotkeys) = on;
+			} else if (key == "SlotSwapGraceMs") {
+				try {
+					g_slotSwapGraceMs = std::clamp(std::stoi(line.substr(eq + 1)), 0, 10000);
+				} catch (...) {
+				}
 			} else if (key == "SlotKey") {
 				try {
 					g_slotKey = std::clamp(std::stoi(line.substr(eq + 1)), 1, 255);
@@ -801,23 +807,33 @@ namespace
 		return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 	}
 
-	// the wheel is ours: slots on, a Skylands gun really in the hand and drawn, no menu, at least one slot filled
+	// the wheel is ours: slots on, no menu, at least one slot filled, and a Skylands gun in either hand that is drawn or being drawn. 1.38.1: no longer tied to
+	// gun mode or "drawn" alone (both drop for a moment while a swap takes the new gun out, and the camera got the wheel back then: the user's report), and for
+	// SlotSwapGraceMs after a switch the wheel stays ours even while the hands are briefly empty.
+	std::atomic<long long> g_lastSwapMs{ 0 };
+
 	bool SlotsWantWheel()
 	{
-		if (!g_slotsOn || !g_gunMode.load() || !g_gunInHand.load() || MenuOpen()) {
+		if (!g_slotsOn || MenuOpen()) {
 			return false;
+		}
+		bool filled = false;
+		for (const auto& slot : g_slots) {
+			filled = filled || slot.load() != 0;
+		}
+		if (!filled) {
+			return false;
+		}
+		if (NowMs() < g_lastSwapMs.load() + g_slotSwapGraceMs) {
+			return true;
 		}
 		const auto player = RE::PlayerCharacter::GetSingleton();
 		const auto state = player ? player->AsActorState() : nullptr;
-		if (!state || !state->IsWeaponDrawn()) {
+		GunInfo    info{};
+		if (!state || !HeldGun(player, info)) {
 			return false;
 		}
-		for (const auto& slot : g_slots) {
-			if (slot.load()) {
-				return true;
-			}
-		}
-		return false;
+		return state->GetWeaponState() != RE::WEAPON_STATE::kSheathed;
 	}
 
 	void SlotAssign(int a_slot)
@@ -878,6 +894,7 @@ namespace
 			if (!manager) {
 				return;
 			}
+			g_lastSwapMs = NowMs();
 			manager->EquipObject(player, gun, nullptr, 1, rightSlot, true, false, true, false);
 			static int told = 0;
 			if (told++ < 40) {
@@ -3711,7 +3728,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 38, 0, 0 },
+	.Version = { 1, 38, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

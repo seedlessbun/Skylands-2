@@ -895,6 +895,10 @@ Other commands:
   for Zoom In/Out while `SlotsWantWheel()`, `HotkeyHook` on `VTABLE_FavoritesHandler[0]` answers false for Hotkey1-4 while the slot key is held. Ini `WeaponSlots`, `SlotKey`, `SlotHookZoom`, `SlotHookHotkeys` (new keys
   take defaults). Log "slots: on ...", "slots: ... hooked (vtable slot 1, was module+..)", "slots: slot N = ..", "slots: wheel down/up: slot a -> slot b (..)", "slots: slot N emptied", "the camera's zoom swallowed",
   "a favourites hotkey (1-4) blocked", "slots: save/load - ..". UNCONFIRMED in game: all of it (that CanProcess is slot 1 on 1.7.104 for these handlers, that the zoom is handled by the camera states, the equip while drawn).
+- 0.62.0 in game (user, SkylandsNative.log 0049b3aa "SkylandsNative 413"): "works great"; all three hooks installed on 1.7.104 (first-person camera was module+8F5430, third-person module+8FDCA0, favourites module+962120), assigning,
+  the hotkey block and the zoom swallowing logged, no exception lines. Seen: scrolling while the new gun comes out zooms the camera for a moment (gun mode and `IsWeaponDrawn` both drop during a swap). 0.62.1 (TestBuild-186,
+  plugin 1.38.1 = "SkylandsNative 414"): `SlotsWantWheel` = slots on, no menu, a slot filled, and (within `SlotSwapGraceMs` 1500 of the last switch, `g_lastSwapMs`) or (a Skylands gun in EITHER hand via `HeldGun`
+  and weapon state not `kSheathed`, i.e. drawing counts); no longer reads gun mode. UNCONFIRMED in game. The user also asked how Borderlands-style cel shading could be done (options given, nothing built).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
