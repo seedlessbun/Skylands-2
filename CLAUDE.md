@@ -886,7 +886,7 @@ Other commands:
   "dead, gone or no longer hostile"); a maker shield bonus showed ("the player's capacity bonus changes the shield from 70.0% to 73.1%": Jakobs 8 capacity; rate/delay changes are not logged); a bonus projectile fired
   ("prof: 1 bonus projectile(s) on 1 (4.0% chance)"). 0.61.3 (TestBuild-184, plugin 1.37.3 = "SkylandsNative 412"), the user: (1) no mouse button for the toggle by default (`LeftHandMouse=-1`, `LeftHandRev=3` resets
   it once; the setting and the Windows poll for 2/3/4 stay); (2) Torgue's second stat is the BONUS PROJECTILE CHANCE again (`kMakerStats[6] = {kDamage, kProj}`) and it is the CHARACTER's: `kSecondaryEverywhere` makes
-  `BonusFor` give it to every gun in full (launchers still x0.5); Torgue no longer adds shield capacity. UNCONFIRMED in game. NEXT FEATURE: a Borderlands-style weapon wheel (4 slots, scroll to switch): interview in progress.
+  `BonusFor` give it to every gun in full (launchers still x0.5); Torgue no longer adds shield capacity. UNCONFIRMED in game. NEXT FEATURE: WEAPON SLOTS, PHASE 1 (docs only): interview done, `docs/weapon-slots-roadmap.md` WRITTEN, AWAITING APPROVAL (4 slots, hold Left Alt + 1-4 to assign, wheel switches while a gun is drawn with the zoom swallowed, wrap + skip empty, lost gun empties its slot, notices only, the game's equip; open: section 6).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
