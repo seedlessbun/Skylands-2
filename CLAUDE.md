@@ -907,6 +907,13 @@ Other commands:
   reference flag `kNoAIAcquire` (1 << 25, `AddChange(kFlags)` so the save keeps it) at each 3 s scan, also with `Despawn=0`; `DropSink`: a non-player actor that takes one from the WORLD anyway (container event with a reference,
   old container 0; AddItem gifts have no reference and are not touched) drops it again in a queued task (`RemoveItem kDropping`, the new ref flagged). Ini `NoNpcPickup=1`. Log "despawn: N loose Skylands item(s) marked 'no AI acquire'",
   "despawn: <id> \"name\" picked up <id> \"item\" (rarity) from the ground: dropped again as <id>". UNCONFIRMED in game: that the combat pickup honours the flag (if the "dropped again" lines appear often, it does not, and an NPC may loop).
+- GUN TEXTURES, PHASE 1 (0.62.3, TestBuild-188 = 0.62.2 + a survey, python only, plugin 1.38.2): the user wants real BL2 paint on the guns (and relics): today every gun is ONE solid colour with a faint texture because
+  `Bl2Source.gun_parts` takes one texture (the Material part's MIC diffuse parameter, a packed "Comp" texture: its channels are masks) and `dxt.shade` keeps only its brightness x the manufacturer colour (models.PALETTE).
+  BL2's shader builds the paint from those masks plus the MIC's colour/scalar parameters and maybe more textures (pattern, decal, rarity) - none of it read yet. Survey `texprobe.py` (`python -m skylands_setup bl2textures --work DIR`,
+  `Check-BL2-GunTextures.bat`, writes `work\bl2-gun-texture-report.txt` + PNGs in `work\gun-textures\`, packed into `work\bl2-gun-textures.zip`): T1 every gun Material part per type x manufacturer x rarity from `work\pandora.json`
+  with the MIC chain to its root (scalar/vector/texture parameters of every level), T3 the gestalt meshes (guns, shields, relics: materials referred to, UVs read or not, UV range), T2 the root materials' expression objects (how the
+  shader combines the channels), T4 each texture as a PNG strip (colour, R, G, B, A) with channel statistics, T5 the gestalt mesh UV layout drawn over its texture, T6 a GUESSED paint per MIC (R/G/B masks x its first three colours).
+  NEXT: the user sends the zip; read it; rebuild the paint in `models.py` (per gun: masks x the MIC's colours, + pattern/decal if any) instead of `dxt.shade`; relics the same with their material.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

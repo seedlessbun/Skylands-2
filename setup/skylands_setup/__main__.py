@@ -24,7 +24,7 @@ def skse_check(argv: list[str]) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] not in ("survey", "build", "uninstall", "modelsurvey", "shootingsurvey", "sksecheck", "bl2audio", "bl2shotguns", "bl2gestalt", "bl2shields", "bl2badass", "bl2progress"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("survey", "build", "uninstall", "modelsurvey", "shootingsurvey", "sksecheck", "bl2audio", "bl2shotguns", "bl2gestalt", "bl2shields", "bl2badass", "bl2progress", "bl2textures"):
         print("usage: python -m skylands_setup survey --out FILE [--bl2 DIR --skyrim DIR]")
         print("       python -m skylands_setup build --done FILE [--bl2 DIR --skyrim DIR] [--stage-only]")
         print("       python -m skylands_setup uninstall --work DIR")
@@ -57,6 +57,10 @@ def main() -> int:
         from . import progressprobe
 
         return progressprobe.main(sys.argv[2:])
+    if sys.argv[1] == "bl2textures":
+        from . import texprobe
+
+        return texprobe.main(sys.argv[2:])
     if sys.argv[1] == "bl2gestalt":
         from . import gestaltprobe
 

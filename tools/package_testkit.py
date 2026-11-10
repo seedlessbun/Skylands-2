@@ -170,6 +170,16 @@ echo.
 echo Send work\bl2-progress-deep-report.txt back to Claude.
 pause
 """
+TEXTURE_PROBE = r"""@echo off
+setlocal
+cd /d "%~dp0"
+set "PYTHONPATH=%~dp0app"
+echo The gun texture survey: how Borderlands 2 paints its guns, shields and relics (materials, colours, mask textures; changes nothing; about 5-20 minutes) ...
+"%~dp0python\python.exe" -X utf8 -m skylands_setup bl2textures --work "%~dp0work" %*
+echo.
+echo Send work\bl2-gun-textures.zip back to Claude.
+pause
+"""
 SHOOTING_SURVEY = r"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -252,6 +262,7 @@ Skylands but put each gun's own mesh in a second plugin, SkylandsGunModels.esp (
   Check-BL2-EnemyVoice.bat finds the human enemies' voice lines (taunts, pain, death...) in Borderlands 2's English voice packs, saves a few of every bandit-like voice as WAV files in work\\voice-samples to listen to (changes nothing, 5-15 minutes), and writes
     work\\bl2-enemy-voice-report.txt: send it, the enemy voices are extracted from what it finds.
   Check-BL2-Relics-Deep.bat is the second relic survey (what each relic type changes and by how much; changes nothing, 10-20 minutes): work\\bl2-relic-deep-report.txt.
+  Check-BL2-GunTextures.bat looks at how Borderlands 2 paints its guns, shields and relics (materials, colours, mask textures; changes nothing) and writes work\\bl2-gun-textures.zip: send it.
   Check-BL2-Relics.bat looks at how Borderlands 2 builds its relics (artifacts: stats, parts, rarities, loot; changes nothing, 10-25 minutes) and writes work\\bl2-relic-report.txt: send it, the relics are built from it.
   Check-BL2-Shields-Deep.bat is the second shield survey (the numbers behind shield grades and types, enemy shields, the HUD; changes nothing, 10-20 minutes) and writes
   work\\bl2-shield-deep-report.txt.
@@ -300,7 +311,7 @@ Nothing from Borderlands 2 or Skyrim is included; it is all built on your PC fro
 def main() -> int:
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / "Skylands-TestBuild-187.zip"
+    out = dist / "Skylands-TestBuild-188.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with tarfile.open(fileobj=io.BytesIO(python_tar()), mode="r:gz") as t:
             for m in t.getmembers():
@@ -330,6 +341,7 @@ def main() -> int:
         z.writestr("Check-BL2-Progress.bat", PROGRESS_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Progress-Deep.bat", PROGRESS_DEEP_PROBE.replace("\n", "\r\n"))
         z.writestr("Check-BL2-Relics-Deep.bat", RELIC_DEEP.replace("\n", "\r\n"))
+        z.writestr("Check-BL2-GunTextures.bat", TEXTURE_PROBE.replace("\n", "\r\n"))
         z.writestr("Uninstall-Skylands.bat", UNINSTALL.replace("\n", "\r\n"))
         z.writestr("README.txt", README.replace("\n", "\r\n"))
     print(f"{out.relative_to(ROOT)} {out.stat().st_size} bytes")
