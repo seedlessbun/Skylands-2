@@ -304,6 +304,27 @@
    "note": "... shorter recharge delay step"
   },
   {
+   "id": "ProfHealthStart",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Bandit's second stat: Skyrim Health, percent of your base health EVERY Bandit level (the user: 1 %)"
+  },
+  {
+   "id": "ProfMagickaStart",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Maliwan's second stat: Magicka, percent of the base every Maliwan level"
+  },
+  {
+   "id": "ProfStaminaStart",
+   "value": 1,
+   "source": "design",
+   "bl2_object": "-",
+   "note": "Vladof's second stat: Stamina, percent of the base every Vladof level"
+  },
+  {
    "id": "ProfHud",
    "value": 1,
    "source": "design",

@@ -401,7 +401,10 @@ class GunModels:
             if not parts:
                 return None
             for tkey, dds in src.take_textures().items():
-                self.raw[tkey] = dds
+                if tkey.startswith("p_"):  # a gun painted from Borderlands 2's material (bl2.gunpaint): final, not tinted
+                    self.textures[tkey] = dds
+                else:
+                    self.raw[tkey] = dds
             body = PALETTE.get(mfr, ((120, 120, 124), (60, 60, 64)))[0]
             for part in parts:  # a part whose texture could not be read still gets the manufacturer's colour
                 if part.texture in self.raw:

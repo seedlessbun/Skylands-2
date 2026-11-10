@@ -298,10 +298,12 @@ def vertex_arrays(data: bytes, start: int, bounds: tuple[M.Vec, M.Vec] | None) -
 
 
 def element_uvs(data: bytes, off: int, size: int, count: int, pos_offset: int):
-    """UVs inside a vertex element: a half-float pair (the usual) or a float pair that is not the position."""
-    for o in range(0, size - 3, 2):
-        if pos_offset - 4 < o < pos_offset + 12:
-            continue
+    """UVs inside a vertex element: a half-float pair (the usual) or a float pair that is not the position. The bytes right after the position come
+    first (UE3's skinned vertex: tangents, bone influences, position, then the UVs): 0.63.0, the assault rifle's packed tangents in front of the
+    position passed as UVs (survey: u -0.71..0.46) and every rifle looked like one colour."""
+    after = [o for o in range(pos_offset + 12, size - 3, 2)]
+    before = [o for o in range(0, size - 3, 2) if o <= pos_offset - 4]
+    for o in after + before:
         for fmt, width in (("<2e", 4), ("<2f", 8)):
             if o + width > size or (width == 8 and o % 4):
                 continue

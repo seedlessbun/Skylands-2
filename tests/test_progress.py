@@ -57,7 +57,7 @@ def test_proficiencies_are_wired_into_the_hits_the_shots_the_hud_and_the_save():
     assert "facts.magnitude * facts.power, !actor->IsDead()" in prog and "effect->effectItem.magnitude" in main
     # the user's numbers
     for text in ("g_bl2TypeBase = 50.0f", "g_bl2TypeStep = 15.0f", "g_bl2MakerBase = 50.0f", "g_bl2MakerStep = 15.0f", "g_killGrace = 0.25f", "g_statsPerLevel = 1", "g_otherMakers = 0.25f", "g_ownMaker = 1.0f", "g_launcherProj = 0.5f",
-                 "g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }", "0x464F5250"):
+                 "g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }", "0x464F5250"):
         assert text in prof, text
     # the bonuses act per shot on top of the relics, and the HUD shows both levels
     assert "prof::BonusFor(g_gun.info.type, g_gun.info.maker, pb)" in main and "* (1.0f + pb[prof::kRate] * 0.01f)" in main and "* (1.0f + pb[prof::kDamage] * 0.01f)" in main
@@ -99,8 +99,8 @@ def test_the_type_track_bonus_table_matches_the_roadmap():
         total = [a + b for a, b in zip(total, _gains(None, n))]
     assert [round(x, 1) for x in total] == [17.5, 11.5, 11.5, 15.5, 18.8, 25.0, 0, 0, 0]
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
-    assert "{ kMag, kShieldCap }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap }" in prof
-    assert "{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kProj }, { kRate, kShieldRate }" in prof and "% kGunStats" in prof
+    assert "{ kMag, kHealth }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap }" in prof  # 1.39.0: Bandit health, Maliwan magicka, Vladof stamina
+    assert "{ kDamage, kMagicka }, { kReload, kShieldDelay }, { kDamage, kProj }, { kRate, kStamina }" in prof and "% kGunStats" in prof
     # 1.37.3: Torgue's second stat (bonus projectiles) is the character's: every gun gets it in full
     assert "kSecondaryEverywhere[kMakers] = { false, false, false, false, false, false, true, false }" in prof and "if (kSecondaryEverywhere[m])" in prof
 

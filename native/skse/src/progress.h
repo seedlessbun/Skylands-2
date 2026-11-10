@@ -13,6 +13,7 @@
 #include "PCH.h"
 #include "badass.h"
 #include "proficiency.h"
+#include "vitals.h"
 #include "shield.h"
 #include "shielditems.h"
 
@@ -278,6 +279,7 @@ namespace progress
 	inline void Start(RE::ScriptEventSourceHolder* a_holder)
 	{
 		prof::Start();
+		vitals::Start();
 		if ((!g_on && !prof::g_on) || !a_holder) {
 			SKSE::log::info("kill xp: off; proficiencies: off");
 			return;
@@ -301,6 +303,8 @@ namespace progress
 					Apply();
 					shield::g_stage = "progress: proficiencies";
 					prof::Apply();
+					shield::g_stage = "progress: vitals";
+					vitals::Apply();
 					queued = false;
 				});
 			}

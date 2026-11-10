@@ -914,6 +914,21 @@ Other commands:
   with the MIC chain to its root (scalar/vector/texture parameters of every level), T3 the gestalt meshes (guns, shields, relics: materials referred to, UVs read or not, UV range), T2 the root materials' expression objects (how the
   shader combines the channels), T4 each texture as a PNG strip (colour, R, G, B, A) with channel statistics, T5 the gestalt mesh UV layout drawn over its texture, T6 a GUESSED paint per MIC (R/G/B masks x its first three colours).
   NEXT: the user sends the zip; read it; rebuild the paint in `models.py` (per gun: masks x the MIC's colours, + pattern/decal if any) instead of `dxt.shade`; relics the same with their material.
+- 0.62.3 in game (user): the wheel zoom during a swap is fixed; no crash and no NPC pickup seen yet. GUN TEXTURE REPORT READ (`bl2-gun-texture-report.txt` 6,463 lines + 115 PNGs; `work\pandora.json` was missing, so T1 fell back to every
+  `*materials` group): every gun Material part -> MIC chain (instance -> `Common_GunMaterials.MasterMaterials.<Maker>.MasterMati_<Maker><Rarity>` -> `Common_Materials.Weapons.Master_Gun`, a Material whose cooked graph has 43
+  parameter expressions and no wiring). Parameters: `p_Masks` = per gun type `Weap_<Type>.Tex.Weap_<Type>_Comp` (R/G/B = paint regions A/B/C, hard blocks in the lower half, soft in the upper half; none = region D);
+  `p_Diffuse` = SHARED shading atlas `Common_GunMaterials.CompTextures.Weap_AssaultSubSniper_Comp` / `Weap_LauncherShotgunPistol_Comp` (4096, one gun type per channel by static mask `p_WeapClassSelect`; MEASURED by
+  UV seams vs channel edges: AR R, SMG G, sniper B; launcher R, shotgun G, pistol B); `p_<A|B|C>Color<Shadow|Midtone|Hilight>` (linear, up to ~1.4), `p_DColor`, `p_Pattern` (+`p_PatternColor`, `p_PatternScalePosition` xy scale zw
+  offset, `p_PatternChannelScale` per region), `p_Decal` (+scale/position/rotate/channel/colour), `P_SimpleReflect` env, `p_NormalScopesEmissive`. This was the "one solid colour": the old code shaded the shading ATLAS (all 3 types
+  mixed) by luminance x one manufacturer colour. Also: the base-game AR gestalt mesh's UVs were read from the wrong bytes (u -0.71..0.46; `element_uvs` tried the tangents before the position first).
+  0.63.0 (TestBuild-189, plugin 1.39.0 = "SkylandsNative 416"): (1) `bl2/gunpaint.py` `Painter.paint(mic, type)`: 512x512 per Material instance = regions (masks normalised; sum < 3/255 = D, fading to D under 25.5) x 3-tone
+  colour of the type's atlas channel (shadow -> midtone -> highlight), D = DColor x shade, x pattern (R channel, tiled) by region scale, linear -> sRGB, `encode_fast` DXT1; cached per (MIC, type); `gunparts.gun_parts` tries
+  `_paint` first (budget `PAINT_BUDGET_S` 900 s), keys `p_...` go straight to `models` textures (no `dxt.shade`). Not done: decals (logos), reflections, normal maps, relics (Mat_ItemArtifact is a plain Material: no
+  texture found), shields (Shield_Comp unreadable: "no mip table"). Prototype check: the Bone Shredder's paint comes out bone white + slate like the user's BL2 screenshot. (2) `gunmesh.element_uvs` tries the bytes after the
+  position first. (3) the user: Bandit / Maliwan / Vladof's SECOND stat = Skyrim Health / Magicka / Stamina, 1 % of the BASE value every maker level (`kStats` 12, `kHealth/kMagicka/kStamina`, `ProfHealthStart/MagickaStart/StaminaStart` 1;
+  the primary keeps odd levels + milestones; those makers no longer give shield capacity/rate); (4) `vitals.h`: the vitals and `PlayerSpeedBonus` 25 (SpeedMult +25 points, carry-weight nudge) as tracked temporary modifiers (Revert on
+  load), `NoFallDamage` 1 = GMST `fJumpFallHeightMult` 0 at data load (all actors). Log "gun paint: ..." / summary "N gun paints made" (setup log), "vitals: ..." (plugin). UNCONFIRMED in game: all of it (the paint's look, AR UVs, the speed
+  taking effect, fall damage gone, the vitals on the HUD bars).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

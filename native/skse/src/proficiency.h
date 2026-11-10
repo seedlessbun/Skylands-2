@@ -19,7 +19,8 @@ namespace prof
 	using Clock = std::chrono::steady_clock;
 
 	// 1.36.0: kStats = the 6 gun stats + 3 shield stats (the manufacturers' second stat, the user's choice); gun type tracks only ever rotate over the first kGunStats
-	constexpr int kTypes = 6, kMakers = 8, kGunStats = 6, kStats = 9;
+	// 1.39.0: + 3 Skyrim stats (health, magicka, stamina: Bandit / Maliwan / Vladof's second stat, the user's choice), percent of the player's base value
+	constexpr int kTypes = 6, kMakers = 8, kGunStats = 6, kStats = 12;
 	enum Stat : int
 	{
 		kDamage = 0,
@@ -30,19 +31,25 @@ namespace prof
 		kProj,
 		kShieldCap,    // shield capacity, percent
 		kShieldRate,   // shield recharge rate, percent
-		kShieldDelay   // shield recharge delay, percent shorter
+		kShieldDelay,  // shield recharge delay, percent shorter
+		kHealth,       // 1.39.0: Skyrim's Health, percent of the base value
+		kMagicka,      // Magicka
+		kStamina       // Stamina
 	};
+	inline bool IsVital(int a_stat) { return a_stat >= kHealth && a_stat <= kStamina; }
 	inline constexpr const char* kTypeNames[kTypes] = { "SMG", "Assault Rifle", "Pistol", "Shotgun", "Sniper", "Launcher" };  // generate.STAFF_KINDS order (the ammo list)
 	inline constexpr const char* kTypeShort[kTypes] = { "SMG", "AR", "Pistol", "Shotgun", "Sniper", "Launcher" };  // the HUD line
 	inline constexpr const char* kMakerNames[kMakers] = { "Bandit", "Dahl", "Hyperion", "Jakobs", "Maliwan", "Tediore", "Torgue", "Vladof" };  // sheets/manufacturers.json order
 	inline constexpr const char* kStatNames[kStats] = { "damage", "accuracy", "reload speed", "fire rate", "magazine size", "bonus projectile chance", "shield capacity",
-		"shield recharge rate", "shield recharge delay" };
+		"shield recharge rate", "shield recharge delay", "health", "magicka", "stamina" };
 	// each maker's two signature stats (roadmap 3.3; Jakobs' second, fire rate, is a choice: "fire as fast as you can pull the trigger")
 	// 1.36.0 (the user): a maker's PRIMARY is a gun stat (its own guns full, every other gun a quarter); its SECONDARY is a shield stat that ALWAYS applies, whatever gun is
 	// held or shield worn. Bandit / Jakobs capacity (1.37.3: Torgue = bonus projectile chance, for every gun), Vladof / Hyperion / Maliwan recharge rate, Tediore / Dahl shorter delay (BL2: Bandit big shields, Tediore quick
 	// delay, Vladof quick refill; the rest my pick). Five of them (Torgue, Maliwan, Jakobs, Dahl, Hyperion) are meant to move to grenade stats when grenades exist.
-	inline constexpr int kMakerStats[kMakers][2] = { { kMag, kShieldCap }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap },
-		{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kProj }, { kRate, kShieldRate } };
+	// 1.39.0 (the user): Bandit's second stat is Skyrim's Health, Maliwan's Magicka, Vladof's Stamina: 1 percent of the base value EVERY maker level (ProfHealthStart /
+	// ProfMagickaStart / ProfStaminaStart), not alternating with the primary, no milestone or growth; the primary keeps its odd levels and milestones as before
+	inline constexpr int kMakerStats[kMakers][2] = { { kMag, kHealth }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap },
+		{ kDamage, kMagicka }, { kReload, kShieldDelay }, { kDamage, kProj }, { kRate, kStamina } };
 	// 1.37.3: Torgue's second stat is the bonus projectile chance again (the user), and like the shield stats it is the CHARACTER's: every gun gets it, not only Torgue's
 	inline constexpr bool kSecondaryEverywhere[kMakers] = { false, false, false, false, false, false, true, false };
 	constexpr int kLauncher = 5, kShotgun = 3;
@@ -72,8 +79,9 @@ namespace prof
 	inline float g_skyCharXP = 0.5f, g_skyMakerXP = 0.0f, g_skyKill = 0.0f;
 	inline float g_charPending = 0.0f;  // character XP from proficiency levels, waiting for progress.h's Apply (under g_lock)
 	inline std::atomic_int g_charTold{ 0 };  // a maker's second stat grows at this share of the first (the user: half, a secondary bonus)
-	inline float g_start[kStats] = { 2.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f, 3.0f, 3.0f, 3.0f };  // the shield stats: maker steps only (x MakerStartScale, x SecondaryShare)
-	inline float g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+	inline float g_start[kStats] = { 2.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f, 3.0f, 3.0f, 3.0f, 1.0f, 1.0f, 1.0f };  // the vitals: percent every maker level, as is  // the shield stats: maker steps only (x MakerStartScale, x SecondaryShare)
+	inline float g_floor[kStats] = { 0.5f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+	inline std::atomic<float> g_vitalPct[3]{ 0.0f, 0.0f, 0.0f };  // 1.39.0: health / magicka / stamina bonus in percent, for ApplyVitals (no lock crosses)
 	inline bool  g_hud = true, g_notices = true;
 	inline int   g_logHits = 30;
 
@@ -122,6 +130,16 @@ namespace prof
 		}
 		const bool milestone = Milestone(n);
 		if (a_maker >= 0) {
+			if (IsVital(kMakerStats[a_maker][1])) {  // 1.39.0: a flat percent every level; the primary on odd levels and milestones as before
+				a_out[kMakerStats[a_maker][1]] += g_start[kMakerStats[a_maker][1]];
+				const int s = kMakerStats[a_maker][0];
+				if (milestone) {
+					a_out[s] += MakerStepOf(s, passed) * g_milestoneMult * g_makerBonusScale;
+				} else if ((n - 1) % 2 == 0) {
+					a_out[s] += MakerStepOf(s, passed) * g_makerBonusScale;
+				}
+				return;
+			}
 			if (milestone) {
 				for (int i = 0; i < 2; ++i) {
 					const int s = kMakerStats[a_maker][i];
@@ -168,14 +186,18 @@ namespace prof
 				}
 			}
 		}
-		float shieldBonus[3]{};
+		float shieldBonus[3]{}, vital[3]{};
 		for (int m = 0; m < kMakers; ++m) {
 			Recompute(m, g_maker[m].level, g_makerBonus[m]);
 			for (int i = 0; i < 3; ++i) {  // the makers' second stats: shield bonuses that always apply (handed to shield.h as plain numbers: no lock crosses)
 				shieldBonus[i] += g_makerBonus[m][kShieldCap + i] * g_ownMaker;
+				vital[i] += g_makerBonus[m][kHealth + i];  // 1.39.0: the character's health / magicka / stamina
 			}
 		}
 		const bool on = g_on;
+		for (int i = 0; i < 3; ++i) {
+			g_vitalPct[i] = on ? vital[i] : 0.0f;
+		}
 		shield::g_profShieldCap = on ? shieldBonus[0] : 0.0f;
 		shield::g_profShieldRate = on ? shieldBonus[1] : 0.0f;
 		shield::g_profShieldDelay = on ? shieldBonus[2] : 0.0f;
@@ -536,7 +558,7 @@ namespace prof
 			return true;
 		}
 		const std::string_view k = std::string_view(a_key).substr(4);
-		static constexpr std::string_view statKeys[kStats] = { "Damage", "Accuracy", "Reload", "Rate", "Magazine", "Projectile", "ShieldCapacity", "ShieldRecharge", "ShieldDelay" };
+		static constexpr std::string_view statKeys[kStats] = { "Damage", "Accuracy", "Reload", "Rate", "Magazine", "Projectile", "ShieldCapacity", "ShieldRecharge", "ShieldDelay", "Health", "Magicka", "Stamina" };
 		for (int s = 0; s < kStats; ++s) {
 			if (k == fmt::format("{}Start", statKeys[s])) {
 				g_start[s] = std::clamp(v, 0.0f, 100.0f);

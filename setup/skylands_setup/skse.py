@@ -141,6 +141,10 @@ DespawnEtech=16000
 BeamCap=24
 ; 1 = people never pick Skylands loot up from the ground (it is marked "no AI acquire"; one taken anyway is dropped again). 0 = they may.
 NoNpcPickup=1
+; the player as a shooter: run and walk speed + this many points (100 = normal speed, so 25 = 25 % faster; 0 = as Skyrim has it)
+PlayerSpeedBonus=25
+; 1 = no fall damage (the game setting fJumpFallHeightMult is set to 0 while Skylands runs; it counts for everyone). 0 = Skyrim's fall damage
+NoFallDamage=1
 """
 
 

@@ -14,7 +14,9 @@ import time
 from pathlib import Path
 
 from .. import meshes as M
-from . import gunmesh, upk
+from . import gunmesh, gunpaint, upk
+
+PAINT_BUDGET_S = 900  # seconds of gun painting (bl2.gunpaint) before the remaining guns keep the old manufacturer colour
 
 MESH_INDEX_VERSION = 3  # the saved mesh locations are only used when written by this version of the search
 MESH_KEYS = ("GestaltModeSkeletalMeshName", "Mesh", "SkeletalMesh", "StaticMesh", "GearModel", "Model", "WeaponMesh")
@@ -61,6 +63,8 @@ class Bl2Source:
         self.gestalt_meshes: dict[str, dict] = {}  # mesh key -> {"file", "path", "total"}
         self._gestalt_full: dict[str, M.Mesh | None] = {}
         self.deadline = time.time() + 10 * 60  # then the remaining guns fall back to the next method
+        self.painter = None  # bl2.gunpaint.Painter, made at the first gun
+        self.painted: dict[str, bool] = {}  # paint key -> painted (True) or failed (False)
 
     def log(self, msg: str, force: bool = False) -> None:
         if force or self.logged < 40:
@@ -757,7 +761,9 @@ class Bl2Source:
             placed[slot] = M.transformed(d["mesh"], None, 1.0, offset)
         matrix = orientation(placed)
         parts = [M.transformed(m, matrix, 1.0) for m in placed.values()]
-        gun_texture = self._gun_material_texture(picked.get("Material"))
+        gun_texture = self._paint(picked.get("Material"), str(g.get("type", "")))  # 0.63.0: Borderlands 2's own paint (masks x the material's colours)
+        if not gun_texture:
+            gun_texture = self._gun_material_texture(picked.get("Material"))
         if not gun_texture:  # no Material part: the body's own material stands in
             for mat in slots[body_slot].get("mats", [])[:3]:
                 d, _n = gunmesh.pick_textures(gunmesh.texture_parameters(self.ix, mat))
@@ -768,6 +774,41 @@ class Bl2Source:
             for m in parts:
                 m.texture = gun_texture
         return parts
+
+    def _paint(self, material_part: str | None, gun_type: str) -> str | None:
+        """The gun's painted texture (bl2.gunpaint) as a texture key starting "p_" (final: not tinted again by models), or None."""
+        if not material_part or self.prof.get("paint_s", 0) > PAINT_BUDGET_S:
+            if material_part and not self.prof.get("paint_stop"):
+                self.prof["paint_stop"] = 1
+                self.log(f"gun paint: time budget ({PAINT_BUDGET_S} s) used up; the remaining guns get the old manufacturer colour", force=True)
+            return None
+        mic = (self.ix.props(material_part) or {}).get("Material")
+        if not isinstance(mic, str):
+            return None
+        key = gunpaint.key_of(mic, gun_type)
+        if key in self.painted:
+            return key if self.painted[key] else None
+        t0 = time.time()
+        try:
+            if self.painter is None:
+                self.painter = gunpaint.Painter(self.ix, self.tfc_dir, lambda m: self.log(m, force=True))
+            made = self.painter.paint(mic, gun_type)
+        except Exception as e:  # noqa: BLE001 - the old colour stays
+            made = None
+            self.log(f"gun paint: {mic} ({gun_type}) failed: {type(e).__name__}: {str(e)[:100]}", force=True)
+        spent = time.time() - t0
+        self.prof["paint_s"] = self.prof.get("paint_s", 0) + spent
+        self.painted[key] = made is not None
+        if made is None:
+            self.stats["paint_failed"] = self.stats.get("paint_failed", 0) + 1
+            if self.stats["paint_failed"] <= 12:
+                self.log(f"gun paint: {mic} ({gun_type}): not the gun shader's layout or its textures could not be read; old colour", force=True)
+            return None
+        self.textures[key] = made[0]
+        self.stats["painted"] = self.stats.get("painted", 0) + 1
+        if self.stats["painted"] <= 25:
+            self.log(f"gun paint: {mic} ({gun_type}) painted in {spent:.1f} s: {made[1]}", force=True)
+        return key
 
     def _gun_material_texture(self, material_part: str | None) -> str | None:
         """The diffuse texture of the gun's Material part (a manufacturer/rarity paint job: Common_GunMaterials...Mati_*)."""
@@ -828,7 +869,7 @@ class Bl2Source:
         extra = f"; {len(errs)} packages could not be opened, e.g. {dict(list(errs.items())[:3])}" if errs else ""
         return (f"native: {s['parts']} parts looked at, {s['meshes']} meshes read, {s['no_mesh']} without a mesh object, "
                 f"{s['no_geometry']} whose geometry could not be found, {s['textured']} textures decoded, "
-                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh, {s.get('stand_ins', 0)} parts using another manufacturer's mesh, {s.get('gestalt_parts', 0)} parts cut from gestalt meshes; parts without a mesh by package {s.get('no_mesh_kinds', {})}{extra}")
+                f"{s.get('no_body', 0)} guns skipped for lacking a body mesh, {s.get('stand_ins', 0)} parts using another manufacturer's mesh, {s.get('gestalt_parts', 0)} parts cut from gestalt meshes, {s.get('painted', 0)} gun paints made from Borderlands 2's materials ({s.get('paint_failed', 0)} failed, {self.prof.get('paint_s', 0):.0f} s); parts without a mesh by package {s.get('no_mesh_kinds', {})}{extra}")
 
 
 def orientation(placed: dict[str, M.Mesh]) -> tuple[M.Vec, M.Vec, M.Vec]:
