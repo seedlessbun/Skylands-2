@@ -100,7 +100,9 @@ def test_the_type_track_bonus_table_matches_the_roadmap():
     assert [round(x, 1) for x in total] == [17.5, 11.5, 11.5, 15.5, 18.8, 25.0, 0, 0, 0]
     prof = (SRC / "proficiency.h").read_text(encoding="utf-8")
     assert "{ kMag, kShieldCap }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap }" in prof
-    assert "{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kShieldCap }, { kRate, kShieldRate }" in prof and "% kGunStats" in prof
+    assert "{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kProj }, { kRate, kShieldRate }" in prof and "% kGunStats" in prof
+    # 1.37.3: Torgue's second stat (bonus projectiles) is the character's: every gun gets it in full
+    assert "kSecondaryEverywhere[kMakers] = { false, false, false, false, false, false, true, false }" in prof and "if (kSecondaryEverywhere[m])" in prof
 
 
 def test_a_makers_second_stat_is_half_and_only_its_own_guns_get_it():

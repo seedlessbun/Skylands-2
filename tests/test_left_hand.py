@@ -38,7 +38,7 @@ def test_the_settings_file_carries_the_left_hand_keys():
     ini = skse.default_ini() if hasattr(skse, "default_ini") else ""
     text = ini if isinstance(ini, str) else ""
     src = (HERE.parent / "setup" / "skylands_setup" / "skse.py").read_text(encoding="utf-8")
-    for key in ("LeftHand=1", "LeftHandMouse=2", "LeftHandKey=34", "LeftHandRev=2"):
+    for key in ("LeftHand=1", "LeftHandMouse=-1", "LeftHandKey=34", "LeftHandRev=3"):
         assert key in src or key in text
     main = _main()
     for key in ('"LeftHand"', '"LeftHandMouse"', '"LeftHandKey"'):

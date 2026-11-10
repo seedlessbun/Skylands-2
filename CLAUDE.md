@@ -880,6 +880,13 @@ Other commands:
   unequipped from the left (`ActorEquipManager::UnequipObject`, slot `LookupByID<BGSEquipSlot>(0x13F43)` LeftHand) and, when the right holds no gun, equipped into the right (0x13F42); notice "Skylands: guns go in the
   right hand only"; log "left hand: Skylands gun .. was in the left hand ..: moved to the right hand / taken out of the left hand"; ini `DualGuns=1` (not written, read if present) switches it off for the Gunzerker later.
   (3) the mouse log skips codes 0/1 too. UNCONFIRMED in game: all of it (the poll, the equip moves; 0x13F43 = LeftHand is from memory of Skyrim.esm).
+- 0.61.2 in game (user, SkylandsNative.log 8049baed "SkylandsNative 411"): G works great, the middle mouse "had some issues" (the log has NO "seen down by Windows" line: the poll never saw it); the spell bugs are GONE
+  ("attack handler: the left button came up after a gun was taken in hand: its release goes to the game" x3), ammo is consistent, every shop shows ammo; `KeepGunsRight` works ("Skylands gun FE003C88 was in the left
+  hand (right hand FE003E0B, a gun): taken out of the left hand" x3); the enemy bar picks and drops the shielded hostile ("now about FF000E66 (the shielded hostile hit last)", "not in the crosshair or hit for a while",
+  "dead, gone or no longer hostile"); a maker shield bonus showed ("the player's capacity bonus changes the shield from 70.0% to 73.1%": Jakobs 8 capacity; rate/delay changes are not logged); a bonus projectile fired
+  ("prof: 1 bonus projectile(s) on 1 (4.0% chance)"). 0.61.3 (TestBuild-184, plugin 1.37.3 = "SkylandsNative 412"), the user: (1) no mouse button for the toggle by default (`LeftHandMouse=-1`, `LeftHandRev=3` resets
+  it once; the setting and the Windows poll for 2/3/4 stay); (2) Torgue's second stat is the BONUS PROJECTILE CHANCE again (`kMakerStats[6] = {kDamage, kProj}`) and it is the CHARACTER's: `kSecondaryEverywhere` makes
+  `BonusFor` give it to every gun in full (launchers still x0.5); Torgue no longer adds shield capacity. UNCONFIRMED in game. NEXT FEATURE: a Borderlands-style weapon wheel (4 slots, scroll to switch): interview in progress.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

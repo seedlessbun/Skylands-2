@@ -99,12 +99,12 @@ HideHands=1
 ; the first-person left arm is hidden while a gun is held in the right hand (1 on, 0 off)
 HideLeftHand=1
 ; the left-hand toggle: while a gun is held, this button switches the left attack button between the left hand (a spell or a shield) and aiming down the sights
-; (1 on, 0 off); it starts OFF after every load. LeftHandMouse: a mouse button (2 = middle; -1 none); LeftHandKey: a keyboard scan code as well (34 = G; -1 none)
+; (1 on, 0 off); it starts OFF after every load. LeftHandKey: a keyboard scan code (34 = G; -1 none); LeftHandMouse: a mouse button as well (2 = middle, 3 and 4 the side buttons; -1 none)
 ; (LeftHandRev: when it changes, the installer puts LeftHandMouse and LeftHandKey back to these values once)
 LeftHand=1
-LeftHandMouse=2
+LeftHandMouse=-1
 LeftHandKey=34
-LeftHandRev=2
+LeftHandRev=3
 Casings=1
 ; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
 Rockets=1
@@ -228,7 +228,7 @@ def merge_ini(default: str, old: str | None) -> tuple[str, bool]:
     # the drop toss of 0.53.0 was too weak (items still in the bodies): its strengths are put back to the new defaults once when DropTossRev changes
     if before.get("DropTossRev") != after.get("DropTossRev"):
         reset |= {"DropTossUp", "DropTossOut"}
-    # 0.61.1: the left-hand toggle gained the G key (the middle click did nothing for the user): the keys go back to the new defaults once
+    # 0.61.1: the left-hand toggle gained the G key; 0.61.3: no mouse button by default (the user: G only): the keys go back to the new defaults once
     if before.get("LeftHandRev") != after.get("LeftHandRev"):
         reset |= {"LeftHandMouse", "LeftHandKey"}
     for line in default.splitlines():

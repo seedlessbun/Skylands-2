@@ -39,10 +39,12 @@ namespace prof
 		"shield recharge rate", "shield recharge delay" };
 	// each maker's two signature stats (roadmap 3.3; Jakobs' second, fire rate, is a choice: "fire as fast as you can pull the trigger")
 	// 1.36.0 (the user): a maker's PRIMARY is a gun stat (its own guns full, every other gun a quarter); its SECONDARY is a shield stat that ALWAYS applies, whatever gun is
-	// held or shield worn. Bandit / Jakobs / Torgue capacity, Vladof / Hyperion / Maliwan recharge rate, Tediore / Dahl shorter delay (BL2: Bandit big shields, Tediore quick
+	// held or shield worn. Bandit / Jakobs capacity (1.37.3: Torgue = bonus projectile chance, for every gun), Vladof / Hyperion / Maliwan recharge rate, Tediore / Dahl shorter delay (BL2: Bandit big shields, Tediore quick
 	// delay, Vladof quick refill; the rest my pick). Five of them (Torgue, Maliwan, Jakobs, Dahl, Hyperion) are meant to move to grenade stats when grenades exist.
 	inline constexpr int kMakerStats[kMakers][2] = { { kMag, kShieldCap }, { kAccuracy, kShieldDelay }, { kAccuracy, kShieldRate }, { kDamage, kShieldCap },
-		{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kShieldCap }, { kRate, kShieldRate } };
+		{ kDamage, kShieldRate }, { kReload, kShieldDelay }, { kDamage, kProj }, { kRate, kShieldRate } };
+	// 1.37.3: Torgue's second stat is the bonus projectile chance again (the user), and like the shield stats it is the CHARACTER's: every gun gets it, not only Torgue's
+	inline constexpr bool kSecondaryEverywhere[kMakers] = { false, false, false, false, false, false, true, false };
 	constexpr int kLauncher = 5, kShotgun = 3;
 
 	// ---- settings (ini Prof...) ----
@@ -200,6 +202,10 @@ namespace prof
 			} else {  // every other gun: only that maker's PRIMARY stat, at the share (the secondary is for the maker's own guns)
 				const int s = kMakerStats[m][0];
 				a_out[s] += g_makerBonus[m][s] * g_otherMakers;
+				if (kSecondaryEverywhere[m]) {  // 1.37.3: Torgue's projectile chance belongs to the character: every gun gets it in full
+					const int s2 = kMakerStats[m][1];
+					a_out[s2] += g_makerBonus[m][s2] * g_ownMaker;
+				}
 			}
 		}
 		if (a_type == kLauncher) {

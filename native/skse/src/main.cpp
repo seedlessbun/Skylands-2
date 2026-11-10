@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 411;  // 1.37.2
+	constexpr std::int32_t kVersion = 412;  // 1.37.3
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -34,7 +34,7 @@ namespace
 	// there is no aiming down the sights; OFF at start and after every load or new game. The key only switches the mode: equipment is never touched.
 	std::atomic_bool g_leftHand{ false };
 	bool             g_leftHandFeature = true;  // ini LeftHand=0 switches the toggle off altogether
-	int              g_leftHandMouse = 2;       // ini LeftHandMouse: a mouse button (2 = middle; -1 none)
+	int              g_leftHandMouse = -1;      // ini LeftHandMouse: a mouse button (2 = middle, 3/4 side buttons; -1 none). 1.37.3: none by default (the user: G only)
 	int              g_leftHandKey = 34;        // ini LeftHandKey: a keyboard scan code as well (34 = G; -1 none). 1.37.1: G added, the middle click did nothing in 1.37.0
 	// 1.37.0: a Skylands gun is really in the hand (set by the tick, which runs only in gun mode). The attack handler swallows the buttons only then: gun mode
 	// left on after the gun went away kept spells from casting (the user's report).
@@ -3449,7 +3449,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 37, 2, 0 },
+	.Version = { 1, 37, 3, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
