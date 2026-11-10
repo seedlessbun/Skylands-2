@@ -887,6 +887,14 @@ Other commands:
   ("prof: 1 bonus projectile(s) on 1 (4.0% chance)"). 0.61.3 (TestBuild-184, plugin 1.37.3 = "SkylandsNative 412"), the user: (1) no mouse button for the toggle by default (`LeftHandMouse=-1`, `LeftHandRev=3` resets
   it once; the setting and the Windows poll for 2/3/4 stay); (2) Torgue's second stat is the BONUS PROJECTILE CHANCE again (`kMakerStats[6] = {kDamage, kProj}`) and it is the CHARACTER's: `kSecondaryEverywhere` makes
   `BonusFor` give it to every gun in full (launchers still x0.5); Torgue no longer adds shield capacity. UNCONFIRMED in game. NEXT FEATURE: WEAPON SLOTS, PHASE 1 (docs only): interview done, `docs/weapon-slots-roadmap.md` WRITTEN, AWAITING APPROVAL (4 slots, hold Left Alt + 1-4 to assign, wheel switches while a gun is drawn with the zoom swallowed, wrap + skip empty, lost gun empties its slot, notices only, the game's equip; open: section 6).
+- WEAPON SLOTS STAGE 1 = 0.62.0 (TestBuild-185, plugin 1.38.0 = "SkylandsNative 413"; the user approved the roadmap, section 6: pressing the slot that already holds the same gun leaves it unchanged).
+  `g_slots[4]` (base form ids, co-save 'SLOT' v1 via `SlotSave/SlotLoad/SlotRevert`); `InputSink`: `SlotKey` (56 Left Alt) held -> keyboard 1-4 (codes 2-5) = `QueueSlotAssign` (task -> `SlotAssign`: the gun in hand into the
+  slot, out of any other slot, notice "Slot N: name" / "(already)"); wheel codes 8/9 while `SlotsWantWheel()` (slots on, gun mode, gun really in hand, `AsActorState()->IsWeaponDrawn()`, no menu, a slot filled) =
+  `QueueSlotSwitch` (600 ms guard `g_swapUntilMs`; task -> `SlotSwitch`: next filled slot, wraps, skips empty and the gun in hand, a gun no longer in the pack empties its slot with a notice, `ActorEquipManager::EquipObject`
+  into RightHand 0x13F42); hooks on slot 1 = `CanProcess` (before the slots that moved on 1.7.99): `ZoomHook<0/1>` on `VTABLE_FirstPersonState[1]` / `VTABLE_ThirdPersonState[1]` (the PlayerInputHandler part) answer false
+  for Zoom In/Out while `SlotsWantWheel()`, `HotkeyHook` on `VTABLE_FavoritesHandler[0]` answers false for Hotkey1-4 while the slot key is held. Ini `WeaponSlots`, `SlotKey`, `SlotHookZoom`, `SlotHookHotkeys` (new keys
+  take defaults). Log "slots: on ...", "slots: ... hooked (vtable slot 1, was module+..)", "slots: slot N = ..", "slots: wheel down/up: slot a -> slot b (..)", "slots: slot N emptied", "the camera's zoom swallowed",
+  "a favourites hotkey (1-4) blocked", "slots: save/load - ..". UNCONFIRMED in game: all of it (that CanProcess is slot 1 on 1.7.104 for these handlers, that the zoom is handled by the camera states, the equip while drawn).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

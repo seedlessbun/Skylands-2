@@ -105,6 +105,13 @@ LeftHand=1
 LeftHandMouse=-1
 LeftHandKey=34
 LeftHandRev=3
+; weapon slots: with a gun in hand hold SlotKey (keyboard scan code; 56 = Left Alt) and press 1-4 to put the gun in that slot; the mouse wheel then
+; switches between the slotted guns while a gun is drawn (wheel down = next). WeaponSlots=0 turns it off; SlotHookZoom=0 lets the wheel zoom the camera as well,
+; SlotHookHotkeys=0 lets the favourites hotkeys 1-4 work while the slot key is held (both are only there in case a hook misbehaves)
+WeaponSlots=1
+SlotKey=56
+SlotHookZoom=1
+SlotHookHotkeys=1
 Casings=1
 ; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
 Rockets=1

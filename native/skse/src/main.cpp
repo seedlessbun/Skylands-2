@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 412;  // 1.37.3
+	constexpr std::int32_t kVersion = 413;  // 1.38.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -45,6 +45,15 @@ namespace
 	// 1.37.0: the game saw this button go down (right 0, left 1), so it also gets its release even if the buttons became ours meanwhile: a spell being cast
 	// when a gun was drawn never heard the button come up and went on casting (the user's report).
 	std::atomic_bool g_gameSawDown[2]{ false, false };
+	// 1.38.0: weapon slots (docs/weapon-slots-roadmap.md): four Skylands guns (base form ids, per character in the co-save 'SLOT'); hold SlotKey (Left Alt)
+	// and press 1-4 with a gun in hand to put it in a slot; the mouse wheel switches between them while a gun is drawn (the camera zoom is swallowed then)
+	bool                    g_slotsOn = true;        // ini WeaponSlots
+	int                     g_slotKey = 56;          // ini SlotKey (keyboard scan code; 56 = Left Alt)
+	bool                    g_slotHookZoom = true;   // ini SlotHookZoom: swallow the wheel's camera zoom while switching guns
+	bool                    g_slotHookHotkeys = true;  // ini SlotHookHotkeys: swallow the favourites hotkeys 1-4 while the slot key is held
+	std::atomic_bool        g_slotKeyHeld{ false };
+	std::atomic<RE::FormID> g_slots[4]{ 0, 0, 0, 0 };
+	std::atomic<long long>  g_swapUntilMs{ 0 };      // one switch at a time: wheel ticks before this are ignored
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
 	std::atomic<const char*> g_stage{ "start" };  // where the plugin last was (told by the crash handler)
@@ -128,6 +137,14 @@ namespace
 				}
 			} else if (key == "AimPredict") {
 				g_aimPredict = line.substr(eq + 1).find('0') == std::string::npos;
+			} else if (key == "WeaponSlots" || key == "SlotHookZoom" || key == "SlotHookHotkeys") {
+				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
+				(key == "WeaponSlots" ? g_slotsOn : key == "SlotHookZoom" ? g_slotHookZoom : g_slotHookHotkeys) = on;
+			} else if (key == "SlotKey") {
+				try {
+					g_slotKey = std::clamp(std::stoi(line.substr(eq + 1)), 1, 255);
+				} catch (...) {
+				}
 			} else if (key == "DualGuns") {
 				g_dualGuns = line.substr(eq + 1).find('1') != std::string::npos;
 			} else if (key == "LeftHand") {
@@ -208,6 +225,9 @@ namespace
 	}
 
 	bool MenuOpen();
+	void QueueSlotAssign(int a_slot);
+	void QueueSlotSwitch(int a_dir);
+	bool SlotsWantWheel();
 
 	// what the player holds in the left hand, for the log
 	std::string LeftHandText()
@@ -281,6 +301,19 @@ namespace
 				}
 				const auto button = e->AsButtonEvent();
 				if (!button) {
+					continue;
+				}
+				// 1.38.0: weapon slots. The slot key (held), 1-4 while it is held (assign), the wheel (switch).
+				if (g_slotsOn && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && static_cast<int>(button->GetIDCode()) == g_slotKey) {
+					g_slotKeyHeld = button->IsPressed();
+					continue;
+				}
+				if (g_slotsOn && g_slotKeyHeld.load() && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->IsDown() && button->GetIDCode() >= 2 && button->GetIDCode() <= 5) {
+					QueueSlotAssign(static_cast<int>(button->GetIDCode()) - 2);
+					continue;
+				}
+				if (g_slotsOn && button->GetDevice() == RE::INPUT_DEVICE::kMouse && button->IsDown() && (button->GetIDCode() == 8 || button->GetIDCode() == 9) && SlotsWantWheel()) {
+					QueueSlotSwitch(button->GetIDCode() == 9 ? 1 : -1);  // 9 = wheel down ("Zoom Out") = the next slot
 					continue;
 				}
 				if (button->GetDevice() == RE::INPUT_DEVICE::kMouse && button->IsDown()) {
@@ -426,6 +459,71 @@ namespace
 		const auto ui = RE::UI::GetSingleton();
 		return ui && ui->GameIsPaused();
 	}
+
+	// 1.38.0: the wheel's camera zoom is swallowed while it switches guns. The zoom is handled by the first- and third-person camera states, which are
+	// input handlers: their CanProcess (slot 1 of the PlayerInputHandler part, before the slots that moved on 1.7.99) answers "not mine" for Zoom In/Out then.
+	bool IsUserEvent(RE::InputEvent* a_event, const RE::BSFixedString& a_name)
+	{
+		if (!a_event || a_event->GetEventType() != RE::INPUT_EVENT_TYPE::kButton) {
+			return false;
+		}
+		const auto button = a_event->AsButtonEvent();
+		return button && button->QUserEvent() == a_name;
+	}
+
+	template <int N>
+	struct ZoomHook
+	{
+		static bool Thunk(RE::PlayerInputHandler* a_this, RE::InputEvent* a_event)
+		{
+			const auto events = RE::UserEvents::GetSingleton();
+			if (g_slotHookZoom && events && (IsUserEvent(a_event, events->zoomIn) || IsUserEvent(a_event, events->zoomOut)) && SlotsWantWheel()) {
+				static std::atomic_int told{ 0 };
+				if (told.fetch_add(1) < 10) {
+					SKSE::log::info("slots: the camera's zoom swallowed ({} camera) while the wheel switches guns", N == 0 ? "first-person" : "third-person");
+				}
+				return false;
+			}
+			return Original(a_this, a_event);
+		}
+
+		static void Install(REL::VariantID a_vtbl)
+		{
+			REL::Relocation<std::uintptr_t> vtbl{ a_vtbl };
+			Original = vtbl.write_vfunc(1, Thunk);
+			SKSE::log::info("slots: {} camera's input check hooked (vtable slot 1, was module+{:X})", N == 0 ? "first-person" : "third-person",
+				Original.address() - REL::Module::get().base());
+		}
+
+		static inline REL::Relocation<decltype(Thunk)> Original;
+	};
+
+	// 1.38.0: while the slot key is held, the favourites hotkeys 1-4 are not the game's (they pick a slot)
+	struct HotkeyHook
+	{
+		static bool Thunk(RE::FavoritesHandler* a_this, RE::InputEvent* a_event)
+		{
+			const auto events = RE::UserEvents::GetSingleton();
+			if (g_slotsOn && g_slotHookHotkeys && g_slotKeyHeld.load() && events &&
+				(IsUserEvent(a_event, events->hotkey1) || IsUserEvent(a_event, events->hotkey2) || IsUserEvent(a_event, events->hotkey3) || IsUserEvent(a_event, events->hotkey4))) {
+				static std::atomic_int told{ 0 };
+				if (told.fetch_add(1) < 10) {
+					SKSE::log::info("slots: a favourites hotkey (1-4) blocked while the slot key is held");
+				}
+				return false;
+			}
+			return Original(a_this, a_event);
+		}
+
+		static void Install()
+		{
+			REL::Relocation<std::uintptr_t> vtbl{ RE::VTABLE_FavoritesHandler[0] };
+			Original = vtbl.write_vfunc(1, Thunk);
+			SKSE::log::info("slots: favourites hotkeys' input check hooked (vtable slot 1, was module+{:X})", Original.address() - REL::Module::get().base());
+		}
+
+		static inline REL::Relocation<decltype(Thunk)> Original;
+	};
 
 	// ---- Papyrus ----------------------------------------------------------------------------------------------------
 
@@ -693,6 +791,157 @@ namespace
 			}
 		}
 		return nullptr;
+	}
+
+	// ---- 1.38.0: weapon slots ----
+	int CountOf(RE::TESObjectREFR* a_who, RE::TESBoundObject* a_item);  // below, with the ammo
+
+	long long NowMs()
+	{
+		return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
+
+	// the wheel is ours: slots on, a Skylands gun really in the hand and drawn, no menu, at least one slot filled
+	bool SlotsWantWheel()
+	{
+		if (!g_slotsOn || !g_gunMode.load() || !g_gunInHand.load() || MenuOpen()) {
+			return false;
+		}
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		const auto state = player ? player->AsActorState() : nullptr;
+		if (!state || !state->IsWeaponDrawn()) {
+			return false;
+		}
+		for (const auto& slot : g_slots) {
+			if (slot.load()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void SlotAssign(int a_slot)
+	{
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		GunInfo    info{};
+		const auto gun = player ? HeldGun(player, info) : nullptr;
+		if (!gun) {
+			RE::SendHUDMessage::ShowHUDMessage("Skylands: take the gun you want in hand first", nullptr, true);
+			return;
+		}
+		const auto  id = gun->GetFormID();
+		const char* name = gun->GetName() ? gun->GetName() : "";
+		if (g_slots[a_slot].load() == id) {  // the user: pressing the slot that already holds this gun leaves it as it is
+			RE::SendHUDMessage::ShowHUDMessage(fmt::format("Slot {}: {} (already)", a_slot + 1, name).c_str(), nullptr, true);
+			return;
+		}
+		for (auto& slot : g_slots) {  // a gun is in one slot at most
+			if (slot.load() == id) {
+				slot = 0;
+			}
+		}
+		g_slots[a_slot] = id;
+		RE::SendHUDMessage::ShowHUDMessage(fmt::format("Slot {}: {}", a_slot + 1, name).c_str(), nullptr, true);
+		SKSE::log::info("slots: slot {} = {:08X} \"{}\" (slots now {:08X} {:08X} {:08X} {:08X})", a_slot + 1, id, name, g_slots[0].load(), g_slots[1].load(), g_slots[2].load(), g_slots[3].load());
+	}
+
+	void SlotSwitch(int a_dir)
+	{
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		GunInfo    info{};
+		const auto cur = player ? HeldGun(player, info) : nullptr;
+		if (!player || !cur) {
+			return;
+		}
+		int curIdx = -1;
+		for (int i = 0; i < 4; ++i) {
+			if (g_slots[i].load() == cur->GetFormID()) {
+				curIdx = i;
+			}
+		}
+		const int start = curIdx >= 0 ? curIdx : (a_dir > 0 ? -1 : 4);
+		for (int k = 1; k <= 4; ++k) {
+			const int        i = ((start + a_dir * k) % 4 + 4) % 4;
+			const RE::FormID id = g_slots[i].load();
+			if (!id || id == cur->GetFormID()) {
+				continue;
+			}
+			const auto gun = RE::TESForm::LookupByID<RE::TESObjectWEAP>(id);
+			if (!gun || CountOf(player, gun) <= 0) {  // the user: a slot whose gun is gone empties
+				g_slots[i] = 0;
+				RE::SendHUDMessage::ShowHUDMessage(fmt::format("Slot {}: that gun is no longer with you", i + 1).c_str(), nullptr, true);
+				SKSE::log::info("slots: slot {} emptied ({:08X} is no longer in the pack)", i + 1, id);
+				continue;
+			}
+			const auto manager = RE::ActorEquipManager::GetSingleton();
+			const auto rightSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F42);  // Skyrim.esm RightHand
+			if (!manager) {
+				return;
+			}
+			manager->EquipObject(player, gun, nullptr, 1, rightSlot, true, false, true, false);
+			static int told = 0;
+			if (told++ < 40) {
+				SKSE::log::info("slots: wheel {}: slot {} -> slot {} ({:08X} \"{}\")", a_dir > 0 ? "down" : "up", curIdx + 1, i + 1, id, gun->GetName() ? gun->GetName() : "");
+			}
+			return;
+		}
+	}
+
+	void QueueSlotAssign(int a_slot)
+	{
+		if (const auto tasks = SKSE::GetTaskInterface()) {
+			tasks->AddTask([a_slot]() { SlotAssign(a_slot); });
+		}
+	}
+
+	void QueueSlotSwitch(int a_dir)
+	{
+		const long long now = NowMs();
+		if (now < g_swapUntilMs.load()) {  // a wheel notch sends several events: one switch at a time
+			return;
+		}
+		g_swapUntilMs = now + 600;
+		if (const auto tasks = SKSE::GetTaskInterface()) {
+			tasks->AddTask([a_dir]() { SlotSwitch(a_dir); });
+		}
+	}
+
+	constexpr std::uint32_t kSlotRecord = 0x544F4C53;  // 'SLOT'
+
+	void SlotSave(SKSE::SerializationInterface* a_intfc)
+	{
+		if (!a_intfc->OpenRecord(kSlotRecord, 1)) {
+			return;
+		}
+		for (const auto& slot : g_slots) {
+			a_intfc->WriteRecordData(static_cast<std::uint32_t>(slot.load()));
+		}
+		SKSE::log::info("slots: save - {:08X} {:08X} {:08X} {:08X}", g_slots[0].load(), g_slots[1].load(), g_slots[2].load(), g_slots[3].load());
+	}
+
+	bool SlotLoad(SKSE::SerializationInterface* a_intfc, std::uint32_t a_type, std::uint32_t a_version)
+	{
+		if (a_type != kSlotRecord) {
+			return false;
+		}
+		if (a_version != 1) {
+			return true;
+		}
+		for (auto& slot : g_slots) {
+			std::uint32_t id = 0, newId = 0;
+			a_intfc->ReadRecordData(id);
+			slot = id && a_intfc->ResolveFormID(id, newId) ? newId : 0;
+		}
+		SKSE::log::info("slots: load - {:08X} {:08X} {:08X} {:08X}", g_slots[0].load(), g_slots[1].load(), g_slots[2].load(), g_slots[3].load());
+		return true;
+	}
+
+	void SlotRevert()
+	{
+		for (auto& slot : g_slots) {
+			slot = 0;
+		}
+		g_slotKeyHeld = false;
 	}
 
 	// A short glowing flash where the bullet leaves, spawned by the plugin itself (a temporary effect of our own flash mesh that the game removes after
@@ -3231,6 +3480,16 @@ namespace
 			ClaimCrashFilter("after data load");
 			AttackHook::Install();
 			ReadyHook::Install();
+			if (g_slotsOn) {  // 1.38.0: weapon slots
+				if (g_slotHookZoom) {
+					ZoomHook<0>::Install(RE::VTABLE_FirstPersonState[1]);
+					ZoomHook<1>::Install(RE::VTABLE_ThirdPersonState[1]);
+				}
+				if (g_slotHookHotkeys) {
+					HotkeyHook::Install();
+				}
+				SKSE::log::info("slots: on; slot key {}, zoom hook {}, hotkey hook {}", g_slotKey, g_slotHookZoom, g_slotHookHotkeys);
+			}
 			StartPump();
 			shield::g_afterUpdate = []() {
 				QueueShieldHud();  // a UI task (see QueueHud)
@@ -3275,6 +3534,9 @@ namespace
 				shield::g_extraSave.push_back(&MagSave);  // 0.60.2: the magazines and the first-stock marks in the co-save ('SMAG')
 				shield::g_extraLoad.push_back(&MagLoad);
 				shield::g_extraRevert.push_back(&MagRevert);
+				shield::g_extraSave.push_back(&SlotSave);  // 1.38.0: the weapon slots ('SLOT')
+				shield::g_extraLoad.push_back(&SlotLoad);
+				shield::g_extraRevert.push_back(&SlotRevert);
 				badass::Start(holder);  // Badass enemies, stage 1: tiers and stats
 				// character progression, stage 1: kill XP into the level meter (progress.h)
 				progress::g_gunFacts = [](RE::FormID a_source, progress::GunFacts& a_out) -> bool {
@@ -3449,7 +3711,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 37, 3, 0 },
+	.Version = { 1, 38, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 

@@ -1,4 +1,4 @@
-# Weapon slots (Borderlands 2 style): roadmap (PHASE 1, awaiting the user's approval, no feature code yet)
+# Weapon slots (Borderlands 2 style): roadmap (APPROVED; stage 1 built as 0.62.0 / plugin 1.38.0)
 
 Written after 0.61.3 (TestBuild-184, plugin 1.37.3 = "SkylandsNative 412").
 
@@ -58,3 +58,6 @@ Why: Borderlands 2 swaps weapons on the wheel, which speeds play up and frees th
 
 ## 6. One question before stage 1
 - While Left Alt is held, should a press of 1-4 on a slot that already holds the SAME gun clear that slot (a way to empty a slot), or leave it as it is?
+
+## 7. Answer to section 6
+Pressing a slot that already holds the same gun leaves it unchanged ("Slot N: <name> (already)").
