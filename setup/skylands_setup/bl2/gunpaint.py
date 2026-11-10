@@ -86,6 +86,10 @@ def _tone_lut(shadow, mid, hi) -> list[tuple[float, float, float]]:
     return out
 
 
+METAL = ((0.03, 0.03, 0.035), (0.12, 0.12, 0.13), (0.42, 0.42, 0.45))  # shadow, midtone, highlight of a region the material leaves at its default
+METAL_D = (0.35, 0.35, 0.37)
+PATTERN_STRENGTH = 0.7  # the pattern's share where the material applies it fully (its true blend is compiled away; full strength looked too busy)
+
 GAMMA = bytes(min(255, int(round(255 * (i / 1023.0) ** (1 / 2.2)))) for i in range(1024))  # linear 0..1 in 1024 steps -> sRGB byte
 
 
@@ -150,8 +154,15 @@ class Painter:
         if lay is None:
             return None
         wa, wb, wc, wd, shade = lay
-        luts = [_tone_lut(_colour(vec.get(f"p_{r}colorshadow")), _colour(vec.get(f"p_{r}colormidtone")), _colour(vec.get(f"p_{r}colorhilight"))) for r in "abc"]
-        dcol = _colour(vec.get("p_dcolor"))
+        luts = []
+        for r in "abc":  # a region the material never colours keeps Master_Gun's default (white) in the game's files, but is metal on the real gun (Jakobs:
+            # its metal comes from a tiled decal texture we do not draw): plain gun metal then
+            sh, mid, hi = (vec.get(f"p_{r}color{t}") for t in ("shadow", "midtone", "hilight"))
+            if sh is None and mid is None and hi is None:
+                luts.append(_tone_lut(*METAL))
+            else:
+                luts.append(_tone_lut(_colour(sh), _colour(mid), _colour(hi)))
+        dcol = _colour(vec.get("p_dcolor"), METAL_D)
         la, lb, lc = luts
         n = SIDE * SIDE
         # pattern
@@ -175,7 +186,7 @@ class Painter:
             g = a * ta[1] + b * tb[1] + c * tc[1] + dd * dcol[1] * ds
             bl = a * ta[2] + b * tb[2] + c * tc[2] + dd * dcol[2] * ds
             if pat is not None:
-                w = a * pcs[0] + b * pcs[1] + c * pcs[2]
+                w = (a * pcs[0] + b * pcs[1] + c * pcs[2]) * PATTERN_STRENGTH
                 if w > 0.01:
                     y, x = divmod(i, SIDE)
                     pu = int(((x / SIDE) * sx + ox) % 1.0 * 256) & 255

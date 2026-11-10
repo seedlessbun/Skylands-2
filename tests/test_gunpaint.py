@@ -77,7 +77,7 @@ def test_a_pattern_darkens_only_its_regions():
     assert "pattern Stripes" in note
     _w, _h, rgb = dxt.decode(dds)
     row = S // 2
-    reds = {rgb[(row * S + x) * 3] > 128 for x in range(0, S // 2, 4)}
+    reds = {rgb[(row * S + x) * 3] > 200 for x in range(0, S // 2, 4)}
     assert reds == {True, False}  # region A striped
     blues = {rgb[(row * S + x) * 3 + 2] > 200 for x in range(S // 2 + 8, S, 4)}
     assert blues == {True}  # region B untouched (its pattern scale is 0)
