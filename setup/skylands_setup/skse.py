@@ -139,6 +139,8 @@ DespawnLegendary=16000
 DespawnEtech=16000
 ; rarity beams shown at once; past this the lowest rarity loses its beam first
 BeamCap=24
+; 1 = people never pick Skylands loot up from the ground (it is marked "no AI acquire"; one taken anyway is dropped again). 0 = they may.
+NoNpcPickup=1
 """
 
 

@@ -970,6 +970,12 @@ class Armory:
                 for part in RELOAD_PARTS:
                     reload_ids[part].append(0)
         bolts = self.rounds.bolts  # the vanilla bolt record the Borderlands rounds are built on (ammo items are built from scratch the same way)
+        # 0.62.2: the ammo items carry the vanilla bolt's projectile. With projectile 0 the game's combat AI crashed (SkyrimSE.exe+86AD98, reading
+        # [projectile + 0x88]) when an NPC weighed a bow or crossbow against the ammo in its pack (CombatBehaviorFindWeapon). Our guns never use it.
+        bolt_data = bolts.first("DATA") or b""
+        ammo_proj = struct.unpack_from("<I", bolt_data)[0] if len(bolt_data) >= 4 else 0
+        if not ammo_proj:
+            self.log.append("Staff guns: WARNING the vanilla bolt has no projectile; the ammo items get none (the combat AI may crash on them)")
         arrow_kw = m.find("KYWD", "VendorItemArrow")  # 0.60.1: merchants who deal in arrows show and buy the ammo (the barter list needs a vendor keyword)
         for kind in STAFF_KINDS:
             keep = [(sig, d) for sig, d in bolts.subrecords if sig in ("OBND", "MODL", "YNAM", "ZNAM")]
@@ -978,7 +984,7 @@ class Armory:
             am.subs.sort(key=lambda sd: ["EDID", "OBND", "FULL", "MODL", "YNAM", "ZNAM"].index(sd[0]))
             if arrow_kw is not None:
                 am.add("KSIZ", esp.u32(1)).add("KWDA", esp.u32(arrow_kw.form_id))
-            am.add("DATA", struct.pack("<IIfI", 0, 0, 1.0, STAFF_AMMO_VALUE[kind]))
+            am.add("DATA", struct.pack("<IIfI", ammo_proj, 0, 1.0, STAFF_AMMO_VALUE[kind]))
             self.view.override(am)
             self.log.append(f"Staff guns: ammo item {STAFF_AMMO_NAMES[kind]} ({am.form_id:08X}); guns of that type use it from the player's pack")
         gifts = [self.gifts.get(kind) or self.first_of.get(kind) or next(iter(self.first_of.values())) for kind in STAFF_KINDS]

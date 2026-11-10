@@ -899,6 +899,14 @@ Other commands:
   the hotkey block and the zoom swallowing logged, no exception lines. Seen: scrolling while the new gun comes out zooms the camera for a moment (gun mode and `IsWeaponDrawn` both drop during a swap). 0.62.1 (TestBuild-186,
   plugin 1.38.1 = "SkylandsNative 414"): `SlotsWantWheel` = slots on, no menu, a slot filled, and (within `SlotSwapGraceMs` 1500 of the last switch, `g_lastSwapMs`) or (a Skylands gun in EITHER hand via `HeldGun`
   and weapon state not `kSheathed`, i.e. drawing counts); no longer reads gun mode. UNCONFIRMED in game. The user also asked how Borderlands-style cel shading could be done (options given, nothing built).
+- 0.62.1 in game (user, CrashLogger log + SkylandsNative.log 2b56f963 "SkylandsNative 413"): cel shading deferred ("the cherry on top"). A CRASH in combat: "first chance exception C0000005 at SkyrimSE.exe+86AD98 (reading
+  address 88)", CrashLogger: `mulss xmm6, [rdi+0x88]` with rdi = 0 inside `CombatBehaviorFindWeapon` while a Nomad weighed a Hunting Bow on the ground against "Shotgun Shells" (our AMMO 0x070009EB) in its pack;
+  the same address and stack (+82D84E, +8768AC) as the unexplained 0.49.0 crash. Cause (code): the six `SkylandsAmmo_<kind>` AMMO records had PROJECTILE 0 in DATA, and the AI reads the ammo's projectile data. The user also
+  asked that enemies stop walking to Skylands loot on the ground and picking it up (it was then gone with their death: `Cleanup` takes every weapon). 0.62.2 (TestBuild-187, plugin 1.38.2 = "SkylandsNative 415"):
+  (1) every staff AMMO carries the vanilla bolt's projectile (`ammo_proj` from `bolts` DATA; our guns never use it; test in test_generate); (2) `despawn.h`: every loose run-time Skylands item (base with `SkylandsRarity_`) gets the
+  reference flag `kNoAIAcquire` (1 << 25, `AddChange(kFlags)` so the save keeps it) at each 3 s scan, also with `Despawn=0`; `DropSink`: a non-player actor that takes one from the WORLD anyway (container event with a reference,
+  old container 0; AddItem gifts have no reference and are not touched) drops it again in a queued task (`RemoveItem kDropping`, the new ref flagged). Ini `NoNpcPickup=1`. Log "despawn: N loose Skylands item(s) marked 'no AI acquire'",
+  "despawn: <id> \"name\" picked up <id> \"item\" (rarity) from the ground: dropped again as <id>". UNCONFIRMED in game: that the combat pickup honours the flag (if the "dropped again" lines appear often, it does not, and an NPC may loop).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

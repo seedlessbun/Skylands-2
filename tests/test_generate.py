@@ -648,6 +648,8 @@ def test_every_gun_type_is_a_staff_gun_and_no_crossbow_is_left(tmp_path):
     assert ammo == {f"SkylandsAmmo_{k}" for k in generate.STAFF_KINDS}
     ammo_recs = [r for r in read_plugin(tmp_path / "out" / "Data" / "SkylandsGunModels.esp", {"AMMO"})[1]["AMMO"] if r.edid.startswith("SkylandsAmmo_")]
     assert all(r.first("KWDA") == st.pack("<I", 0x6301) for r in ammo_recs), "every ammo item carries the fake Skyrim.esm's VendorItemArrow (merchants show it)"
+    projs = {st.unpack_from("<I", r.first("DATA"))[0] for r in ammo_recs}
+    assert 0 not in projs and len(projs) == 1, f"0.62.2: every ammo item carries the vanilla bolt's projectile (0 crashed the combat AI): {projs}"
 
 
 def test_rockets_are_bigger_and_slower_in_three_looks_and_shotguns_scatter_their_pellets(tmp_path):

@@ -20,6 +20,22 @@ namespace despawn
 
 	inline int   g_beamCap = 24;  // rarity beams at once (main.cpp TrackBeam): past it the lowest rarity loses its beam first
 	inline bool  g_on = true;  // Despawn=0 keeps everything
+	// 1.38.2: NPCs must not pick up Skylands loot from the ground (the user: enemies walked to it, took it, and it was gone after they died).
+	// Every loose item gets the reference flag "No AI Acquire" (kNoAIAcquire) at each scan; an NPC that takes one anyway drops it again (NoNpcPickup=0: off).
+	inline bool  g_noPickup = true;
+	inline std::atomic_int g_flagged{ 0 };
+	inline std::atomic_int g_droppedBack{ 0 };
+
+	inline bool NoAcquire(RE::TESObjectREFR* a_ref)
+	{
+		constexpr std::uint32_t kFlag = RE::TESObjectREFR::RecordFlags::kNoAIAcquire;
+		if (!g_noPickup || !a_ref || (a_ref->formFlags & kFlag) != 0) {
+			return false;
+		}
+		a_ref->formFlags |= kFlag;
+		a_ref->AddChange(RE::TESForm::ChangeFlags::kFlags);
+		return true;
+	}
 	inline float g_dist[7] = { 0.0f, 3000.0f, 4500.0f, 7000.0f, 10000.0f, 16000.0f, 16000.0f };  // by rarity 1 common ... 6 e-tech
 	inline constexpr const char* kRarityNames[7] = { "?", "common", "uncommon", "rare", "epic", "legendary", "e-tech" };
 
@@ -101,10 +117,11 @@ namespace despawn
 	{
 		const auto player = RE::PlayerCharacter::GetSingleton();
 		const auto tes = RE::TES::GetSingleton();
-		if (!g_on || !player || !tes || !player->GetParentCell() || RE::UI::GetSingleton()->GameIsPaused()) {
+		if ((!g_on && !g_noPickup) || !player || !tes || !player->GetParentCell() || RE::UI::GetSingleton()->GameIsPaused()) {
 			return;
 		}
 		shield::g_stage = "despawn";
+		int flaggedNow = 0;
 		const auto here = player->GetPosition();
 		const auto space = SpaceOf(player);
 		struct Hit
@@ -126,6 +143,12 @@ namespace despawn
 				return RE::BSContainer::ForEachResult::kContinue;
 			}
 			++loose[rarity];
+			if (NoAcquire(a_ref)) {
+				++flaggedNow;
+			}
+			if (!g_on) {
+				return RE::BSContainer::ForEachResult::kContinue;
+			}
 			const auto id = a_ref->GetFormID();
 			seen.insert(id);
 			const auto where = SpaceOf(a_ref);
@@ -154,6 +177,12 @@ namespace despawn
 			}
 			return RE::BSContainer::ForEachResult::kContinue;
 		});
+		if (flaggedNow > 0 && g_flagged.fetch_add(flaggedNow) < 200) {
+			SKSE::log::info("despawn: {} loose Skylands item(s) marked 'no AI acquire' (NPCs leave them on the ground)", flaggedNow);
+		}
+		if (!g_on) {
+			return;
+		}
 		// items not loaded now: the player went far away from where they were last seen -> marked, gone when next loaded
 		int marks = 0;
 		{
@@ -209,6 +238,32 @@ namespace despawn
 		{
 			if (!a_event) {
 				return RE::BSEventNotifyControl::kContinue;
+			}
+			// an NPC took a Skylands item from the ground: it drops it again (a task: never change a pack inside its own event)
+			if (g_noPickup && a_event->oldContainer == 0 && a_event->newContainer != 0 && a_event->newContainer != 0x14 && a_event->baseObj && a_event->reference) {  // a reference = taken from the world (not given by AddItem)
+				const auto base = RE::TESForm::LookupByID<RE::TESBoundObject>(a_event->baseObj);
+				const int  rarity = RarityOf(base);  // takes g_lock: before the guard below
+				const auto taker = rarity > 0 ? RE::TESForm::LookupByID<RE::Actor>(a_event->newContainer) : nullptr;
+				if (taker && !taker->IsPlayerRef()) {
+					const RE::FormID who = a_event->newContainer, what = a_event->baseObj;
+					const int        count = std::max(1, static_cast<int>(a_event->itemCount));
+					shield::Queue([who, what, count, rarity]() {
+						const auto actor = RE::TESForm::LookupByID<RE::Actor>(who);
+						const auto item = RE::TESForm::LookupByID<RE::TESBoundObject>(what);
+						if (!actor || !item || actor->IsDead()) {
+							return;
+						}
+						const auto handle = actor->RemoveItem(item, count, RE::ITEM_REMOVE_REASON::kDropping, nullptr, nullptr);
+						const auto ref = handle.get();
+						NoAcquire(ref.get());
+						if (g_droppedBack.fetch_add(1) < 40) {
+							const char* an = actor->GetName();
+							const char* in = item->GetName();
+							SKSE::log::info("despawn: {:08X} \"{}\" picked up {:08X} \"{}\" ({}) from the ground: dropped again{}", who, an ? an : "?", what, in ? in : "?",
+								kRarityNames[std::clamp(rarity, 0, 6)], ref ? fmt::format(" as {:08X}", ref->GetFormID()) : " (no reference came back)");
+						}
+					});
+				}
 			}
 			const auto       ptr = a_event->reference.get();
 			const RE::FormID id = ptr ? ptr->GetFormID() : 0;
@@ -341,6 +396,13 @@ namespace despawn
 		if (a_key == "BeamCap") {
 			try {
 				g_beamCap = std::clamp(std::stoi(a_value), 1, 96);
+			} catch (...) {
+			}
+			return true;
+		}
+		if (a_key == "NoNpcPickup") {
+			try {
+				g_noPickup = std::stoi(a_value) != 0;
 			} catch (...) {
 			}
 			return true;
