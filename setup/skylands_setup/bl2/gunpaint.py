@@ -14,6 +14,7 @@ The shader's wiring is compiled away in the cooked files, so the mix below is a 
 from __future__ import annotations
 
 import hashlib
+import math
 import struct
 
 from . import gunmesh
@@ -88,9 +89,13 @@ def _tone_lut(shadow, mid, hi) -> list[tuple[float, float, float]]:
 
 METAL = ((0.03, 0.03, 0.035), (0.12, 0.12, 0.13), (0.42, 0.42, 0.45))  # shadow, midtone, highlight of a region the material leaves at its default
 METAL_D = (0.35, 0.35, 0.37)
-PATTERN_STRENGTH = 0.7  # the pattern's share where the material applies it fully (its true blend is compiled away; full strength looked too busy)
+PATTERN_STRENGTH = 0.85  # an overlay's share where the material applies it fully (its true blend is compiled away)
 
-GAMMA = bytes(min(255, int(round(255 * (i / 1023.0) ** (1 / 2.2)))) for i in range(1024))  # linear 0..1 in 1024 steps -> sRGB byte
+LINEAR = [(v / 255.0) ** 2.2 for v in range(256)]  # sRGB byte -> linear
+# 0.63.1: linear 0..4 in 1024 steps -> sRGB byte through a soft roll-off (1 - e^(-1.4 c)): BL2's colours go past 1 (Dahl and Jakobs midtones 1.3) and
+# its lighting tames them; a hard clip turned those guns white
+GAMMA = bytes(min(255, int(round(255 * (1.0 - math.exp(-1.4 * (i * 4.0 / 1023.0))) ** (1 / 2.2)))) for i in range(1024))
+LIT = [1.15 * (i / 255.0) for i in range(256)]  # the colours are TINTS of the shading atlas (BL2 leaves unused ones at 1.0 = no tint, Dahl's tan midtone is 1.74): colour x shade
 
 
 class Painter:
@@ -140,6 +145,21 @@ class Painter:
         self.layers[key] = result
         return result
 
+    def _overlay(self, path: str, scale_pos, colour, weights):
+        """(linear values, sx, sy, ox, oy, full colour?, colour, region weights) of a tiled overlay texture, or None."""
+        img = self._image(path, 256)
+        if not img:
+            return None
+        full = "_comp" not in path.lower()
+        rgb = img[2]
+        if full:
+            lin = [LINEAR[v] for v in rgb]
+        else:  # a packed texture: its first channel as plain 0..1 shading
+            lin = [v / 255.0 for v in rgb]
+        sp = scale_pos
+        sx, sy, ox, oy = (float(sp[0]), float(sp[1]), float(sp[2]), float(sp[3])) if isinstance(sp, list) and len(sp) >= 4 else (1.0, 1.0, 0.0, 0.0)
+        return lin, sx, sy, ox, oy, full, colour, weights
+
     def paint(self, mic: str, gun_type: str) -> tuple[bytes, str] | None:
         """(DXT1 DDS, note) of the gun material `mic` for a gun of `gun_type`, or None (then the caller falls back)."""
         p = material_params(self.ix, mic)
@@ -165,42 +185,58 @@ class Painter:
         dcol = _colour(vec.get("p_dcolor"), METAL_D)
         la, lb, lc = luts
         n = SIDE * SIDE
-        # pattern
-        pat = None
+        # 0.63.1: overlays. The pattern (p_Pattern by p_PatternChannelScale per region) and, when the material says which regions take it
+        # (p_DecalChannel set), a tiled "decal" that is a pattern texture (Jakobs: Pattern_JacobsCommonMetal on regions B and C). A full-colour
+        # texture REPLACES the region's colour (Jakobs wood, Dahl camo: texture x its colour x the shading); a packed one ("_Comp", grey) only shades it.
+        layers = []
+        notes = []
         ptex = tex.get("p_pattern")
         pcs = _colour(vec.get("p_patternchannelscale"), (0.0, 0.0, 0.0))
         if isinstance(ptex, str) and "stub" not in ptex.lower() and any(pcs):
-            img = self._image(ptex, 256)
-            if img:
-                pat = img
-        pcol = _colour(vec.get("p_patterncolor"))
-        sp = vec.get("p_patternscaleposition")
-        sx, sy, ox, oy = (float(sp[0]), float(sp[1]), float(sp[2]), float(sp[3])) if isinstance(sp, list) and len(sp) >= 4 else (1.0, 1.0, 0.0, 0.0)
+            lay = self._overlay(ptex, vec.get("p_patternscaleposition"), _colour(vec.get("p_patterncolor")), pcs)
+            if lay:
+                layers.append(lay)
+                notes.append(f"pattern {ptex.rsplit('.', 1)[-1]} ({'colour' if lay[5] else 'shading'})")
+        dtex = tex.get("p_decal")
+        dch = vec.get("p_decalchannel")
+        if isinstance(dtex, str) and ".patterns." in dtex.lower() and isinstance(dch, list) and any(dch[:3]):
+            lay = self._overlay(dtex, vec.get("p_decalscaleposition"), _colour(vec.get("p_decalcolor")), _colour(dch, (0.0, 0.0, 0.0)))
+            if lay:
+                layers.append(lay)
+                notes.append(f"tiled decal {dtex.rsplit('.', 1)[-1]}")
         out = bytearray(n * 3)
         for i in range(n):
             di = shade[i]
             a, b, c, dd = wa[i], wb[i], wc[i], wd[i]
             ta, tb, tc = la[di], lb[di], lc[di]
             ds = di / 255.0
-            r = a * ta[0] + b * tb[0] + c * tc[0] + dd * dcol[0] * ds
-            g = a * ta[1] + b * tb[1] + c * tc[1] + dd * dcol[1] * ds
-            bl = a * ta[2] + b * tb[2] + c * tc[2] + dd * dcol[2] * ds
-            if pat is not None:
-                w = (a * pcs[0] + b * pcs[1] + c * pcs[2]) * PATTERN_STRENGTH
-                if w > 0.01:
-                    y, x = divmod(i, SIDE)
-                    pu = int(((x / SIDE) * sx + ox) % 1.0 * 256) & 255
-                    pv = int(((y / SIDE) * sy + oy) % 1.0 * 256) & 255
-                    pv_ = pat[2][(pv * 256 + pu) * 3] / 255.0
-                    r *= 1 - w + w * pv_ * pcol[0]
-                    g *= 1 - w + w * pv_ * pcol[1]
-                    bl *= 1 - w + w * pv_ * pcol[2]
+            lit = LIT[di]
+            r = (a * ta[0] + b * tb[0] + c * tc[0]) * lit + dd * dcol[0] * ds
+            g = (a * ta[1] + b * tb[1] + c * tc[1]) * lit + dd * dcol[1] * ds
+            bl = (a * ta[2] + b * tb[2] + c * tc[2]) * lit + dd * dcol[2] * ds
+            for lin, sx, sy, ox, oy, full, col, wts in layers:
+                w = a * wts[0] + b * wts[1] + c * wts[2]
+                if w <= 0.01:
+                    continue
+                w = min(1.0, w) * PATTERN_STRENGTH
+                y, x = divmod(i, SIDE)
+                q = 3 * ((int(((y / SIDE) * sy + oy) % 1.0 * 256) & 255) * 256 + (int(((x / SIDE) * sx + ox) % 1.0 * 256) & 255))
+                if full:  # the texture's own colour, lit by the gun's shading
+                    k = lit
+                    r = r * (1 - w) + w * lin[q] * col[0] * k
+                    g = g * (1 - w) + w * lin[q + 1] * col[1] * k
+                    bl = bl * (1 - w) + w * lin[q + 2] * col[2] * k
+                else:
+                    v = lin[q]
+                    r *= 1 - w + w * v * col[0]
+                    g *= 1 - w + w * v * col[1]
+                    bl *= 1 - w + w * v * col[2]
             o = 3 * i
-            out[o] = GAMMA[min(1023, max(0, int(r * 1023)))]
-            out[o + 1] = GAMMA[min(1023, max(0, int(g * 1023)))]
-            out[o + 2] = GAMMA[min(1023, max(0, int(bl * 1023)))]
+            out[o] = GAMMA[min(1023, max(0, int(r * 255.75)))]
+            out[o + 1] = GAMMA[min(1023, max(0, int(g * 255.75)))]
+            out[o + 2] = GAMMA[min(1023, max(0, int(bl * 255.75)))]
         dds = encode_fast(SIDE, SIDE, bytes(out))
-        note = f"masks {masks.rsplit('.', 1)[-1]}, shading {atlas.rsplit('.', 1)[-1]} channel {'RGB'[channel]}, pattern {ptex.rsplit('.', 1)[-1] if pat else 'none'}"
+        note = f"masks {masks.rsplit('.', 1)[-1]}, shading {atlas.rsplit('.', 1)[-1]} channel {'RGB'[channel]}, {', '.join(notes) or 'no pattern'}"
         return dds, note
 
 

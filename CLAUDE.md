@@ -929,6 +929,13 @@ Other commands:
   the primary keeps odd levels + milestones; those makers no longer give shield capacity/rate); (4) `vitals.h`: the vitals and `PlayerSpeedBonus` 25 (SpeedMult +25 points, carry-weight nudge) as tracked temporary modifiers (Revert on
   load), `NoFallDamage` 1 = GMST `fJumpFallHeightMult` 0 at data load (all actors). Log "gun paint: ..." / summary "N gun paints made" (setup log), "vitals: ..." (plugin). UNCONFIRMED in game: all of it (the paint's look, AR UVs, the speed
   taking effect, fall damage gone, the vitals on the HUD bars).
+- 0.63.0 in game (user, setup log 8fb9cbcd "0.63.0", SkylandsNative.log 8dd7991a "SkylandsNative 416", screenshot): speed bonus and no fall damage CONFIRMED; guns "look more textured" and more unique (setup log: "160 gun paints made ...
+  (0 failed, 120 s)"), but some makers do not look like theirs: the Jakobs common pistol came out white/grey stripes ("like Dahl"). Causes (code): (1) Jakobs' wood (`Pattern_JakobsCommon`/`JakobsRareWood`) and Dahl's camo are FULL-COLOUR
+  textures, used as a grey multiplier (R channel) over the region colours; (2) Jakobs' metal is a TILED texture in the decal slot (`p_Decal = Patterns.Pattern_JacobsCommonMetal`, `p_DecalChannel` 0,1,1 = regions B and C), not drawn;
+  (3) colours past 1.0 (Dahl midtone 1.74, highlights 1.4-1.5; unused ones exactly 1.0) were hard-clipped to white: they are TINTS of the shading atlas. 0.63.1 (TestBuild-190, python only, plugin 1.39.0): `Painter._overlay`:
+  a full-colour overlay (path without "_comp") REPLACES the region colour (texture, linearised, x its colour x the lit shade), a "_Comp" one still shades; the decal is drawn as a tiled overlay only when it is a `.Patterns.`
+  texture AND `p_DecalChannel` is set (logos are still skipped); region colour = tint x `LIT` (1.15 x shade); output through a soft roll-off 1 - e^(-1.4 c) over 0..4 (`GAMMA`); `PATTERN_STRENGTH` 0.85. Checked only on the
+  survey's 256 px images in UV space (no in-game reference): Jakobs rare shows orange wood, Jakobs common grey weathered wood (that IS BL2's common Jakobs wood), Dahl common pale tan/grey. UNCONFIRMED in game: the look.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.
