@@ -34,3 +34,13 @@ def test_the_wheel_stays_with_the_guns_while_a_swap_takes_the_new_gun_out():
     assert "GetWeaponState() != RE::WEAPON_STATE::kSheathed" in want and "HeldGun(player, info)" in want
     assert "g_gunMode" not in want  # gun mode drops for a moment during a swap
     assert "g_lastSwapMs = NowMs();" in main
+
+
+def test_the_hud_shows_the_guns_slot_number_before_its_name():
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    main = (root / "native/skse/src/main.cpp").read_text()
+    assert 'fmt::format("<font size=\\"15\\" color=\\"#D8D8D8\\">[{}]</font> ", slot)' in main
+    assert "g_slots[i].load() == g_gun.weapon" in main and "g_slotsOn && g_slotHudNumber" in main
+    assert "g_slotNameAgain = true;" in main and "if (g_slotNameAgain.exchange(false))" in main and 'key == "SlotHudNumber"' in main
+    assert "SlotHudNumber=1" in (root / "setup/skylands_setup/skse.py").read_text()

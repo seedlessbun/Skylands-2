@@ -114,6 +114,8 @@ SlotHookZoom=1
 SlotHookHotkeys=1
 ; after a wheel switch the wheel stays with the guns this long (milliseconds), so the camera does not zoom while the new gun comes out
 SlotSwapGraceMs=1500
+; 1 = the gun's weapon slot number shows in front of its name on the HUD ("[2] Gun Name"); 0 = name only
+SlotHudNumber=1
 Casings=1
 ; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
 Rockets=1

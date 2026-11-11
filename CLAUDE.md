@@ -936,6 +936,9 @@ Other commands:
   a full-colour overlay (path without "_comp") REPLACES the region colour (texture, linearised, x its colour x the lit shade), a "_Comp" one still shades; the decal is drawn as a tiled overlay only when it is a `.Patterns.`
   texture AND `p_DecalChannel` is set (logos are still skipped); region colour = tint x `LIT` (1.15 x shade); output through a soft roll-off 1 - e^(-1.4 c) over 0..4 (`GAMMA`); `PATTERN_STRENGTH` 0.85. Checked only on the
   survey's 256 px images in UV space (no in-game reference): Jakobs rare shows orange wood, Jakobs common grey weathered wood (that IS BL2's common Jakobs wood), Dahl common pale tan/grey. UNCONFIRMED in game: the look.
+- 0.63.1 in game (user): the guns "look better, less cartoony, but not perfect" - good for now, more tuning LATER. 0.63.2 (TestBuild-191, plugin 1.39.1 = "SkylandsNative 417"), the user: the HUD shows the gun's weapon slot as a small "[N]"
+  (size 15, light grey) in front of its name (`HudFrame`, slot = the `g_slots` entry equal to `g_gun.weapon`, the base id; nothing when unslotted); assigning a slot sets `g_slotNameAgain`, and the tick shows the name again for 4.5 s
+  so the new number is seen; ini `SlotHudNumber=1`. UNCONFIRMED in game.
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

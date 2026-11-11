@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 416;  // 1.39.0
+	constexpr std::int32_t kVersion = 417;  // 1.39.1
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -54,6 +54,8 @@ namespace
 	std::atomic_bool        g_slotKeyHeld{ false };
 	std::atomic<RE::FormID> g_slots[4]{ 0, 0, 0, 0 };
 	std::atomic<long long>  g_swapUntilMs{ 0 };      // one switch at a time: wheel ticks before this are ignored
+	bool                    g_slotHudNumber = true;  // ini SlotHudNumber (1.39.1): the gun's slot number shown in front of its name on the HUD
+	std::atomic_bool        g_slotNameAgain{ false };  // a slot was just set: show the name (with its new number) again
 	int                     g_slotSwapGraceMs = 1500;  // ini SlotSwapGraceMs: the wheel stays ours this long after a switch (1.38.1)
 
 	bool  g_flash = true;  // a short glowing flash at the muzzle with every bullet (ini: MuzzleFlash=0 turns it off)
@@ -141,6 +143,8 @@ namespace
 			} else if (key == "WeaponSlots" || key == "SlotHookZoom" || key == "SlotHookHotkeys") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "WeaponSlots" ? g_slotsOn : key == "SlotHookZoom" ? g_slotHookZoom : g_slotHookHotkeys) = on;
+			} else if (key == "SlotHudNumber") {
+				g_slotHudNumber = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "SlotSwapGraceMs") {
 				try {
 					g_slotSwapGraceMs = std::clamp(std::stoi(line.substr(eq + 1)), 0, 10000);
@@ -857,6 +861,7 @@ namespace
 			}
 		}
 		g_slots[a_slot] = id;
+		g_slotNameAgain = true;  // the HUD shows the name again, now with its slot number
 		RE::SendHUDMessage::ShowHUDMessage(fmt::format("Slot {}: {}", a_slot + 1, name).c_str(), nullptr, true);
 		SKSE::log::info("slots: slot {} = {:08X} \"{}\" (slots now {:08X} {:08X} {:08X} {:08X})", a_slot + 1, id, name, g_slots[0].load(), g_slots[1].load(), g_slots[2].load(), g_slots[3].load());
 	}
@@ -2788,7 +2793,14 @@ namespace
 		// the name of the gun in the colour of its rarity, for a moment after it is taken up, fading at the end
 		const double left = std::chrono::duration<double>(g_gun.nameUntil - a_now).count();
 		if (left > 0.0) {
-			const std::string name = std::string("<p align=\"right\"><font face=\"$EverywhereBoldFont\" size=\"21\" color=\"") + g_gun.rarityColor + "\">" + HtmlEscape(g_gun.name) + "</font></p>";
+			int slot = 0;  // 1.39.1 (the user): the weapon slot the gun is in, as a small number in front of its name
+			for (int i = 0; i < 4 && g_slotsOn && g_slotHudNumber; ++i) {
+				if (g_gun.weapon && g_slots[i].load() == g_gun.weapon) {
+					slot = i + 1;
+				}
+			}
+			const std::string tag = slot ? fmt::format("<font size=\"15\" color=\"#D8D8D8\">[{}]</font> ", slot) : std::string();
+			const std::string name = std::string("<p align=\"right\"><font face=\"$EverywhereBoldFont\" size=\"21\" color=\"") + g_gun.rarityColor + "\">" + tag + HtmlEscape(g_gun.name) + "</font></p>";
 			HudText(movie.get(), "_root.SkylandsHUD.tfName", name, lastName);
 			HudSet(movie.get(), "_root.SkylandsHUD.tfName", left < 1.2 ? left / 1.2 * 100.0 : 100.0, true);
 		} else {
@@ -2950,6 +2962,9 @@ namespace
 		}
 		const auto now = Clock::now();
 		g_hudShow = true;
+		if (g_slotNameAgain.exchange(false)) {
+			g_gun.nameUntil = now + std::chrono::milliseconds(4500);
+		}
 		if (weapon->GetFormID() != g_gun.weapon) {  // another gun than before: its numbers, and the rounds it had (a fresh one is full)
 			if (g_gun.weapon) {
 				g_gun.mags[g_gun.weapon] = g_gun.mag;
@@ -3729,7 +3744,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 39, 0, 0 },
+	.Version = { 1, 39, 1, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
