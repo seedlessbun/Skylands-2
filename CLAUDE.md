@@ -939,6 +939,13 @@ Other commands:
 - 0.63.1 in game (user): the guns "look better, less cartoony, but not perfect" - good for now, more tuning LATER. 0.63.2 (TestBuild-191, plugin 1.39.1 = "SkylandsNative 417"), the user: the HUD shows the gun's weapon slot as a small "[N]"
   (size 15, light grey) in front of its name (`HudFrame`, slot = the `g_slots` entry equal to `g_gun.weapon`, the base id; nothing when unslotted); assigning a slot sets `g_slotNameAgain`, and the tick shows the name again for 4.5 s
   so the new number is seen; ini `SlotHudNumber=1`. UNCONFIRMED in game.
+  0.63.2 was NOT sent: 0.64.0 (TestBuild-192, plugin 1.40.0 = "SkylandsNative 418") holds it plus the STATS MENU (the user: a menu for each gun type / maker proficiency and its bonuses, and a character sheet on an
+  out-of-the-way key like Skyrim's "/"): `StatsKey` 43 (backslash; 0 off) -> `QueueStatsMenu(0)` (task) -> `StatsMenu(page, index)` -> `ShowBox` = `RE::MessageBoxMenu::Create(text, callback, 0, 4, 10, buttons..., nullptr)` (the same call as
+  CommonLib's `DebugMessageBox`, buttons as const char*, at most 10). Page 0 = CHARACTER SHEET (`SheetText`: with a gun in hand its BASE stats from `GunOf` + the difference the bonuses make, computed like `TickGun`: damage = enchantment
+  magnitude (x pellets) x (1+Variable09%) x (1+prof damage%), fire rate 1/interval x `Relic(V06)` x prof, reload / quick, magazine x (1+V04%) x prof, spread / accuracy, bonus projectile chance; without a gun the percent bonuses
+  every gun gets (`BonusFor(-1,-1)` + relic variables); shield capacity/recharge/delay %, Health/Magicka/Stamina base + `vitals::g_applied`, speed) with buttons Gun Types / Manufacturers / Close; pages 1/2 = one button per track
+  ("SMG 4", "*n" Legendary) + Back; pages 3/4 = the track (`prof::TrackOf`: level, cap, XP / next cost, bonuses) with Close / Back. The callback logs "stats menu: page p button b of n" (first 20). UNCONFIRMED in game: all of it
+  (that the callback's button index starts at 0 with offset 0, Esc's value, how much text the box shows before it is cut).
 - Stage 2: `docs/stage2-animation-types.md` is written; the user is unsure one-handed and hand-to-hand help, so drop them from
   the proposed lineup unless asked; "a new weapon type" would need new animations and a behavior-graph patch (or SKSE with an
   animation replacer), not plain Papyrus.

@@ -44,3 +44,15 @@ def test_the_hud_shows_the_guns_slot_number_before_its_name():
     assert "g_slots[i].load() == g_gun.weapon" in main and "g_slotsOn && g_slotHudNumber" in main
     assert "g_slotNameAgain = true;" in main and "if (g_slotNameAgain.exchange(false))" in main and 'key == "SlotHudNumber"' in main
     assert "SlotHudNumber=1" in (root / "setup/skylands_setup/skse.py").read_text()
+
+
+def test_the_stats_menu_key_opens_the_character_sheet_and_the_proficiencies():
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    main = (root / "native/skse/src/main.cpp").read_text()
+    assert "RE::MessageBoxMenu::Create(a_text.c_str()," in main and "QueueStatsMenu(0, -1);" in main and 'key == "StatsKey"' in main
+    for text in ('"CHARACTER SHEET\\n\\n"', '{ "Gun Types", "Manufacturers", "Close" }', '"Fire rate: {:.1f}/s ({:+.1f}/s)\\n"', '"No Skylands gun in hand.', '{ "Close", "Back" }'):
+        assert text in main, text
+    prof = (root / "native/skse/src/proficiency.h").read_text()
+    assert "inline TrackView TrackOf(int a_index, bool a_maker)" in prof
+    assert "StatsKey=43" in (root / "setup/skylands_setup/skse.py").read_text()

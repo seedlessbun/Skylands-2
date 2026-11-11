@@ -261,6 +261,32 @@ namespace prof
 		return v;
 	}
 
+	// 1.40.0: one track for the stats menu (statsmenu in main.cpp): level, XP into the level and the next level's cost, Legendary count, its bonuses (percent)
+	struct TrackView
+	{
+		int   level = 0, legendary = 0, cap = 0;
+		float xp = 0.0f, next = 1.0f;
+		float bonus[kStats]{};
+	};
+	inline TrackView TrackOf(int a_index, bool a_maker)
+	{
+		TrackView v;
+		const std::lock_guard guard(g_lock);
+		if (a_maker ? (a_index < 0 || a_index >= kMakers) : (a_index < 0 || a_index >= kTypes)) {
+			return v;
+		}
+		const Track& t = a_maker ? g_maker[a_index] : g_type[a_index];
+		v.level = t.level;
+		v.legendary = t.legendary;
+		v.cap = a_maker || !g_legOn ? 0 : CapOf(t);
+		v.xp = t.xp;
+		v.next = Cost(t.level, a_maker);
+		for (int s = 0; s < kStats; ++s) {
+			v.bonus[s] = a_maker ? g_makerBonus[a_index][s] : g_typeBonus[a_index][s] + g_typeKept[a_index][s];
+		}
+		return v;
+	}
+
 	// ---- booking: from progress.h's hit sink (the game thread) ----
 	inline void NoteDeath(RE::FormID a_id)
 	{

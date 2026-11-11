@@ -116,6 +116,8 @@ SlotHookHotkeys=1
 SlotSwapGraceMs=1500
 ; 1 = the gun's weapon slot number shows in front of its name on the HUD ("[2] Gun Name"); 0 = name only
 SlotHudNumber=1
+; the character sheet and proficiency menu key (keyboard scan code; 43 = backslash \, 0 = off)
+StatsKey=43
 Casings=1
 ; a rocket leaves flame and smoke behind it, and its launcher a cloud of back-blast smoke (1 on, 0 off)
 Rockets=1

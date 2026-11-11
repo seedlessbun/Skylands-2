@@ -22,7 +22,7 @@
 
 namespace
 {
-	constexpr std::int32_t kVersion = 417;  // 1.39.1
+	constexpr std::int32_t kVersion = 418;  // 1.40.0
 
 	std::atomic_bool g_held{ false };
 	std::atomic_bool g_gunMode{ false };  // a Skylands gun is in the hand: the attack button is ours, the game's attack handler does not get it
@@ -143,6 +143,11 @@ namespace
 			} else if (key == "WeaponSlots" || key == "SlotHookZoom" || key == "SlotHookHotkeys") {
 				const bool on = line.substr(eq + 1).find('0') == std::string::npos;
 				(key == "WeaponSlots" ? g_slotsOn : key == "SlotHookZoom" ? g_slotHookZoom : g_slotHookHotkeys) = on;
+			} else if (key == "StatsKey") {
+				try {
+					g_statsKey = std::clamp(std::stoi(line.substr(eq + 1)), 0, 255);
+				} catch (...) {
+				}
 			} else if (key == "SlotHudNumber") {
 				g_slotHudNumber = line.substr(eq + 1).find('0') == std::string::npos;
 			} else if (key == "SlotSwapGraceMs") {
@@ -236,6 +241,8 @@ namespace
 
 	bool MenuOpen();
 	void QueueSlotAssign(int a_slot);
+	void QueueStatsMenu(int a_page, int a_index);  // 1.40.0: the stats menu (below)
+	int  g_statsKey = 43;                          // ini StatsKey (keyboard scan code; 43 = backslash), 0 = off
 	void QueueSlotSwitch(int a_dir);
 	bool SlotsWantWheel();
 
@@ -311,6 +318,11 @@ namespace
 				}
 				const auto button = e->AsButtonEvent();
 				if (!button) {
+					continue;
+				}
+				// 1.40.0: the stats menu key (the character sheet, then the proficiencies)
+				if (g_statsKey > 0 && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->IsDown() && static_cast<int>(button->GetIDCode()) == g_statsKey && !MenuOpen()) {
+					QueueStatsMenu(0, -1);
 					continue;
 				}
 				// 1.38.0: weapon slots. The slot key (held), 1-4 while it is held (assign), the wheel (switch).
@@ -2449,6 +2461,157 @@ namespace
 		return (std::max)(0.2f, 1.0f + percent * 0.01f);
 	}
 
+	// ---- 1.40.0: the stats menu (the user): the StatsKey opens the character sheet in a game message box (no records, no scripts);
+	// its buttons lead to the gun type and manufacturer proficiencies, each with its level, XP and bonuses. Pages: 0 sheet, 1 type list, 2 maker list,
+	// 3 one type (a_index), 4 one maker (a_index). The buttons' callback queues the next page as a task.
+	std::atomic_int g_statsPage{ 0 };
+	std::atomic_int g_statsCount{ 0 };
+
+	std::string Pct(float a_v)
+	{
+		return fmt::format("{:+.1f}%", a_v);
+	}
+
+	std::string BonusLines(const float a_b[prof::kStats])
+	{
+		std::string out;
+		for (int s = 0; s < prof::kStats; ++s) {
+			if (std::abs(a_b[s]) >= 0.05f) {
+				out += fmt::format("  {} {}\n", prof::kStatNames[s], Pct(a_b[s]));
+			}
+		}
+		return out.empty() ? std::string("  none yet\n") : out;
+	}
+
+	std::string SheetText(RE::PlayerCharacter* a_player)
+	{
+		const auto ao = a_player->AsActorValueOwner();
+		const float v04 = ao->GetActorValue(RE::ActorValue::kVariable04), v06 = ao->GetActorValue(RE::ActorValue::kVariable06), v07 = ao->GetActorValue(RE::ActorValue::kVariable07),
+					v08 = ao->GetActorValue(RE::ActorValue::kVariable08), v09 = ao->GetActorValue(RE::ActorValue::kVariable09);
+		std::string out;
+		GunInfo     held{};
+		const auto  gun = HeldGun(a_player, held);
+		GunInfo     base{};
+		if (gun && GunOf(gun, base)) {
+			float pb[prof::kStats];
+			prof::BonusFor(base.type, base.maker, pb);
+			const float rateM = Relic(a_player, RE::ActorValue::kVariable06) * (1.0f + pb[prof::kRate] * 0.01f);
+			const float quickM = Relic(a_player, RE::ActorValue::kVariable07) * (1.0f + pb[prof::kReload] * 0.01f);
+			const float accM = Relic(a_player, RE::ActorValue::kVariable08) * (1.0f + pb[prof::kAccuracy] * 0.01f);
+			const float dmgM = (std::max)(0.2f, 1.0f + v09 * 0.01f) * (1.0f + pb[prof::kDamage] * 0.01f);
+			const float magM = (std::max)(0.2f, 1.0f + v04 * 0.01f) * (1.0f + pb[prof::kMag] * 0.01f);
+			float magnitude = 0.0f;
+			if (gun->formEnchanting && !gun->formEnchanting->effects.empty() && gun->formEnchanting->effects[0]) {
+				magnitude = gun->formEnchanting->effects[0]->effectItem.magnitude;
+			}
+			const float rate = base.interval > 0.0f ? 1.0f / base.interval : 0.0f;
+			const int   clip = (std::max)(1, static_cast<int>(static_cast<float>(base.clip) * magM + 0.5f));
+			const char* name = gun->GetName() ? gun->GetName() : "";
+			out += fmt::format("{}\n({} / {})\n\n", name, base.type >= 0 ? prof::kTypeNames[base.type] : "?", base.maker >= 0 ? prof::kMakerNames[base.maker] : "?");
+			if (base.pellets > 1) {
+				out += fmt::format("Damage: {:.0f} x{} ({:+.0f})\n", magnitude, base.pellets, magnitude * (dmgM - 1.0f));
+			} else {
+				out += fmt::format("Damage: {:.0f} ({:+.0f})\n", magnitude, magnitude * (dmgM - 1.0f));
+			}
+			out += fmt::format("Fire rate: {:.1f}/s ({:+.1f}/s)\n", rate, rate * (rateM - 1.0f));
+			out += fmt::format("Reload: {:.2f} s ({:+.2f} s)\n", base.reload, base.reload / quickM - base.reload);
+			out += fmt::format("Magazine: {} ({:+d})\n", base.clip, clip - base.clip);
+			out += fmt::format("Spread: {:.2f} deg ({:+.2f})\n", base.spread, base.spread / accM - base.spread);
+			out += fmt::format("Bonus projectile chance: {:.1f}%\n", pb[prof::kProj]);
+		} else {
+			float pb[prof::kStats];
+			prof::BonusFor(-1, -1, pb);  // what every gun gets whatever its type and maker (the other makers' share, Torgue's projectiles)
+			out += "No Skylands gun in hand.\n\nBonuses on every gun:\n";
+			out += fmt::format("  damage {}\n  fire rate {}\n  reload speed {}\n  accuracy {}\n  magazine {}\n  bonus projectile chance {:.1f}%\n",
+				Pct(v09 + pb[prof::kDamage]), Pct(v06 + pb[prof::kRate]), Pct(v07 + pb[prof::kReload]), Pct(v08 + pb[prof::kAccuracy]), Pct(v04 + pb[prof::kMag]), pb[prof::kProj]);
+			out += "  (plus each gun's own type and maker)\n";
+		}
+		out += fmt::format("\nShield: capacity {}, recharge {}, delay {}\n", Pct(ao->GetActorValue(RE::ActorValue::kVariable01) + shield::g_profShieldCap.load()),
+			Pct(ao->GetActorValue(RE::ActorValue::kVariable02) + shield::g_profShieldRate.load()), Pct(-(ao->GetActorValue(RE::ActorValue::kVariable03) + shield::g_profShieldDelay.load())));
+		static constexpr RE::ActorValue kVit[3] = { RE::ActorValue::kHealth, RE::ActorValue::kMagicka, RE::ActorValue::kStamina };
+		static constexpr const char*    kVitName[3] = { "Health", "Magicka", "Stamina" };
+		for (int i = 0; i < 3; ++i) {
+			const float b = ao->GetBaseActorValue(kVit[i]);
+			out += fmt::format("{}: {:.0f} ({:+.0f}, {} from manufacturers)\n", kVitName[i], b, vitals::g_applied[i], Pct(prof::g_vitalPct[i].load()));
+		}
+		out += fmt::format("Speed: {:.0f} ({:+.0f})", ao->GetBaseActorValue(RE::ActorValue::kSpeedMult), vitals::g_applied[3]);
+		return out;
+	}
+
+	void ShowBox(const std::string& a_text, const std::vector<std::string>& a_buttons)
+	{
+		std::vector<const char*> b;
+		for (const auto& x : a_buttons) {
+			b.push_back(x.c_str());
+		}
+		while (b.size() < 10) {
+			b.push_back(nullptr);  // the game reads buttons until the first null
+		}
+		g_statsCount = static_cast<int>(a_buttons.size());
+		RE::MessageBoxMenu::Create(a_text.c_str(), [](std::uint8_t a_button) {
+			const int page = g_statsPage.load(), n = g_statsCount.load(), i = static_cast<int>(a_button);
+			static int told = 0;
+			if (told++ < 20) {
+				SKSE::log::info("stats menu: page {} button {} of {}", page, i, n);
+			}
+			if (i < 0 || i >= n || i == n - 1) {  // the last button closes (or goes back), as does Esc
+				if (page == 3 || page == 4) {
+					QueueStatsMenu(page - 2, -1);
+				} else if (page == 1 || page == 2) {
+					QueueStatsMenu(0, -1);
+				}
+				return;
+			}
+			if (page == 0) {
+				QueueStatsMenu(i + 1, -1);  // 0: gun types, 1: manufacturers
+			} else if (page == 1 || page == 2) {
+				QueueStatsMenu(page + 2, i);
+			} else if (page == 3 || page == 4) {
+				return;  // "Close" on a track page (Back is the last button)
+			}
+		}, 0, 4, 10, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9]);
+	}
+
+	void StatsMenu(int a_page, int a_index)
+	{
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		if (!player) {
+			return;
+		}
+		g_statsPage = a_page;
+		if (a_page == 0) {
+			ShowBox("CHARACTER SHEET\n\n" + SheetText(player), { "Gun Types", "Manufacturers", "Close" });
+		} else if (a_page == 1 || a_page == 2) {
+			const bool               maker = a_page == 2;
+			std::vector<std::string> buttons;
+			for (int i = 0; i < (maker ? prof::kMakers : prof::kTypes); ++i) {
+				const auto t = prof::TrackOf(i, maker);
+				buttons.push_back(fmt::format("{} {}{}", maker ? prof::kMakerNames[i] : prof::kTypeNames[i], t.level, t.legendary > 0 ? fmt::format(" *{}", t.legendary) : std::string()));
+			}
+			buttons.push_back("Back");
+			ShowBox(maker ? "MANUFACTURER PROFICIENCIES\n\nDamage dealt with a maker's guns raises its level.\nIts own guns get both of its stats; other guns get its first stat at a quarter.\nPick one:"
+						  : "GUN TYPE PROFICIENCIES\n\nDamage dealt with a gun type raises its level.\nPick one:",
+				buttons);
+		} else {
+			const bool  maker = a_page == 4;
+			const auto  t = prof::TrackOf(a_index, maker);
+			const char* name = maker ? prof::kMakerNames[std::clamp(a_index, 0, prof::kMakers - 1)] : prof::kTypeNames[std::clamp(a_index, 0, prof::kTypes - 1)];
+			std::string text = fmt::format("{} PROFICIENCY\n\nLevel {}{}{}\nXP {:.0f} / {:.0f} to the next level\n\nBonuses:\n{}", name, t.level,
+				t.cap > 0 ? fmt::format(" of {}", t.cap) : std::string(), t.legendary > 0 ? fmt::format("  (Legendary x{})", t.legendary) : std::string(), t.xp, t.next, BonusLines(t.bonus));
+			if (maker && a_index >= 0) {
+				text += fmt::format("\nOther makers' guns get its {} at a quarter.", prof::kStatNames[prof::kMakerStats[a_index][0]]);
+			}
+			ShowBox(text, { "Close", "Back" });
+		}
+	}
+
+	void QueueStatsMenu(int a_page, int a_index)
+	{
+		if (const auto tasks = SKSE::GetTaskInterface()) {
+			tasks->AddTask([a_page, a_index]() { StatsMenu(a_page, a_index); });
+		}
+	}
+
 	void SetBar(RE::PlayerCharacter* a_player, int a_mag)
 	{
 		g_mag = a_mag;
@@ -3744,7 +3907,7 @@ namespace
 }
 
 SKSEPluginInfo(
-	.Version = { 1, 39, 1, 0 },
+	.Version = { 1, 40, 0, 0 },
 	.Name = "SkylandsNative"sv,
 	.Author = "Skylands"sv)
 
