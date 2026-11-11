@@ -62,8 +62,8 @@ def test_the_child_colour_wins_and_regions_take_their_midtone():
     assert (w, h) == (S, S)
     left = rgb[(S // 2 * S + 10) * 3:(S // 2 * S + 10) * 3 + 3]
     right = rgb[(S // 2 * S + S - 10) * 3:(S // 2 * S + S - 10) * 3 + 3]
-    assert left[0] > 200 and left[1] < 40 and left[2] < 40, left  # region A: the child's red midtone
-    assert right[2] > 200 and right[0] < 40 and right[1] < 40, right  # region B: blue
+    assert left[0] > 150 and left[1] < 40 and left[2] < 40, left  # region A: the child's red midtone (a tint of the mid-grey shading)
+    assert right[2] > 150 and right[0] < 40 and right[1] < 40, right  # region B: blue
     assert painter.paint("Mat.Child", "rocket_launcher_of_doom") is None  # unknown gun type: no paint, the old colour stays
 
 
@@ -77,9 +77,9 @@ def test_a_pattern_darkens_only_its_regions():
     assert "pattern Stripes" in note
     _w, _h, rgb = dxt.decode(dds)
     row = S // 2
-    reds = {rgb[(row * S + x) * 3] > 200 for x in range(0, S // 2, 4)}
+    reds = {rgb[(row * S + x) * 3] > 120 for x in range(0, S // 2, 4)}
     assert reds == {True, False}  # region A striped
-    blues = {rgb[(row * S + x) * 3 + 2] > 200 for x in range(S // 2 + 8, S, 4)}
+    blues = {rgb[(row * S + x) * 3 + 2] > 150 for x in range(S // 2 + 8, S, 4)}
     assert blues == {True}  # region B untouched (its pattern scale is 0)
 
 
